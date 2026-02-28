@@ -12,6 +12,7 @@ function makeSession(code = 'ABCDEF', jam: JamArtifacts | null = null): Session 
   return {
     code,
     createdAt: new Date().toISOString(),
+    status: 'active',
     participants: new Map(),
     submissions: [],
     messages: [],

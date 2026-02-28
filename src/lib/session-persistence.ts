@@ -19,6 +19,7 @@ function sessionToJson(session: Session): SerializedSession {
   return {
     code: session.code,
     createdAt: session.createdAt,
+    status: session.status,
     participants: Array.from(session.participants.values()),
     submissions: session.submissions,
     jam: session.jam,
@@ -35,6 +36,7 @@ function sessionFromJson(json: SerializedSession): Session {
   return {
     code: json.code,
     createdAt: json.createdAt,
+    status: json.status ?? 'active',
     participants,
     submissions: json.submissions,
     jam: json.jam,

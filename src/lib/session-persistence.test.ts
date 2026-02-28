@@ -64,6 +64,7 @@ function makeSession(overrides: Partial<Omit<Session, 'participants'>> & { parti
   return {
     code: 'ABC123',
     createdAt: '2026-02-28T08:00:00Z',
+    status: 'active' as const,
     participants,
     submissions: [],
     messages: [],

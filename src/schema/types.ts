@@ -1,6 +1,10 @@
 /** Types matching candidate-events.schema.json */
 
 export type Confidence = 'CONFIRMED' | 'LIKELY' | 'POSSIBLE';
+
+/** Session lifecycle state machine */
+export type SessionStatus = 'active' | 'paused' | 'closed';
+export type SessionTransitionAction = 'pause' | 'resume' | 'close';
 export type Direction = 'inbound' | 'outbound' | 'internal';
 export type AssumptionType = 'ownership' | 'contract' | 'ordering' | 'existence';
 
