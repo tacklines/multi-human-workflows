@@ -11,9 +11,20 @@
 ## Gotchas
 - ELK layered algorithm rejects self-loop edges; filter them before layout, handle separately in rendering (added: 2026-02-28, dispatch: multi-human-workflows-3tm)
 - BFS: always seed visited set with start node to handle self-loops/cycles naturally; remove start from results at the end (added: 2026-02-28, dispatch: multi-human-workflows-3qx)
+- `src/lib/` files must use relative imports (`../schema/types.js`), not `@` alias — alias only works in vitest/vite, not `tsc --noEmit` (added: 2026-02-28, dispatch: multi-human-workflows-9o8)
+- `tsconfig.server.json` should explicitly include only needed files, not all of `src/lib/` — other lib files have bundler-specific imports that fail under node16 resolution (added: 2026-02-28, dispatch: multi-human-workflows-9o8)
+- SessionStore API returns structured objects `{ session, creatorId }` / `{ session, participantId }` — verify actual return shapes before writing tests (added: 2026-02-28, dispatch: multi-human-workflows-9o8)
 
 ## Preferences
-- (none yet)
+- PrepStatus and SessionPrepStatus are exported from src/lib/prep-completeness.ts alongside the functions — no need to add analysis output types to schema/types.ts (added: 2026-02-28, dispatch: multi-human-workflows-xb6)
+
+## Workflow Engine
+- PHASE_ORDER array + PHASE_METADATA record pattern gives DRY iteration without switch statements in main computation paths (added: 2026-02-28, dispatch: multi-human-workflows-9j7)
+- Terminal phase (done) needs special handling: isComplete = true only when current === done, not from the generic "earlier phases complete" rule (added: 2026-02-28, dispatch: multi-human-workflows-9j7)
+
+## Persistence
+- SessionPersistence uses existing SerializedSession type for JSON format — don't reinvent session serialization, session-store.ts already has serializeSession() (added: 2026-02-28, dispatch: multi-human-workflows-27c)
+- Map<string, Participant> round-trips through Participant[] array; reconstruct Map from array in sessionFromJson() using p.id as key (added: 2026-02-28, dispatch: multi-human-workflows-27c)
 
 ## Cross-Agent Notes
 - (none yet)
