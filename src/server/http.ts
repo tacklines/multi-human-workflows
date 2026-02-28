@@ -223,6 +223,37 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // POST /api/sessions/:code/jam/flag — Flag an unresolved item
+    const jamFlagMatch = url.match(/^\/api\/sessions\/([^/]+)\/jam\/flag$/);
+    if (method === 'POST' && jamFlagMatch) {
+      const code = jamFlagMatch[1];
+      const body = await parseBody(req) as {
+        description?: string;
+        relatedOverlap?: string;
+        flaggedBy?: string;
+      };
+      if (!body.description || !body.flaggedBy) {
+        sendJson(res, 400, { error: 'description and flaggedBy are required' });
+        return;
+      }
+      const item: { description: string; relatedOverlap?: string; flaggedBy: string } = {
+        description: body.description,
+        flaggedBy: body.flaggedBy,
+      };
+      if (body.relatedOverlap) {
+        item.relatedOverlap = body.relatedOverlap;
+      }
+      const result = store.flagUnresolved(code, item);
+      if (!result) {
+        sendJson(res, 404, { error: 'Session not found or jam not started' });
+        return;
+      }
+      persistSessions();
+      pushSseEvent(code, 'jam', { action: 'flagged', item: result });
+      sendJson(res, 200, { item: result });
+      return;
+    }
+
     // GET /api/sessions/:code/jam — Export jam artifacts
     const jamExportMatch = url.match(/^\/api\/sessions\/([^/]+)\/jam$/);
     if (method === 'GET' && jamExportMatch) {
