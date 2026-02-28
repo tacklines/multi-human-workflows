@@ -6,6 +6,7 @@ import { getAllAggregates } from '../lib/grouping.js';
 import { getAggregateColorIndex } from '../lib/aggregate-colors.js';
 import { runElkLayout, NODE_W, NODE_H, elkSectionToPath, straightEdgePath } from '../lib/elk-layout.js';
 import type { LayoutNode, LayoutCompound, LayoutEdgeGroup, CollapsedAggregate } from '../lib/elk-layout.js';
+import { runForceLayout } from '../lib/force-layout.js';
 import { isEdgeGroupVisible } from '../lib/edge-filters.js';
 import { zoom as d3Zoom, zoomIdentity, zoomTransform, type ZoomBehavior, type D3ZoomEvent } from 'd3-zoom';
 import { select } from 'd3-selection';
@@ -88,6 +89,11 @@ export class FlowDiagram extends LitElement {
     }
     .zoom-controls button:hover {
       background: #f3f4f6;
+    }
+    .zoom-controls button.active {
+      background: #e0e7ff;
+      border-color: #4338ca;
+      color: #312e81;
     }
     .tooltip {
       position: absolute;
@@ -210,6 +216,7 @@ export class FlowDiagram extends LitElement {
   @state() private _matchedNodeIndices: number[] = [];
   @state() private _currentMatchIndex = -1;
   @state() private _filters: { confidence: Set<Confidence>; direction: Set<Direction> } = store.get().filters;
+  @state() private _layoutMode: 'elk' | 'force' = 'elk';
   @state() private _focusedNodeId: string | null = null;
 
   /** Adjacency list built from _edgeGroups for keyboard navigation (nodeId -> adjacent nodeIds) */
@@ -249,7 +256,7 @@ export class FlowDiagram extends LitElement {
   /** True during the brief window between layout update and RAF callback */
   private _animatingLayout = false;
 
-  private async _runElkLayout(): Promise<void> {
+  private async _runLayout(): Promise<void> {
     if (this.files.length === 0) {
       this._layoutNodes = [];
       this._layoutCompounds = [];
@@ -266,7 +273,13 @@ export class FlowDiagram extends LitElement {
     const oldCompoundPositions = new Map(this._layoutCompounds.map((c) => [c.id, { x: c.x, y: c.y }]));
     const hasExistingLayout = oldNodePositions.size > 0;
 
-    const result = await runElkLayout(this.files, this._collapsedAggregates);
+    let result: { nodes: LayoutNode[]; compounds: LayoutCompound[]; edgeGroups: LayoutEdgeGroup[]; width: number; height: number; collapsedAggregates?: CollapsedAggregate[] };
+
+    if (this._layoutMode === 'force') {
+      result = runForceLayout(this.files);
+    } else {
+      result = await runElkLayout(this.files, this._collapsedAggregates);
+    }
 
     if (hasExistingLayout) {
       // Store old positions so render places nodes at old spots first
@@ -277,7 +290,7 @@ export class FlowDiagram extends LitElement {
 
     this._layoutNodes = result.nodes;
     this._layoutCompounds = result.compounds;
-    this._layoutCollapsedAggregates = result.collapsedAggregates;
+    this._layoutCollapsedAggregates = result.collapsedAggregates ?? [];
     this._edgeGroups = result.edgeGroups;
     this._svgWidth = result.width;
     this._svgHeight = result.height;
@@ -292,6 +305,12 @@ export class FlowDiagram extends LitElement {
         this._prevCompoundPositions = new Map();
       });
     }
+  }
+
+  private async _toggleLayoutMode(): Promise<void> {
+    this._layoutMode = this._layoutMode === 'elk' ? 'force' : 'elk';
+    await this._runLayout();
+    this._computeMinimapData(this._layoutNodes, this._layoutCompounds, this._edgeGroups);
   }
 
   private _setupZoom(): void {
@@ -357,7 +376,7 @@ export class FlowDiagram extends LitElement {
       this._transform = '';
       this.viewTransform = { x: 0, y: 0, k: 1 };
 
-      this._runElkLayout().then(() => {
+      this._runLayout().then(() => {
         this._computeMinimapData(this._layoutNodes, this._layoutCompounds, this._edgeGroups);
         // Re-attach zoom (SVG may have been recreated if going from empty to loaded)
         this.updateComplete.then(() => {
@@ -579,7 +598,7 @@ export class FlowDiagram extends LitElement {
       next.add(aggregateId);
     }
     this._collapsedAggregates = next;
-    this._runElkLayout().then(() => {
+    this._runLayout().then(() => {
       this._computeMinimapData(this._layoutNodes, this._layoutCompounds, this._edgeGroups);
     });
   }
@@ -1475,6 +1494,12 @@ export class FlowDiagram extends LitElement {
           <button @click=${this._zoomIn} title="Zoom in">+</button>
           <button @click=${this._zoomOut} title="Zoom out">&minus;</button>
           <button @click=${this._zoomReset} title="Reset zoom" style="font-size:12px">&#8634;</button>
+          <button
+            @click=${this._toggleLayoutMode}
+            title=${this._layoutMode === 'elk' ? 'Switch to force layout' : 'Switch to ELK layout'}
+            class=${this._layoutMode === 'force' ? 'active' : ''}
+            style="font-size:10px;width:auto;padding:0 6px;"
+          >${this._layoutMode === 'elk' ? 'ELK' : 'Force'}</button>
         </div>
 
         ${this._tooltip
