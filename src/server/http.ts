@@ -4,8 +4,8 @@ import { sessionStore as store, persistSessions } from './store.js';
 import type { CandidateEventsFile } from '../schema/types.js';
 import type { ServerResponse } from 'node:http';
 
-const PORT = 3001;
-const CORS_ORIGIN = 'http://localhost:5173';
+const PORT = Number(process.env.PORT ?? 3002);
+const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
 
 // SSE clients per session code: code -> Set of response objects
 const sseClients: Map<string, Set<ServerResponse>> = new Map();

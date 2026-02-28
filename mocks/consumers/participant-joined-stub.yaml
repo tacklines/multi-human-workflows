@@ -1,0 +1,24 @@
+# mocks/consumers/participant-joined-stub.yaml
+stub:
+  event: ParticipantJoined
+  version: "v1"
+  owner: "session"
+  schema: "contracts/agreed/participant-joined.v1.schema.yaml"
+
+consumption-contract:
+  reads-fields:
+    - code: "Session identifier for routing the SSE broadcast"
+    - participant_id: "Unique participant key for roster management"
+    - participant_name: "Displayed in the lobby participant list"
+    - joined_at: "Displayed as join timestamp"
+  ordering-guarantee: "best-effort"
+  idempotency: "idempotent"
+
+contract-tests:
+  - name: "rejects events missing participant_id"
+    input: { code: "ABC123", participant_name: "Bob", joined_at: "2026-02-28T16:05:00Z" }
+    expected: reject
+
+  - name: "accepts valid happy-path event"
+    input: { code: "ABC123", participant_id: "660e8400-e29b-41d4-a716-446655440001", participant_name: "Bob", joined_at: "2026-02-28T16:05:00Z" }
+    expected: accept

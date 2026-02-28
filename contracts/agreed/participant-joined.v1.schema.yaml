@@ -1,0 +1,56 @@
+# contracts/agreed/participant-joined.v1.schema.yaml
+schema:
+  name: ParticipantJoined
+  version: "v1"
+  owner: "session"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Emitted when a participant joins an existing session via join code. Broadcast
+  to all connected SSE clients so the lobby updates in real time. Join codes
+  are case-insensitive.
+
+fields:
+  - name: code
+    type: string
+    required: true
+    description: "Session join code the participant is joining."
+    confidence: CONFIRMED
+    constraints:
+      - "6-character alphanumeric string"
+    example: "ABC123"
+
+  - name: participant_id
+    type: uuid
+    required: true
+    description: "Unique identifier for the joining participant, generated server-side."
+    confidence: CONFIRMED
+    constraints:
+      - "valid UUID"
+    example: "660e8400-e29b-41d4-a716-446655440001"
+
+  - name: participant_name
+    type: string
+    required: true
+    description: "Display name provided by the participant when joining."
+    confidence: CONFIRMED
+    constraints:
+      - "non-empty string"
+    example: "Bob"
+
+  - name: joined_at
+    type: timestamp
+    required: true
+    description: "ISO 8601 timestamp of when the participant joined."
+    confidence: CONFIRMED
+    constraints:
+      - "ISO 8601 timestamp"
+    example: "2026-02-28T16:05:00Z"
+
+envelope:
+  topic: "session.lifecycle"
+  ordering-key: "code"
+  idempotency-key: "participant_id"
+
+unresolved: []

@@ -1,0 +1,29 @@
+# contracts/agreed/file-removed.v1.schema.yaml
+schema:
+  name: FileRemoved
+  version: "v1"
+  owner: "app-state"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Emitted when a user removes a previously loaded file from the visualization.
+  Keyed by role. Reverts the view to cards mode if fewer than 2 files remain.
+
+fields:
+  - name: role
+    type: string
+    required: true
+    description: "Role identifier of the file being removed."
+    confidence: LIKELY
+    constraints:
+      - "non-empty string, kebab-case, must match an existing loaded file"
+    example: "order-fulfillment"
+
+envelope:
+  topic: "ui.files"
+  ordering-key: "role"
+  idempotency-key: "role"
+
+unresolved:
+  - "FileRemoved is inferred from the removeFile(role) method — no explicit event type exists in the codebase. Confidence is LIKELY."

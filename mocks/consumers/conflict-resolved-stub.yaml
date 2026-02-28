@@ -1,0 +1,25 @@
+# mocks/consumers/conflict-resolved-stub.yaml
+stub:
+  event: ConflictResolved
+  version: "v1"
+  owner: "jam-artifacts"
+  schema: "contracts/agreed/conflict-resolved.v1.schema.yaml"
+
+consumption-contract:
+  reads-fields:
+    - overlap_label: "Identifies which overlap was resolved"
+    - resolution: "Resolution strategy description for display"
+    - chosen_approach: "Specific approach selected"
+    - resolved_by: "Participant names for attribution"
+    - resolved_at: "Timestamp for ordering resolutions"
+  ordering-guarantee: "best-effort"
+  idempotency: "at-least-once"
+
+contract-tests:
+  - name: "rejects events missing resolved_by"
+    input: { overlap_label: "OrderPlaced vs OrderCreated", resolution: "merge", chosen_approach: "use OrderPlaced" }
+    expected: reject
+
+  - name: "accepts valid happy-path event"
+    input: { overlap_label: "OrderPlaced vs OrderCreated", resolution: "Merged into single event", chosen_approach: "Use OrderPlaced with expanded payload", resolved_by: ["Alice", "Bob"], resolved_at: "2026-02-28T17:15:00Z" }
+    expected: accept

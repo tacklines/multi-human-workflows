@@ -1,0 +1,48 @@
+# contracts/agreed/file-loaded.v1.schema.yaml
+schema:
+  name: FileLoaded
+  version: "v1"
+  owner: "app-state"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Emitted when a user loads a YAML storm-prep file into the client-side
+  visualization. Files are keyed by role — loading a file with an existing
+  role replaces the previous one. Auto-switches to comparison view when
+  2 or more files are loaded.
+
+fields:
+  - name: role
+    type: string
+    required: true
+    description: "Role identifier from the YAML metadata, used as the dedup key."
+    confidence: CONFIRMED
+    constraints:
+      - "non-empty string, kebab-case"
+    example: "order-fulfillment"
+
+  - name: filename
+    type: string
+    required: true
+    description: "Original filename of the loaded YAML file."
+    confidence: CONFIRMED
+    constraints:
+      - "non-empty string"
+    example: "order-fulfillment.yaml"
+
+  - name: data
+    type: object
+    required: true
+    description: "Parsed CandidateEventsFile content."
+    confidence: CONFIRMED
+    constraints:
+      - "must conform to CandidateEventsFile interface"
+    example: "{metadata: {...}, domain_events: [...], boundary_assumptions: [...]}"
+
+envelope:
+  topic: "ui.files"
+  ordering-key: "role"
+  idempotency-key: "role"
+
+unresolved: []

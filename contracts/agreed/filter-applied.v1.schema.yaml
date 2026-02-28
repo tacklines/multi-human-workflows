@@ -1,0 +1,49 @@
+# contracts/agreed/filter-applied.v1.schema.yaml
+schema:
+  name: FilterApplied
+  version: "v1"
+  owner: "app-state"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Emitted when a user toggles a filter on the event visualization. Filters
+  can target confidence levels (CONFIRMED, LIKELY, POSSIBLE) or integration
+  directions (inbound, outbound, internal). Filters are toggle-based — each
+  value is either included or excluded.
+
+fields:
+  - name: filter_type
+    type: enum
+    required: true
+    description: "Which filter dimension is being toggled."
+    confidence: LIKELY
+    constraints:
+      - "one of: confidence, direction"
+    example: "confidence"
+
+  - name: filter_value
+    type: string
+    required: true
+    description: "The specific value being toggled within the filter dimension."
+    confidence: LIKELY
+    constraints:
+      - "for confidence: CONFIRMED | LIKELY | POSSIBLE; for direction: inbound | outbound | internal"
+    example: "POSSIBLE"
+
+  - name: enabled
+    type: boolean
+    required: true
+    description: "Whether the filter value is now included (true) or excluded (false)."
+    confidence: LIKELY
+    constraints:
+      - "boolean"
+    example: false
+
+envelope:
+  topic: "ui.filters"
+  ordering-key: "filter_type"
+  idempotency-key: "filter_type + filter_value"
+
+unresolved:
+  - "FilterApplied is modeled from toggleConfidence/toggleDirection methods — the actual implementation uses Set toggle semantics, not an explicit event. Confidence is LIKELY."

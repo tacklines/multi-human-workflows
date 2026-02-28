@@ -1,0 +1,29 @@
+# contracts/agreed/aggregate-selected.v1.schema.yaml
+schema:
+  name: AggregateSelected
+  version: "v1"
+  owner: "app-state"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Emitted when a user selects an aggregate to filter or highlight related events
+  in the visualization. Selecting null deselects any previously selected aggregate.
+
+fields:
+  - name: aggregate_name
+    type: string
+    required: false
+    description: "Name of the selected aggregate, or null to deselect."
+    confidence: LIKELY
+    constraints:
+      - "PascalCase string or null"
+    example: "Order"
+
+envelope:
+  topic: "ui.selection"
+  ordering-key: "aggregate_name"
+  idempotency-key: "aggregate_name"
+
+unresolved:
+  - "AggregateSelected is modeled from setSelectedAggregate(name | null) — no explicit event type in codebase. Confidence is LIKELY."

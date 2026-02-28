@@ -13,7 +13,8 @@
 - MCP stdio transport reserves stdout for JSON-RPC — all logging must use `console.error()` (added: 2026-02-28, dispatch: bead-usw)
 
 ## Preferences
-- (none yet)
+- For polling-friendly MCP tools over stateless transports, document that callers must track semantic values (e.g., currentPhase) rather than relying on timestamp-based `changed` booleans (added: 2026-02-28, dispatch: ppc.8+ppc.5)
+- `z.string().optional()` with Zod produces `string | undefined` in handler — TypeScript handles correctly without nullish coalescing (added: 2026-02-28, dispatch: ppc.8+ppc.5)
 
 ## Cross-Agent Notes
 - (none yet)

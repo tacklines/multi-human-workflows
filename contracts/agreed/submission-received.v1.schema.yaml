@@ -1,0 +1,65 @@
+# contracts/agreed/submission-received.v1.schema.yaml
+schema:
+  name: SubmissionReceived
+  version: "v1"
+  owner: "session"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Emitted when a participant submits a storm-prep YAML file to the session.
+  The YAML is validated against candidate-events.schema.json before acceptance.
+  Participants can submit multiple files. Broadcast to all SSE clients.
+
+fields:
+  - name: code
+    type: string
+    required: true
+    description: "Session join code."
+    confidence: CONFIRMED
+    constraints:
+      - "6-character alphanumeric string"
+    example: "ABC123"
+
+  - name: participant_id
+    type: uuid
+    required: true
+    description: "Identifier of the participant submitting the file."
+    confidence: CONFIRMED
+    constraints:
+      - "valid UUID, must be a current session participant"
+    example: "550e8400-e29b-41d4-a716-446655440000"
+
+  - name: file_name
+    type: string
+    required: true
+    description: "Original filename of the submitted YAML file."
+    confidence: CONFIRMED
+    constraints:
+      - "non-empty string"
+    example: "order-fulfillment.yaml"
+
+  - name: data
+    type: object
+    required: true
+    description: "Parsed and validated CandidateEventsFile content."
+    confidence: CONFIRMED
+    constraints:
+      - "must conform to candidate-events.schema.json"
+    example: "{metadata: {...}, domain_events: [...], boundary_assumptions: [...]}"
+
+  - name: submitted_at
+    type: timestamp
+    required: true
+    description: "ISO 8601 timestamp of submission."
+    confidence: CONFIRMED
+    constraints:
+      - "ISO 8601 timestamp"
+    example: "2026-02-28T16:10:00Z"
+
+envelope:
+  topic: "session.submissions"
+  ordering-key: "code"
+  idempotency-key: "participant_id + file_name"
+
+unresolved: []

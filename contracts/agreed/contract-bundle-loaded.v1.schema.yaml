@@ -1,0 +1,65 @@
+# contracts/agreed/contract-bundle-loaded.v1.schema.yaml
+schema:
+  name: ContractBundleLoaded
+  version: "v1"
+  owner: "session"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Emitted when the /formalize output is loaded into a session via the MCP
+  contract_load tool. Bridges the jam session output to the formalization phase.
+  Contains event contracts and boundary contracts derived from jam artifacts.
+
+fields:
+  - name: code
+    type: string
+    required: true
+    description: "Session join code."
+    confidence: CONFIRMED
+    constraints:
+      - "6-character alphanumeric string"
+    example: "ABC123"
+
+  - name: generated_at
+    type: timestamp
+    required: true
+    description: "ISO 8601 timestamp of when the contract bundle was generated."
+    confidence: CONFIRMED
+    constraints:
+      - "ISO 8601 timestamp"
+    example: "2026-02-28T17:00:00Z"
+
+  - name: source_jam_code
+    type: string
+    required: false
+    description: "Session code of the jam session that produced these contracts."
+    confidence: CONFIRMED
+    constraints:
+      - "6-character alphanumeric string if present"
+    example: "ABC123"
+
+  - name: event_contracts
+    type: array
+    required: true
+    description: "Array of EventContract objects defining event schemas, ownership, and consumers."
+    confidence: CONFIRMED
+    constraints:
+      - "each item has: eventName, aggregate, version, schema, owner, consumers, producedBy"
+    example: "[{eventName: 'OrderPlaced', aggregate: 'Order', version: 'v1', ...}]"
+
+  - name: boundary_contracts
+    type: array
+    required: true
+    description: "Array of BoundaryContract objects defining bounded context boundaries."
+    confidence: CONFIRMED
+    constraints:
+      - "each item has: boundaryName, aggregates, events, owner, externalDependencies"
+    example: "[{boundaryName: 'OrderContext', aggregates: ['Order'], ...}]"
+
+envelope:
+  topic: "session.contracts"
+  ordering-key: "code"
+  idempotency-key: "code + generated_at"
+
+unresolved: []

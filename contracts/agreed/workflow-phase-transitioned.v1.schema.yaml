@@ -1,0 +1,58 @@
+# contracts/agreed/workflow-phase-transitioned.v1.schema.yaml
+schema:
+  name: WorkflowPhaseTransitioned
+  version: "v1"
+  owner: "session"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Represents a workflow phase transition inferred from the session's artifact
+  inventory. Phases are not explicitly commanded — they are computed from what
+  artifacts exist (participants, submissions, jam, contracts, integration report).
+  Phases progress: lobby -> prep -> compare -> jam -> formalize -> integrate -> done.
+
+fields:
+  - name: code
+    type: string
+    required: true
+    description: "Session join code."
+    confidence: CONFIRMED
+    constraints:
+      - "6-character alphanumeric string"
+    example: "ABC123"
+
+  - name: previous_phase
+    type: enum
+    required: true
+    description: "The workflow phase before this transition."
+    confidence: LIKELY
+    constraints:
+      - "one of: lobby, prep, compare, jam, formalize, integrate, done"
+    example: "prep"
+
+  - name: current_phase
+    type: enum
+    required: true
+    description: "The workflow phase after this transition."
+    confidence: LIKELY
+    constraints:
+      - "one of: lobby, prep, compare, jam, formalize, integrate, done"
+    example: "compare"
+
+  - name: artifact_inventory
+    type: object
+    required: false
+    description: "Snapshot of what artifacts exist at the time of transition."
+    confidence: LIKELY
+    constraints:
+      - "contains: participantCount, submissionCount, hasJam, resolutionCount, ownershipCount, unresolvedCount, hasContracts, contractCount, hasIntegrationReport, integrationStatus"
+    example: "{participantCount: 3, submissionCount: 2, hasJam: false, ...}"
+
+envelope:
+  topic: "session.workflow"
+  ordering-key: "code"
+  idempotency-key: "code + current_phase"
+
+unresolved:
+  - "Phase transitions are inferred, not explicitly recorded as events in the current codebase. The workflow-engine computes phase from artifact presence. Consider whether to emit explicit transition events."

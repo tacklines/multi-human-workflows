@@ -1,0 +1,56 @@
+# contracts/agreed/session-created.v1.schema.yaml
+schema:
+  name: SessionCreated
+  version: "v1"
+  owner: "session"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Emitted when a new collaborative session is created. A session is the top-level
+  aggregate for an Event Storming workflow, identified by a 6-character alphanumeric
+  join code. The creator is automatically added as the first participant.
+
+fields:
+  - name: code
+    type: string
+    required: true
+    description: "6-character alphanumeric session join code, case-insensitive."
+    confidence: CONFIRMED
+    constraints:
+      - "6-character alphanumeric string"
+    example: "ABC123"
+
+  - name: creator_id
+    type: uuid
+    required: true
+    description: "Unique identifier for the session creator, generated server-side."
+    confidence: CONFIRMED
+    constraints:
+      - "valid UUID"
+    example: "550e8400-e29b-41d4-a716-446655440000"
+
+  - name: creator_name
+    type: string
+    required: true
+    description: "Display name provided by the creator when starting the session."
+    confidence: CONFIRMED
+    constraints:
+      - "non-empty string"
+    example: "Alice"
+
+  - name: created_at
+    type: timestamp
+    required: true
+    description: "ISO 8601 timestamp of session creation."
+    confidence: CONFIRMED
+    constraints:
+      - "ISO 8601 timestamp"
+    example: "2026-02-28T16:00:00Z"
+
+envelope:
+  topic: "session.lifecycle"
+  ordering-key: "code"
+  idempotency-key: "code"
+
+unresolved: []

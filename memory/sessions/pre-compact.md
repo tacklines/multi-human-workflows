@@ -1,31 +1,36 @@
 ## Pre-Compact Snapshot
-**Time**: 2026-02-28T10:39:45Z
+**Time**: 2026-02-28T16:19:11Z
 
 ### In-Progress Tasks
-◐ multi-human-workflows-27c [● P3] [feature] - Persistence & session history with MCP tools
+◐ multi-human-workflows-ppc.6 [● P1] [feature] - Add HTTP POST /api/sessions/:code/jam/flag endpoint (blocked by: multi-human-workflows-ppc, blocks: multi-human-workflows-ppc.7)
+◐ multi-human-workflows-ppc.7 [● P1] [task] - Add SSE broadcast for flagUnresolved events (blocked by: multi-human-workflows-ppc, multi-human-workflows-ppc.6)
 
 ### Recent Commits
+4ced0e0 chore: update agent learnings and session snapshots
+683b43b feat: add force-directed layout as alternate view mode
+214c593 feat: add file-based session persistence
 5b4299e feat: add comparison-diff overlay component
 433b787 feat: add workflow phase engine and MCP tool
-7fa1f13 feat: add workflow-engine for phase inference from session artifacts
-28e6575 feat: add keyboard navigation and accessibility to flow diagram
-c0c2238 feat: add contract and integration report types with MCP tools
 
 ### Working Tree
  M CLAUDE.md
- M memory/agents/component/learnings.md
- M memory/agents/logic/learnings.md
+ D memory/sessions/2026-02-28T07-46-35Z.md
+ D memory/sessions/2026-02-28T07-54-57Z.md
+ D memory/sessions/2026-02-28T08-28-20Z.md
+ D memory/sessions/2026-02-28T08-51-02Z.md
+ D memory/sessions/2026-02-28T09-06-35Z.md
+ M memory/sessions/last.md
  M memory/sessions/pre-compact.md
- M src/lib/session-store.ts
+ M src/components/session-lobby.ts
  M src/server/http.ts
- M src/server/mcp.ts
- M src/server/store.ts
- M tsconfig.server.json
-?? memory/sessions/2026-02-28T08-28-20Z.md
-?? memory/sessions/2026-02-28T08-51-02Z.md
-?? memory/sessions/2026-02-28T09-06-35Z.md
-?? src/lib/session-persistence.test.ts
-?? src/lib/session-persistence.ts
+?? contracts/
+?? data/
+?? events/
+?? justfile
+?? memory/epics/
+?? memory/sessions/2026-02-28T15-46-33Z.md
+?? memory/sessions/2026-02-28T15-54-56Z.md
+?? mocks/
 
 ### Open Questions
 (fill in before context is lost)

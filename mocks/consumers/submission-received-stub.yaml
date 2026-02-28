@@ -1,0 +1,25 @@
+# mocks/consumers/submission-received-stub.yaml
+stub:
+  event: SubmissionReceived
+  version: "v1"
+  owner: "session"
+  schema: "contracts/agreed/submission-received.v1.schema.yaml"
+
+consumption-contract:
+  reads-fields:
+    - code: "Session identifier"
+    - participant_id: "Links submission to participant"
+    - file_name: "Displayed in submission list"
+    - data: "Full CandidateEventsFile content for visualization"
+    - submitted_at: "Displayed as submission timestamp"
+  ordering-guarantee: "best-effort"
+  idempotency: "at-least-once"
+
+contract-tests:
+  - name: "rejects events with invalid data shape"
+    input: { code: "ABC123", participant_id: "test-001", file_name: "test.yaml", data: "not an object", submitted_at: "2026-02-28T16:10:00Z" }
+    expected: reject
+
+  - name: "accepts valid happy-path event"
+    input: { code: "ABC123", participant_id: "test-001", file_name: "order-fulfillment.yaml", data: { metadata: { role: "order-fulfillment", scope: "test", goal: "test", generated_at: "2026-02-28T16:00:00Z", event_count: 0, assumption_count: 0 }, domain_events: [], boundary_assumptions: [] }, submitted_at: "2026-02-28T16:10:00Z" }
+    expected: accept

@@ -1,0 +1,74 @@
+# contracts/agreed/integration-report-loaded.v1.schema.yaml
+schema:
+  name: IntegrationReportLoaded
+  version: "v1"
+  owner: "session"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Emitted when an integration report is loaded into a session via the MCP
+  integration_load tool. This is the final validation step — the overall status
+  determines whether the session can transition to the 'done' workflow phase.
+
+fields:
+  - name: code
+    type: string
+    required: true
+    description: "Session join code."
+    confidence: CONFIRMED
+    constraints:
+      - "6-character alphanumeric string"
+    example: "ABC123"
+
+  - name: generated_at
+    type: timestamp
+    required: true
+    description: "ISO 8601 timestamp of report generation."
+    confidence: CONFIRMED
+    constraints:
+      - "ISO 8601 timestamp"
+    example: "2026-02-28T18:00:00Z"
+
+  - name: source_contracts
+    type: array
+    required: true
+    description: "List of contract source identifiers that were checked."
+    confidence: CONFIRMED
+    constraints:
+      - "array of strings"
+    example: "['session-context', 'jam-context']"
+
+  - name: checks
+    type: array
+    required: true
+    description: "Array of IntegrationCheck objects with individual check results."
+    confidence: CONFIRMED
+    constraints:
+      - "each item has: name, status (pass|fail|warn|skip), message, optional details"
+    example: "[{name: 'schema-compat', status: 'pass', message: 'All schemas compatible'}]"
+
+  - name: overall_status
+    type: enum
+    required: true
+    description: "Aggregate status across all checks. Determines workflow phase transition."
+    confidence: CONFIRMED
+    constraints:
+      - "one of: pass, fail, warn, skip"
+    example: "pass"
+
+  - name: summary
+    type: string
+    required: true
+    description: "Human-readable summary of the integration report."
+    confidence: CONFIRMED
+    constraints:
+      - "non-empty string"
+    example: "All 5 integration checks passed. Ready for production."
+
+envelope:
+  topic: "session.integration"
+  ordering-key: "code"
+  idempotency-key: "code + generated_at"
+
+unresolved: []

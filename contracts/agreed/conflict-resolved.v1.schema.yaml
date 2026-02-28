@@ -1,0 +1,65 @@
+# contracts/agreed/conflict-resolved.v1.schema.yaml
+schema:
+  name: ConflictResolved
+  version: "v1"
+  owner: "jam-artifacts"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Emitted when a facilitator records the resolution of a conflict (overlap)
+  between event definitions from different participants. Records how the team
+  chose to unify overlapping domain concepts.
+
+fields:
+  - name: overlap_label
+    type: string
+    required: true
+    description: "Label identifying the overlapping concept being resolved."
+    confidence: CONFIRMED
+    constraints:
+      - "non-empty string"
+    example: "OrderPlaced vs OrderCreated"
+
+  - name: resolution
+    type: string
+    required: true
+    description: "Description of the resolution strategy chosen."
+    confidence: CONFIRMED
+    constraints:
+      - "non-empty string"
+    example: "Merged into single OrderPlaced event with expanded payload"
+
+  - name: chosen_approach
+    type: string
+    required: true
+    description: "The specific approach selected from alternatives."
+    confidence: CONFIRMED
+    constraints:
+      - "non-empty string"
+    example: "Use OrderPlaced from team-alpha, add status field from team-beta"
+
+  - name: resolved_by
+    type: array
+    required: true
+    description: "List of participant names who contributed to the resolution."
+    confidence: CONFIRMED
+    constraints:
+      - "array of non-empty strings, at least one entry"
+    example: "['Alice', 'Bob']"
+
+  - name: resolved_at
+    type: timestamp
+    required: true
+    description: "ISO 8601 timestamp of resolution."
+    confidence: CONFIRMED
+    constraints:
+      - "ISO 8601 timestamp"
+    example: "2026-02-28T17:15:00Z"
+
+envelope:
+  topic: "jam.resolutions"
+  ordering-key: "overlap_label"
+  idempotency-key: "overlap_label + resolved_at"
+
+unresolved: []

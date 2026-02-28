@@ -12,7 +12,7 @@ import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
 
-const API_BASE = 'http://localhost:3001';
+const API_BASE = 'http://localhost:3002';
 
 type LobbyState = 'landing' | 'creating' | 'joining' | 'in-session';
 

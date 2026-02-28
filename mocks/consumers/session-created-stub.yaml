@@ -1,0 +1,24 @@
+# mocks/consumers/session-created-stub.yaml
+stub:
+  event: SessionCreated
+  version: "v1"
+  owner: "session"
+  schema: "contracts/agreed/session-created.v1.schema.yaml"
+
+consumption-contract:
+  reads-fields:
+    - code: "Used as the session identifier for all subsequent operations"
+    - creator_id: "Identifies the creator for participant roster display"
+    - creator_name: "Displayed in the session lobby participant list"
+    - created_at: "Displayed as session creation timestamp"
+  ordering-guarantee: "none"
+  idempotency: "idempotent"
+
+contract-tests:
+  - name: "rejects events missing required fields"
+    input: { creator_name: "Alice" }
+    expected: reject
+
+  - name: "accepts valid happy-path event"
+    input: { code: "ABC123", creator_id: "550e8400-e29b-41d4-a716-446655440000", creator_name: "Alice", created_at: "2026-02-28T16:00:00Z" }
+    expected: accept

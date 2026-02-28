@@ -1,6 +1,6 @@
 # Multi-Human Workflows Visualizer
 
-Web app for visualizing storm-prep YAML files from the tackline multi-human Event Storming workflow. Built with Lit web components, Vite, and Tailwind CSS v4.
+Collaborative web app for multi-human Event Storming. Participants create/join sessions via join codes, submit storm-prep YAML files, and visualize combined domain event flows in real time. Built with Lit web components, Vite, and Tailwind CSS v4.
 
 ## Operating Mode: Orchestrator
 
@@ -27,10 +27,12 @@ Workflow: dispatch -> wait for completion -> review -> dispatch next task
 ## Quick Reference
 
 ```bash
-npm run dev          # Vite dev server
+npm run dev          # Vite dev server (port 5173)
 npm run build        # tsc + vite build (type-check then bundle)
 npm test             # vitest run (all tests)
 npm run test:watch   # vitest watch mode
+npm run server       # HTTP session server (port 3001)
+npm run mcp          # MCP server (stdio transport)
 ```
 
 ## Project Structure
@@ -38,9 +40,10 @@ npm run test:watch   # vitest watch mode
 ```
 src/
   schema/        # JSON schema + TypeScript types for candidate events
-  lib/           # Pure functions: YAML loading/validation, cross-role comparison
+  lib/           # Pure functions: YAML loading/validation, cross-role comparison, ELK layout
   state/         # Reactive store (pub/sub, framework-independent)
   components/    # Lit web components (one element per file)
+  server/        # Session HTTP server (REST + SSE) and MCP server
   fixtures/      # Sample YAML files for development
 ```
 
@@ -49,7 +52,10 @@ src/
 - **Schema is the contract** -- YAML files validate against `candidate-events.schema.json`
 - **State flows down** via properties, **events bubble up** from child components
 - **Store** is a singleton pub/sub (`src/state/app-state.ts`), not framework-coupled
+- **Session server** -- HTTP REST + SSE on port 3001; shared `SessionStore` singleton in `src/server/store.ts`
+- **MCP server** -- stdio transport with 4 tools (create/join/submit/get session) for AI-assisted workflows
 - **Path alias**: `@` maps to `/src` in both Vite and vitest configs
+- **Server tsconfig** -- `tsconfig.server.json` for Node-only code (separate from browser tsconfig)
 
 ## Key Patterns
 

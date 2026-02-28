@@ -1,0 +1,56 @@
+# contracts/agreed/aggregate-ownership-assigned.v1.schema.yaml
+schema:
+  name: AggregateOwnershipAssigned
+  version: "v1"
+  owner: "jam-artifacts"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Emitted when a facilitator assigns ownership of an aggregate to a specific
+  role during the jam session. Replaces any previous assignment for the same
+  aggregate. Models domain responsibility boundaries.
+
+fields:
+  - name: aggregate
+    type: string
+    required: true
+    description: "Name of the aggregate being assigned."
+    confidence: CONFIRMED
+    constraints:
+      - "non-empty string, typically PascalCase"
+    example: "Order"
+
+  - name: owner_role
+    type: string
+    required: true
+    description: "The role that owns this aggregate going forward."
+    confidence: CONFIRMED
+    constraints:
+      - "non-empty string, typically kebab-case role identifier"
+    example: "order-fulfillment"
+
+  - name: assigned_by
+    type: string
+    required: true
+    description: "Name of the participant who made the assignment."
+    confidence: CONFIRMED
+    constraints:
+      - "non-empty string"
+    example: "Alice"
+
+  - name: assigned_at
+    type: timestamp
+    required: true
+    description: "ISO 8601 timestamp of the assignment."
+    confidence: CONFIRMED
+    constraints:
+      - "ISO 8601 timestamp"
+    example: "2026-02-28T17:20:00Z"
+
+envelope:
+  topic: "jam.ownership"
+  ordering-key: "aggregate"
+  idempotency-key: "aggregate + assigned_at"
+
+unresolved: []

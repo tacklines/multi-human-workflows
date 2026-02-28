@@ -1,0 +1,29 @@
+# contracts/agreed/view-mode-changed.v1.schema.yaml
+schema:
+  name: ViewModeChanged
+  version: "v1"
+  owner: "app-state"
+  source: "events/candidates/collaborative-storytelling.yaml"
+  formalized: "2026-02-28"
+
+description: >
+  Emitted when a user switches between visualization modes. Available modes
+  are cards (individual event cards), flow (directed graph layout), and
+  comparison (side-by-side cross-role comparison).
+
+fields:
+  - name: active_view
+    type: enum
+    required: true
+    description: "The visualization mode being activated."
+    confidence: CONFIRMED
+    constraints:
+      - "one of: cards, flow, comparison"
+    example: "comparison"
+
+envelope:
+  topic: "ui.navigation"
+  ordering-key: "active_view"
+  idempotency-key: "active_view"
+
+unresolved: []
