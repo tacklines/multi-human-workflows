@@ -301,3 +301,206 @@ describe("Given a snapshot returned by getEvents", () => {
     expect(store.getEvents(SESSION_A)).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// getEventsBetween
+// ---------------------------------------------------------------------------
+
+describe("Given a session with three events at different timestamps", () => {
+  function makeStore() {
+    const store = new EventStore();
+    store.append(SESSION_A, makeSessionCreated({ timestamp: "2026-02-28T10:00:00.000Z" }));
+    store.append(SESSION_A, makeParticipantJoined({ timestamp: "2026-02-28T10:01:00.000Z" }));
+    store.append(SESSION_A, makeSessionClosed({ timestamp: "2026-02-28T11:00:00.000Z" }));
+    return store;
+  }
+
+  it("When getEventsBetween spans the middle event, Then it returns only that event", () => {
+    const store = makeStore();
+    const result = store.getEventsBetween(
+      SESSION_A,
+      "2026-02-28T10:00:00.000Z",
+      "2026-02-28T10:30:00.000Z"
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe("ParticipantJoined");
+  });
+
+  it("When getEventsBetween since equals until, Then it returns an empty array", () => {
+    const store = makeStore();
+    const result = store.getEventsBetween(
+      SESSION_A,
+      "2026-02-28T10:00:00.000Z",
+      "2026-02-28T10:00:00.000Z"
+    );
+    expect(result).toHaveLength(0);
+  });
+
+  it("When getEventsBetween covers all events, Then it returns all three", () => {
+    const store = makeStore();
+    const result = store.getEventsBetween(
+      SESSION_A,
+      "2026-02-28T09:00:00.000Z",
+      "2026-02-28T12:00:00.000Z"
+    );
+    expect(result).toHaveLength(3);
+  });
+
+  it("When since is after all events, Then it returns an empty array", () => {
+    const store = makeStore();
+    const result = store.getEventsBetween(
+      SESSION_A,
+      "2026-02-28T12:00:00.000Z",
+      "2026-02-28T13:00:00.000Z"
+    );
+    expect(result).toHaveLength(0);
+  });
+
+  it("When getEventsBetween is called for a session with no events, Then it returns an empty array", () => {
+    const store = makeStore();
+    const result = store.getEventsBetween("NOPE", "2026-02-28T09:00:00.000Z", "2026-02-28T12:00:00.000Z");
+    expect(result).toHaveLength(0);
+  });
+
+  it("When until equals an event timestamp, Then that event is included (inclusive upper bound)", () => {
+    const store = makeStore();
+    const result = store.getEventsBetween(
+      SESSION_A,
+      "2026-02-28T09:00:00.000Z",
+      "2026-02-28T10:00:00.000Z"
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe("SessionCreated");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getStateAt
+// ---------------------------------------------------------------------------
+
+describe("Given a session with three events", () => {
+  function makeStore() {
+    const store = new EventStore();
+    store.append(SESSION_A, makeSessionCreated({ timestamp: "2026-02-28T10:00:00.000Z" }));
+    store.append(SESSION_A, makeParticipantJoined({ timestamp: "2026-02-28T10:01:00.000Z" }));
+    store.append(SESSION_A, makeSessionClosed({ timestamp: "2026-02-28T11:00:00.000Z" }));
+    return store;
+  }
+
+  it("When getStateAt is called at the second event's timestamp, Then it returns the first two events", () => {
+    const store = makeStore();
+    const result = store.getStateAt(SESSION_A, "2026-02-28T10:01:00.000Z");
+    expect(result).toHaveLength(2);
+    expect(result.map((e) => e.type)).toEqual(["SessionCreated", "ParticipantJoined"]);
+  });
+
+  it("When getStateAt is called before all events, Then it returns an empty array", () => {
+    const store = makeStore();
+    const result = store.getStateAt(SESSION_A, "2026-02-28T09:00:00.000Z");
+    expect(result).toHaveLength(0);
+  });
+
+  it("When getStateAt is called after all events, Then it returns all events", () => {
+    const store = makeStore();
+    const result = store.getStateAt(SESSION_A, "2026-02-28T12:00:00.000Z");
+    expect(result).toHaveLength(3);
+  });
+
+  it("When getStateAt is called for a session with no events, Then it returns an empty array", () => {
+    const store = makeStore();
+    const result = store.getStateAt("NOPE", "2026-02-28T10:00:00.000Z");
+    expect(result).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getEventsByType
+// ---------------------------------------------------------------------------
+
+describe("Given a session with events of multiple types", () => {
+  it("When getEventsByType is called for a present type, Then it returns only matching events", () => {
+    const store = new EventStore();
+    store.append(SESSION_A, makeSessionCreated({ timestamp: "2026-02-28T10:00:00.000Z" }));
+    store.append(SESSION_A, makeParticipantJoined({ eventId: "evt-p1", timestamp: "2026-02-28T10:01:00.000Z" }));
+    store.append(SESSION_A, makeParticipantJoined({ eventId: "evt-p2", participantId: "p-2", participantName: "Carol", timestamp: "2026-02-28T10:02:00.000Z" }));
+    store.append(SESSION_A, makeSessionClosed({ timestamp: "2026-02-28T11:00:00.000Z" }));
+
+    const result = store.getEventsByType(SESSION_A, "ParticipantJoined");
+    expect(result).toHaveLength(2);
+    expect(result.every((e) => e.type === "ParticipantJoined")).toBe(true);
+  });
+
+  it("When getEventsByType is called for a type not present, Then it returns an empty array", () => {
+    const store = new EventStore();
+    store.append(SESSION_A, makeSessionCreated());
+    const result = store.getEventsByType(SESSION_A, "SessionClosed");
+    expect(result).toHaveLength(0);
+  });
+
+  it("When getEventsByType is called for a session with no events, Then it returns an empty array", () => {
+    const store = new EventStore();
+    const result = store.getEventsByType("NOPE", "SessionCreated");
+    expect(result).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getEventCount
+// ---------------------------------------------------------------------------
+
+describe("Given an EventStore with events", () => {
+  it("When getEventCount is called, Then it returns the correct count", () => {
+    const store = new EventStore();
+    store.append(SESSION_A, makeSessionCreated());
+    store.append(SESSION_A, makeParticipantJoined());
+    expect(store.getEventCount(SESSION_A)).toBe(2);
+  });
+
+  it("When getEventCount is called for a session with no events, Then it returns 0", () => {
+    const store = new EventStore();
+    expect(store.getEventCount("NOPE")).toBe(0);
+  });
+
+  it("When getEventCount is called after clear, Then it returns 0", () => {
+    const store = new EventStore();
+    store.append(SESSION_A, makeSessionCreated());
+    store.clear(SESSION_A);
+    expect(store.getEventCount(SESSION_A)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getLatestEvent
+// ---------------------------------------------------------------------------
+
+describe("Given a session with events", () => {
+  it("When getLatestEvent is called, Then it returns the most recently appended event", () => {
+    const store = new EventStore();
+    store.append(SESSION_A, makeSessionCreated({ timestamp: "2026-02-28T10:00:00.000Z" }));
+    store.append(SESSION_A, makeParticipantJoined({ timestamp: "2026-02-28T10:01:00.000Z" }));
+    store.append(SESSION_A, makeSessionClosed({ timestamp: "2026-02-28T11:00:00.000Z" }));
+
+    const latest = store.getLatestEvent(SESSION_A);
+    expect(latest).toBeDefined();
+    expect(latest?.type).toBe("SessionClosed");
+  });
+
+  it("When getLatestEvent is called for a session with one event, Then it returns that event", () => {
+    const store = new EventStore();
+    store.append(SESSION_A, makeSessionCreated());
+    const latest = store.getLatestEvent(SESSION_A);
+    expect(latest?.type).toBe("SessionCreated");
+  });
+
+  it("When getLatestEvent is called for a session with no events, Then it returns undefined", () => {
+    const store = new EventStore();
+    expect(store.getLatestEvent("NOPE")).toBeUndefined();
+  });
+
+  it("When getLatestEvent is called after clear, Then it returns undefined", () => {
+    const store = new EventStore();
+    store.append(SESSION_A, makeSessionCreated());
+    store.clear(SESSION_A);
+    expect(store.getLatestEvent(SESSION_A)).toBeUndefined();
+  });
+});

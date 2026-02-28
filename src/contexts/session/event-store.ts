@@ -49,6 +49,53 @@ export class EventStore {
   }
 
   /**
+   * Return events where since < timestamp <= until.
+   * Both bounds are ISO strings; lexicographic comparison works for ISO 8601.
+   */
+  getEventsBetween(
+    sessionCode: string,
+    since: string,
+    until: string
+  ): DomainEvent[] {
+    return this.getEvents(sessionCode).filter(
+      (e) => e.timestamp > since && e.timestamp <= until
+    );
+  }
+
+  /**
+   * Return all events for the session up to and including the given timestamp.
+   * Useful for point-in-time state reconstruction.
+   */
+  getStateAt(sessionCode: string, timestamp: string): DomainEvent[] {
+    return this.getEvents(sessionCode).filter(
+      (e) => e.timestamp <= timestamp
+    );
+  }
+
+  /**
+   * Return all events for the session matching a specific event type string.
+   */
+  getEventsByType(sessionCode: string, type: DomainEvent["type"]): DomainEvent[] {
+    return this.getEvents(sessionCode).filter((e) => e.type === type);
+  }
+
+  /**
+   * Return the count of events for the session without creating a defensive copy.
+   */
+  getEventCount(sessionCode: string): number {
+    return this.store.get(sessionCode)?.length ?? 0;
+  }
+
+  /**
+   * Return the most recent event for the session, or undefined if none exist.
+   */
+  getLatestEvent(sessionCode: string): DomainEvent | undefined {
+    const events = this.store.get(sessionCode);
+    if (!events || events.length === 0) return undefined;
+    return events[events.length - 1];
+  }
+
+  /**
    * Subscribe to all future appended events across all sessions.
    * Returns an unsubscribe function.
    */
