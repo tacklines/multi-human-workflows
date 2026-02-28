@@ -1,0 +1,141 @@
+metadata:
+  role: "payment-backend"
+  scope: "Payment processing and Stripe integration"
+  goal: "Add Stripe payments to the checkout system"
+  generated_at: "2026-02-27T10:30:00Z"
+  event_count: 6
+  assumption_count: 3
+
+domain_events:
+  - name: "PaymentInitiated"
+    aggregate: "Payment"
+    trigger: "Customer submits payment form"
+    payload:
+      - field: "payment_id"
+        type: "str"
+      - field: "order_id"
+        type: "str"
+      - field: "amount_cents"
+        type: "int"
+      - field: "currency"
+        type: "str"
+    state_change: "NONE -> PENDING"
+    integration:
+      direction: "inbound"
+      channel: "checkout-api"
+    sources:
+      - "services/payment.py:45-62"
+    confidence: "CONFIRMED"
+
+  - name: "PaymentSucceeded"
+    aggregate: "Payment"
+    trigger: "Stripe webhook confirms charge"
+    payload:
+      - field: "payment_id"
+        type: "str"
+      - field: "order_id"
+        type: "str"
+      - field: "amount_cents"
+        type: "int"
+      - field: "stripe_charge_id"
+        type: "str"
+    state_change: "PENDING -> SUCCEEDED"
+    integration:
+      direction: "outbound"
+      channel: "event-bus"
+    sources:
+      - "services/payment.py:78-95"
+      - "webhooks/stripe.py:30-45"
+    confidence: "CONFIRMED"
+
+  - name: "PaymentFailed"
+    aggregate: "Payment"
+    trigger: "Stripe webhook reports failure"
+    payload:
+      - field: "payment_id"
+        type: "str"
+      - field: "order_id"
+        type: "str"
+      - field: "failure_reason"
+        type: "str"
+    state_change: "PENDING -> FAILED"
+    integration:
+      direction: "outbound"
+      channel: "event-bus"
+    sources:
+      - "services/payment.py:97-110"
+    confidence: "CONFIRMED"
+
+  - name: "RefundRequested"
+    aggregate: "Refund"
+    trigger: "Admin initiates refund"
+    payload:
+      - field: "refund_id"
+        type: "str"
+      - field: "payment_id"
+        type: "str"
+      - field: "amount_cents"
+        type: "int"
+      - field: "reason"
+        type: "str"
+    integration:
+      direction: "internal"
+    sources:
+      - "services/refund.py:20-35"
+    confidence: "LIKELY"
+
+  - name: "RefundCompleted"
+    aggregate: "Refund"
+    trigger: "Stripe confirms refund processed"
+    payload:
+      - field: "refund_id"
+        type: "str"
+      - field: "stripe_refund_id"
+        type: "str"
+    state_change: "PENDING -> COMPLETED"
+    integration:
+      direction: "outbound"
+      channel: "event-bus"
+    sources:
+      - "services/refund.py:50-65"
+    confidence: "LIKELY"
+
+  - name: "PaymentMethodStored"
+    aggregate: "Customer"
+    trigger: "Customer saves payment method for future use"
+    payload:
+      - field: "customer_id"
+        type: "str"
+      - field: "payment_method_type"
+        type: "str"
+    integration:
+      direction: "internal"
+    confidence: "POSSIBLE"
+    notes: "May belong to a customer-profile domain instead"
+
+boundary_assumptions:
+  - id: "BA-1"
+    type: "contract"
+    statement: "PaymentSucceeded event carries amount_cents as integer (not decimal dollars)"
+    affects_events:
+      - "PaymentSucceeded"
+      - "PaymentInitiated"
+    confidence: "LIKELY"
+    verify_with: "checkout-frontend role"
+
+  - id: "BA-2"
+    type: "existence"
+    statement: "Order entity is owned by the order-management domain, not payments"
+    affects_events:
+      - "PaymentInitiated"
+      - "PaymentSucceeded"
+    confidence: "CONFIRMED"
+    verify_with: "order-management role"
+
+  - id: "BA-3"
+    type: "ownership"
+    statement: "PaymentMethodStored may belong to customer-profile domain rather than payments"
+    affects_events:
+      - "PaymentMethodStored"
+    confidence: "POSSIBLE"
+    verify_with: "customer-profile role"

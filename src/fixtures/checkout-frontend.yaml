@@ -1,0 +1,111 @@
+metadata:
+  role: "checkout-frontend"
+  scope: "Checkout UI and payment form submission"
+  goal: "Add Stripe payments to the checkout system"
+  generated_at: "2026-02-27T10:45:00Z"
+  event_count: 5
+  assumption_count: 3
+
+domain_events:
+  - name: "CheckoutStarted"
+    aggregate: "Checkout"
+    trigger: "User clicks checkout button from cart"
+    payload:
+      - field: "checkout_id"
+        type: "str"
+      - field: "cart_id"
+        type: "str"
+      - field: "item_count"
+        type: "int"
+    integration:
+      direction: "internal"
+    sources:
+      - "components/Cart.tsx:88-102"
+    confidence: "CONFIRMED"
+
+  - name: "PaymentFormSubmitted"
+    aggregate: "Checkout"
+    trigger: "User submits Stripe payment form"
+    payload:
+      - field: "checkout_id"
+        type: "str"
+      - field: "stripe_token"
+        type: "str"
+      - field: "total"
+        type: "int"
+    integration:
+      direction: "outbound"
+      channel: "checkout-api"
+    sources:
+      - "components/PaymentForm.tsx:45-70"
+    confidence: "CONFIRMED"
+    notes: "Sends to payment backend via checkout-api"
+
+  - name: "PaymentSucceeded"
+    aggregate: "Checkout"
+    trigger: "Backend confirms payment success"
+    payload:
+      - field: "order_id"
+        type: "str"
+      - field: "total"
+        type: "int"
+    state_change: "PAYING -> CONFIRMED"
+    integration:
+      direction: "inbound"
+      channel: "event-bus"
+    sources:
+      - "hooks/usePaymentStatus.ts:20-35"
+    confidence: "LIKELY"
+    notes: "Frontend consumes this to show confirmation screen"
+
+  - name: "CartAbandoned"
+    aggregate: "Checkout"
+    trigger: "User leaves checkout without completing payment (timeout or navigation)"
+    payload:
+      - field: "checkout_id"
+        type: "str"
+      - field: "cart_id"
+        type: "str"
+    integration:
+      direction: "outbound"
+      channel: "analytics"
+    sources:
+      - "hooks/useCheckoutTimeout.ts:15-30"
+    confidence: "LIKELY"
+
+  - name: "OrderConfirmationViewed"
+    aggregate: "Order"
+    trigger: "User views order confirmation page after payment"
+    payload:
+      - field: "order_id"
+        type: "str"
+    integration:
+      direction: "internal"
+    confidence: "POSSIBLE"
+    notes: "Analytics event, may not be a true domain event"
+
+boundary_assumptions:
+  - id: "BA-1"
+    type: "contract"
+    statement: "PaymentSucceeded from backend carries order_id and total as integer cents"
+    affects_events:
+      - "PaymentSucceeded"
+    confidence: "POSSIBLE"
+    verify_with: "payment-backend role"
+
+  - id: "BA-2"
+    type: "ordering"
+    statement: "PaymentFormSubmitted always precedes PaymentSucceeded for the same checkout"
+    affects_events:
+      - "PaymentFormSubmitted"
+      - "PaymentSucceeded"
+    confidence: "LIKELY"
+    verify_with: "payment-backend role"
+
+  - id: "BA-3"
+    type: "existence"
+    statement: "Order entity is created by the backend after PaymentSucceeded, not by the frontend"
+    affects_events:
+      - "OrderConfirmationViewed"
+    confidence: "LIKELY"
+    verify_with: "payment-backend role"

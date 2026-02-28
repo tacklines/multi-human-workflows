@@ -1,0 +1,48 @@
+team: multi-human-workflows
+description: "Web app for visualizing storm-prep YAML files from multi-human Event Storming workflows. Lit + Vite + Tailwind CSS v4 + D3 + Shoelace."
+
+defaults:
+  model: sonnet
+  budget: 0.50
+  permission-mode: dontAsk
+
+members:
+  - name: architect
+    role: "System design, schema contracts, state management patterns"
+    tools: [Read, Write, Edit, Glob, Grep, Bash]
+    owns:
+      - "src/schema/**"
+      - "src/state/**"
+      - "docs/**"
+      - "CLAUDE.md"
+
+  - name: component
+    role: "Lit web components, Shoelace integration, visual rendering"
+    tools: [Read, Write, Edit, Glob, Grep, Bash]
+    owns:
+      - "src/components/**"
+      - "index.html"
+      - "src/styles.css"
+
+  - name: logic
+    role: "Pure library functions, YAML parsing, comparison algorithms, D3 layout"
+    tools: [Read, Write, Edit, Glob, Grep, Bash]
+    owns:
+      - "src/lib/**"
+      - "src/fixtures/**"
+
+  - name: backend
+    role: "Rust backend services, API endpoints, data persistence, business logic"
+    tools: [Read, Write, Edit, Glob, Grep, Bash]
+    owns:
+      - "backend/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+  - name: tester
+    role: "Test strategy, coverage, edge cases, type-checking"
+    tools: [Read, Write, Edit, Glob, Grep, Bash]
+    owns:
+      - "src/lib/*.test.ts"
+      - "vitest.config.ts"
+      - "tsconfig.json"

@@ -1,0 +1,52 @@
+@import "tailwindcss";
+@import "@shoelace-style/shoelace/dist/themes/light.css";
+
+/* ── Shoelace design-token overrides ── */
+:root {
+  --sl-color-primary-50: #eef2ff;
+  --sl-color-primary-100: #e0e7ff;
+  --sl-color-primary-200: #c7d2fe;
+  --sl-color-primary-300: #a5b4fc;
+  --sl-color-primary-400: #818cf8;
+  --sl-color-primary-500: #6366f1;
+  --sl-color-primary-600: #4f46e5;
+  --sl-color-primary-700: #4338ca;
+  --sl-color-primary-800: #3730a3;
+  --sl-color-primary-900: #312e81;
+  --sl-color-primary-950: #1e1b4b;
+  --sl-font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, monospace;
+
+  /* ── Aggregate color palette (left-border coding) ── */
+  --agg-color-0: #4338ca; /* indigo */
+  --agg-color-1: #0891b2; /* cyan */
+  --agg-color-2: #059669; /* emerald */
+  --agg-color-3: #d97706; /* amber */
+  --agg-color-4: #dc2626; /* red */
+  --agg-color-5: #7c3aed; /* violet */
+  --agg-color-6: #db2777; /* pink */
+  --agg-color-7: #0d9488; /* teal */
+
+  --agg-bg-0: #eef2ff;
+  --agg-bg-1: #ecfeff;
+  --agg-bg-2: #ecfdf5;
+  --agg-bg-3: #fffbeb;
+  --agg-bg-4: #fef2f2;
+  --agg-bg-5: #f5f3ff;
+  --agg-bg-6: #fdf2f8;
+  --agg-bg-7: #f0fdfa;
+
+  /* ── App-level custom properties ── */
+  --sidebar-width: 260px;
+  --header-height: 56px;
+  --surface-0: #ffffff;
+  --surface-1: #f8fafc;
+  --surface-2: #f1f5f9;
+  --border-color: #e2e8f0;
+}
+
+/* ── Body typography ── */
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}

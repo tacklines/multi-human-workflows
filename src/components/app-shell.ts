@@ -1,0 +1,302 @@
+import { LitElement, html, css, nothing } from 'lit';
+import { customElement, state } from 'lit/decorators.js';
+import { store, type AppState } from '../state/app-state.js';
+import { compareFiles } from '../lib/comparison.js';
+
+import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
+import '@shoelace-style/shoelace/dist/components/tab/tab.js';
+import '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js';
+import '@shoelace-style/shoelace/dist/components/alert/alert.js';
+import '@shoelace-style/shoelace/dist/components/badge/badge.js';
+import '@shoelace-style/shoelace/dist/components/button/button.js';
+import '@shoelace-style/shoelace/dist/components/icon/icon.js';
+import '@shoelace-style/shoelace/dist/components/tag/tag.js';
+import '@shoelace-style/shoelace/dist/components/divider/divider.js';
+
+import './file-drop-zone.js';
+import './card-view.js';
+import './flow-diagram.js';
+import './comparison-view.js';
+import './aggregate-nav.js';
+import './filter-panel.js';
+
+@customElement('app-shell')
+export class AppShell extends LitElement {
+  static styles = css`
+    :host {
+      display: block;
+    }
+
+    /* ── CSS custom properties ── */
+    .app-layout {
+      --sidebar-width: 260px;
+      --header-height: 56px;
+
+      display: grid;
+      grid-template-columns: var(--sidebar-width) 1fr;
+      grid-template-rows: var(--header-height) 1fr;
+      height: 100vh;
+      grid-template-areas:
+        "header header"
+        "sidebar main";
+    }
+
+    .app-layout.sidebar-collapsed {
+      grid-template-columns: 0 1fr;
+    }
+
+    /* ── Header ── */
+    .header {
+      grid-area: header;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1rem;
+      border-bottom: 1px solid var(--border-color, var(--sl-color-neutral-200));
+      background: var(--surface-1, var(--sl-color-neutral-0));
+      z-index: 10;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .header-title {
+      font-size: var(--sl-font-size-large);
+      font-weight: var(--sl-font-weight-bold);
+      color: var(--sl-color-primary-600);
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .file-pills {
+      display: flex;
+      gap: 0.35rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      grid-area: sidebar;
+      background: var(--surface-2, var(--sl-color-neutral-50));
+      border-right: 1px solid var(--border-color, var(--sl-color-neutral-200));
+      overflow-y: auto;
+      overflow-x: hidden;
+      transition: width 0.2s ease, opacity 0.2s ease;
+    }
+
+    .sidebar-collapsed .sidebar {
+      width: 0;
+      opacity: 0;
+      overflow: hidden;
+    }
+
+    .sidebar-toggle {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0.25rem 0.5rem;
+    }
+
+    .sidebar-content {
+      padding: 0;
+    }
+
+    /* ── Main ── */
+    .main {
+      grid-area: main;
+      overflow-y: auto;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .main sl-tab-group {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .main sl-tab-group::part(body) {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .main sl-tab-panel {
+      padding: 1rem;
+    }
+
+    /* ── Errors ── */
+    .errors {
+      grid-column: 1 / -1;
+      padding: 0.5rem 1rem;
+    }
+
+    .errors sl-alert {
+      margin-bottom: 0.5rem;
+    }
+
+    /* ── Conflict badge ── */
+    .conflict-badge {
+      vertical-align: middle;
+      margin-left: 0.25rem;
+    }
+  `;
+
+  @state() private appState: AppState = store.get();
+  private unsubscribe?: () => void;
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.unsubscribe = store.subscribe(() => {
+      this.appState = store.get();
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.unsubscribe?.();
+  }
+
+  render() {
+    const { files } = this.appState;
+
+    if (files.length === 0) {
+      return html`<file-drop-zone mode="hero"></file-drop-zone>`;
+    }
+
+    return this.renderAppLayout();
+  }
+
+  private renderAppLayout() {
+    const { files, activeView, filters, errors, sidebarCollapsed, selectedAggregate } = this.appState;
+    const conflictCount = files.length >= 2 ? compareFiles(files).length : 0;
+
+    return html`
+      ${errors.length > 0
+        ? html`
+            <div class="errors">
+              ${errors.map(
+                (err) => html`
+                  <sl-alert variant="danger" open closable @sl-after-hide=${() => store.clearErrors()}>
+                    <strong>${err.filename}</strong>
+                    <ul>
+                      ${err.errors.map((e) => html`<li>${e}</li>`)}
+                    </ul>
+                  </sl-alert>
+                `
+              )}
+            </div>
+          `
+        : nothing}
+
+      <div class="app-layout${sidebarCollapsed ? ' sidebar-collapsed' : ''}">
+        <!-- Header -->
+        <div class="header">
+          <div class="header-left">
+            <span class="header-title">Storm-Prep</span>
+          </div>
+          <div class="header-right">
+            <div class="file-pills">
+              ${files.map(
+                (f) => html`
+                  <sl-tag size="small" removable @sl-remove=${() => store.removeFile(f.role)}>
+                    ${f.role}
+                    <sl-badge slot="suffix" variant="neutral">${f.data.domain_events.length}</sl-badge>
+                  </sl-tag>
+                `
+              )}
+            </div>
+            <sl-button size="small" variant="default" outline @click=${this.onAddFilesClick}>
+              <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+              Add files
+            </sl-button>
+          </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="sidebar">
+          <div class="sidebar-toggle">
+            <sl-button size="small" variant="text" @click=${() => store.toggleSidebar()}>
+              <sl-icon name=${sidebarCollapsed ? 'chevron-right' : 'chevron-left'}></sl-icon>
+            </sl-button>
+          </div>
+          <div class="sidebar-content">
+            <aggregate-nav
+              .files=${files}
+              .selectedAggregate=${selectedAggregate}
+              @aggregate-select=${this.onAggregateSelect}
+            ></aggregate-nav>
+            <sl-divider></sl-divider>
+            <filter-panel></filter-panel>
+          </div>
+        </div>
+
+        <!-- Main content -->
+        <div class="main">
+          <sl-tab-group @sl-tab-show=${this.onTabChange}>
+            <sl-tab slot="nav" panel="cards" ?active=${activeView === 'cards'}>
+              Events
+            </sl-tab>
+            <sl-tab slot="nav" panel="flow" ?active=${activeView === 'flow'}>
+              Flow
+            </sl-tab>
+            <sl-tab slot="nav" panel="comparison" ?active=${activeView === 'comparison'}
+              ?disabled=${files.length < 2}>
+              Conflicts
+              ${conflictCount > 0
+                ? html`<sl-badge class="conflict-badge" variant="warning" pill>${conflictCount}</sl-badge>`
+                : nothing}
+            </sl-tab>
+
+            <sl-tab-panel name="cards">
+              <card-view
+                .files=${files}
+                .confidenceFilter=${filters.confidence}
+                .directionFilter=${filters.direction}
+              ></card-view>
+            </sl-tab-panel>
+            <sl-tab-panel name="flow">
+              <flow-diagram .files=${files}></flow-diagram>
+            </sl-tab-panel>
+            <sl-tab-panel name="comparison">
+              <comparison-view .files=${files}></comparison-view>
+            </sl-tab-panel>
+          </sl-tab-group>
+        </div>
+      </div>
+
+      <!-- Hidden file drop zone triggered by "Add files" button -->
+      <file-drop-zone mode="compact" style="display:none" id="hidden-drop"></file-drop-zone>
+    `;
+  }
+
+  private onTabChange(e: CustomEvent) {
+    const panel = (e.detail as { name: string }).name;
+    if (panel === 'cards' || panel === 'flow' || panel === 'comparison') {
+      store.setView(panel);
+    }
+  }
+
+  private onAggregateSelect(e: CustomEvent) {
+    store.setSelectedAggregate(e.detail.aggregate);
+  }
+
+  private onAddFilesClick() {
+    const dropZone = this.renderRoot.querySelector<HTMLElement>('#hidden-drop');
+    if (dropZone) {
+      const input = dropZone.shadowRoot?.querySelector<HTMLInputElement>('input[type="file"]');
+      input?.click();
+    }
+  }
+}

@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Claude Code local settings
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Memory scratch (ephemeral)
+memory/scratch/
+
+# OS
+.DS_Store

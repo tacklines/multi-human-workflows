@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(npm test:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx tsc:*)",
+      "Bash(bd:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bd prime 2>/dev/null || echo 'Beads context: Run bd ready to see available work'"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bd sync 2>/dev/null || true"
+          },
+          {
+            "type": "command",
+            "command": "mkdir -p memory/sessions && echo '# Pre-Compaction State\n\nAuto-persisted: '$(date -Iseconds) > memory/sessions/pre-compact.md"
+          }
+        ]
+      }
+    ]
+  }
+}
