@@ -7,6 +7,7 @@ import {
   UnresolvedItem,
   ContractBundle,
   IntegrationReport,
+  SessionStatus,
 } from '../schema/types.js';
 import { EventStore } from '../contexts/session/event-store.js';
 import type {
@@ -15,8 +16,12 @@ import type {
   ArtifactSubmitted,
   ContractGenerated,
   ComplianceCheckCompleted,
+  SessionPaused,
+  SessionResumed,
+  SessionClosed,
 } from '../contexts/session/domain-events.js';
 import { AgreementService } from '../contexts/agreement/agreement-service.js';
+import { canTransition, transitionSession } from './session-state-machine.js';
 
 export interface Participant {
   id: string;
@@ -44,6 +49,7 @@ export interface SessionMessage {
 export interface Session {
   code: string;
   createdAt: string;
+  status: SessionStatus;
   participants: Map<string, Participant>;
   submissions: Submission[];
   messages: SessionMessage[];
@@ -55,6 +61,7 @@ export interface Session {
 export interface SerializedSession {
   code: string;
   createdAt: string;
+  status: SessionStatus;
   participants: Participant[];
   submissions: Submission[];
   messages: SessionMessage[];
@@ -80,12 +87,27 @@ export function serializeSession(session: Session): SerializedSession {
   return {
     code: session.code,
     createdAt: session.createdAt,
+    status: session.status,
     participants: Array.from(session.participants.values()),
     submissions: session.submissions,
     messages: session.messages,
     jam: session.jam,
     contracts: session.contracts,
     integrationReport: session.integrationReport,
+  };
+}
+
+export function deserializeSession(serialized: SerializedSession): Session {
+  return {
+    code: serialized.code,
+    createdAt: serialized.createdAt,
+    status: serialized.status ?? 'active',
+    participants: new Map(serialized.participants.map((p) => [p.id, p])),
+    submissions: serialized.submissions,
+    messages: serialized.messages,
+    jam: serialized.jam,
+    contracts: serialized.contracts,
+    integrationReport: serialized.integrationReport,
   };
 }
 
@@ -115,6 +137,7 @@ export class SessionStore {
     const session: Session = {
       code,
       createdAt: new Date().toISOString(),
+      status: 'active',
       participants: new Map([[creatorId, creator]]),
       submissions: [],
       messages: [],
@@ -175,6 +198,7 @@ export class SessionStore {
   ): Submission | null {
     const session = this.sessions.get(code.toUpperCase());
     if (!session) return null;
+    if (session.status === 'closed') return null;
     if (!session.participants.has(participantId)) return null;
 
     const submission: Submission = {
@@ -211,7 +235,57 @@ export class SessionStore {
     return this.sessions.get(code.toUpperCase()) ?? null;
   }
 
+  pauseSession(code: string): boolean {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return false;
+    if (!canTransition(session.status, 'pause')) return false;
+    session.status = transitionSession(session.status, 'pause');
+    if (this.eventStore) {
+      this.eventStore.append(session.code, {
+        type: 'SessionPaused',
+        eventId: generateId(),
+        sessionCode: session.code,
+        timestamp: new Date().toISOString(),
+      } satisfies SessionPaused);
+    }
+    return true;
+  }
+
+  resumeSession(code: string): boolean {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return false;
+    if (!canTransition(session.status, 'resume')) return false;
+    session.status = transitionSession(session.status, 'resume');
+    if (this.eventStore) {
+      this.eventStore.append(session.code, {
+        type: 'SessionResumed',
+        eventId: generateId(),
+        sessionCode: session.code,
+        timestamp: new Date().toISOString(),
+      } satisfies SessionResumed);
+    }
+    return true;
+  }
+
+  closeSession(code: string): boolean {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return false;
+    if (!canTransition(session.status, 'close')) return false;
+    session.status = transitionSession(session.status, 'close');
+    if (this.eventStore) {
+      this.eventStore.append(session.code, {
+        type: 'SessionClosed',
+        eventId: generateId(),
+        sessionCode: session.code,
+        timestamp: new Date().toISOString(),
+      } satisfies SessionClosed);
+    }
+    return true;
+  }
+
   startJam(code: string): JamArtifacts | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (session?.status === 'closed') return null;
     return this.agreementService.startJam(code.toUpperCase());
   }
 
@@ -219,6 +293,8 @@ export class SessionStore {
     code: string,
     resolution: Omit<ConflictResolution, 'resolvedAt'>
   ): ConflictResolution | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (session?.status === 'closed') return null;
     return this.agreementService.resolveConflict(code.toUpperCase(), resolution);
   }
 
@@ -226,6 +302,8 @@ export class SessionStore {
     code: string,
     assignment: Omit<OwnershipAssignment, 'assignedAt'>
   ): OwnershipAssignment | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (session?.status === 'closed') return null;
     return this.agreementService.assignOwnership(code.toUpperCase(), assignment);
   }
 
@@ -233,6 +311,8 @@ export class SessionStore {
     code: string,
     item: Omit<UnresolvedItem, 'id' | 'flaggedAt'>
   ): UnresolvedItem | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (session?.status === 'closed') return null;
     return this.agreementService.flagUnresolved(code.toUpperCase(), item);
   }
 
@@ -299,6 +379,7 @@ export class SessionStore {
   ): SessionMessage | null {
     const session = this.sessions.get(code.toUpperCase());
     if (!session) return null;
+    if (session.status === 'closed') return null;
     const sender = session.participants.get(fromId);
     if (!sender) return null;
 
