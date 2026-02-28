@@ -304,9 +304,9 @@ export async function runElkLayout(
     id: 'root',
     layoutOptions: {
       'elk.algorithm': 'layered',
-      'elk.direction': 'DOWN',
-      'elk.spacing.nodeNode': '80',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '100',
+      'elk.direction': 'RIGHT',
+      'elk.spacing.nodeNode': '60',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '80',
       'elk.layered.spacing.edgeNodeBetweenLayers': '40',
       'elk.edgeRouting': 'SPLINES',
       'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
