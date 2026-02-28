@@ -62,5 +62,18 @@
 - `SubmissionProtocol = 'web' | 'mcp' | 'a2a'` lives in `src/schema/types.ts` alongside other shared types — not in the context module (added: 2026-02-28, dispatch: a6r.18)
 - ArtifactService follows same optional EventStore injection pattern as AgreementService — `constructor(eventStore?: EventStore)` (added: 2026-02-28, dispatch: a6r.18)
 
+## Contract Context
+- Define a local `SessionData` interface with only the fields the service needs — more explicit than `(code: string) => Session | null` and documents dependency surface in the type system (added: 2026-02-28, dispatch: a6r.19)
+- `checkCompliance` and `detectDrift` are stateless — take/derive data, return report, no mutations. Safe to call repeatedly, easy to test (added: 2026-02-28, dispatch: a6r.19)
+
+## WebSocket
+- `WebSocketServer` attaches to HTTP server's `upgrade` event automatically when constructed with `{ server: httpServer }` — no explicit wiring needed (added: 2026-02-28, dispatch: a6r.24)
+- `heartbeatTimer.unref()` is important for tests to not hang: intervals with references prevent process from exiting (added: 2026-02-28, dispatch: a6r.24)
+- Mock-based tests using `vi.mock('ws')` are correct for server tests in sandbox environments where loopback binding is blocked (added: 2026-02-28, dispatch: a6r.24)
+
+## Keycloak
+- `--import-realm` flag with volume mount to `/opt/keycloak/data/import/` is the cleanest way to get a pre-configured realm on first boot (added: 2026-02-28, dispatch: a6r.25)
+- Storing credentials as plaintext `"value"` in realm JSON is safe for dev imports — Keycloak hashes them on first write (added: 2026-02-28, dispatch: a6r.25)
+
 ## Cross-Agent Notes
 - (none yet)

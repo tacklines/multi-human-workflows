@@ -37,5 +37,9 @@
 - For late-join/pagination: capture `totalCount` from filtered set before applying `maxEvents` slicing so callers know how many were skipped (added: 2026-02-28, dispatch: a6r.11)
 - Pure functions that depend on domain-specific types (DomainEvent) belong in `src/contexts/session/` not `src/lib/` (added: 2026-02-28, dispatch: a6r.11)
 
+## Idempotency
+- `assignOwnership` already had upsert semantics (filter-then-push); other operations needed explicit guards (added: 2026-02-28, dispatch: a6r.27)
+- Content hashing via `JSON.stringify(data)` is sufficient for detecting identical re-submissions — CandidateEventsFile is plain serializable, no crypto hash needed (added: 2026-02-28, dispatch: a6r.27)
+
 ## Cross-Agent Notes
 - (none yet)
