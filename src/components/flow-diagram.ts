@@ -1,13 +1,16 @@
 import { LitElement, html, css, svg, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { LoadedFile } from '../schema/types.js';
+import type { Confidence, Direction } from '../schema/types.js';
 import { getAllAggregates } from '../lib/grouping.js';
 import { getAggregateColorIndex } from '../lib/aggregate-colors.js';
 import { runElkLayout, NODE_W, NODE_H } from '../lib/elk-layout.js';
 import type { LayoutNode, LayoutCompound, LayoutEdgeGroup } from '../lib/elk-layout.js';
+import { isEdgeGroupVisible } from '../lib/edge-filters.js';
 import { zoom as d3Zoom, zoomIdentity, zoomTransform, type ZoomBehavior, type D3ZoomEvent } from 'd3-zoom';
 import { select } from 'd3-selection';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
+import { store } from '../state/app-state.js';
 
 // Hardcoded palette matching --agg-color-N and --agg-bg-N CSS vars
 // (SVG attributes can't resolve CSS custom properties)
@@ -105,6 +108,9 @@ export class FlowDiagram extends LitElement {
       height: 8px;
       background: #1e293b;
     }
+    .edge-group {
+      transition: opacity 0.2s ease;
+    }
     .empty {
       text-align: center;
       padding: 2rem;
@@ -151,6 +157,7 @@ export class FlowDiagram extends LitElement {
   @state() private _tooltip: { x: number; y: number; text: string } | null = null;
   @state() private _matchedNodeIndices: number[] = [];
   @state() private _currentMatchIndex = -1;
+  @state() private _filters: { confidence: Set<Confidence>; direction: Set<Direction> } = store.get().filters;
 
   /** Minimap-ready node data, exposed for parent wiring */
   @state() minimapNodes: MinimapNode[] = [];
@@ -165,6 +172,7 @@ export class FlowDiagram extends LitElement {
   private _prevFiles: LoadedFile[] = [];
   private _prevSearchQuery = '';
   private _updatingFromMinimap = false;
+  private _unsubscribeStore: (() => void) | null = null;
 
   private async _runElkLayout(): Promise<void> {
     if (this.files.length === 0) {
@@ -219,6 +227,19 @@ export class FlowDiagram extends LitElement {
       zoomIdentity.translate(transform.x, transform.y).scale(transform.k),
     );
     this._updatingFromMinimap = false;
+  }
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    this._unsubscribeStore = store.subscribe(() => {
+      this._filters = store.get().filters;
+    });
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._unsubscribeStore?.();
+    this._unsubscribeStore = null;
   }
 
   firstUpdated(): void {
@@ -473,7 +494,13 @@ export class FlowDiagram extends LitElement {
     const to = nodeMap.get(group.to);
     if (!from || !to) return nothing;
 
-    const edgeOpacity = this._searchActive && !matchedNodeIds.has(group.from) && !matchedNodeIds.has(group.to) ? 0.2 : 1;
+    // Filter-based ghosting: opacity 0.1 when no edges in group pass active filters
+    const passesFilter = isEdgeGroupVisible(group, this._filters.confidence, this._filters.direction);
+    // Search-based dimming: opacity 0.2 when search active and neither endpoint matches
+    const searchDimmed = this._searchActive && !matchedNodeIds.has(group.from) && !matchedNodeIds.has(group.to);
+
+    const edgeOpacity = !passesFilter ? 0.1 : searchDimmed ? 0.2 : 1;
+    const pointerEvents = !passesFilter ? 'none' : 'auto';
 
     const fromCx = this._nodeCx(from);
     const fromCy = this._nodeCy(from);
@@ -492,7 +519,7 @@ export class FlowDiagram extends LitElement {
         const tooltipText = `${edge.label}\nTrigger: ${edge.trigger}\nConfidence: ${edge.confidence}`;
 
         return svg`
-          <g class="edge-group" opacity=${edgeOpacity}
+          <g class="edge-group" opacity=${edgeOpacity} style="pointer-events:${pointerEvents}"
             @mouseenter=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
             @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
             @mouseleave=${() => this._hideTooltip()}>
@@ -551,7 +578,7 @@ export class FlowDiagram extends LitElement {
       const tooltipText = group.edges.map((e) => `${e.label} (${e.confidence})`).join('\n');
 
       return svg`
-        <g class="edge-group"
+        <g class="edge-group" opacity=${edgeOpacity} style="pointer-events:${pointerEvents}"
           @mouseenter=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
           @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
           @mouseleave=${() => this._hideTooltip()}>
@@ -593,7 +620,7 @@ export class FlowDiagram extends LitElement {
       const tooltipText = `${edge.label}\nTrigger: ${edge.trigger}\nConfidence: ${edge.confidence}`;
 
       return svg`
-        <g class="edge-group"
+        <g class="edge-group" opacity=${edgeOpacity} style="pointer-events:${pointerEvents}"
           @mouseenter=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
           @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
           @mouseleave=${() => this._hideTooltip()}>
