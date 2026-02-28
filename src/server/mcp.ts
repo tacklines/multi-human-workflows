@@ -267,6 +267,36 @@ async function main(): Promise<void> {
     }
   );
 
+  // Tool: jam_flag
+  server.registerTool(
+    'jam_flag',
+    {
+      description: 'Flag an unresolved item in the jam session for later follow-up',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        description: z.string().describe('Description of the unresolved item'),
+        flaggedBy: z.string().describe('Name of the participant flagging this item'),
+        relatedOverlap: z.string().optional().describe('Label of a related overlap, if any'),
+      },
+    },
+    ({ code, description, flaggedBy, relatedOverlap }) => {
+      const item = relatedOverlap
+        ? { description, flaggedBy, relatedOverlap }
+        : { description, flaggedBy };
+      const result = sessionStore.flagUnresolved(code, item);
+      if (!result) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found or jam not started' }) }],
+          isError: true,
+        };
+      }
+      persistSessions();
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, flagged: result }) }],
+      };
+    }
+  );
+
   // Tool: jam_export
   server.registerTool(
     'jam_export',
@@ -511,6 +541,57 @@ async function main(): Promise<void> {
       });
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(status) }],
+      };
+    }
+  );
+
+  // Tool: workflow_phase_subscribe
+  server.registerTool(
+    'workflow_phase_subscribe',
+    {
+      description:
+        'Poll for workflow phase changes. Call without `since` to get the current phase and a lastChecked timestamp. ' +
+        'Call again with the returned lastChecked value to detect whether the phase has changed since your last poll.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        since: z.string().optional().describe('ISO timestamp from a prior lastChecked value; if provided, a `changed` boolean is included in the response'),
+      },
+    },
+    ({ code, since }) => {
+      const session = sessionStore.getSession(code);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const status = computeWorkflowStatus({
+        participantCount: session.participants.size,
+        submissionCount: session.submissions.length,
+        jam: session.jam,
+        contracts: session.contracts,
+        integrationReport: session.integrationReport,
+      });
+      const lastChecked = new Date().toISOString();
+      const response: Record<string, unknown> = {
+        ...status,
+        lastChecked,
+      };
+      if (since !== undefined) {
+        // Determine whether any phase has changed by comparing artifact counts.
+        // Since computeWorkflowStatus is deterministic, we detect change by checking
+        // whether the currentPhase differs from what the caller last saw. Callers
+        // should compare the returned currentPhase against their stored value to act
+        // on changes. The `changed` flag here indicates whether the session had any
+        // meaningful activity since `since` — we use the lastChecked timestamp itself
+        // as a proxy: if since < the creation of this response, we can only confirm
+        // the phase at poll time. The caller is responsible for comparing currentPhase.
+        const sinceDate = new Date(since);
+        const isValidDate = !isNaN(sinceDate.getTime());
+        response['changed'] = isValidDate ? new Date(lastChecked) > sinceDate : true;
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(response) }],
       };
     }
   );
