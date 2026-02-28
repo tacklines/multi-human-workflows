@@ -14,10 +14,12 @@
   },
   "include": [
     "src/server/**/*",
+    "src/contexts/**/*",
     "src/lib/session-store.ts",
     "src/lib/yaml-validator-server.ts",
     "src/lib/prep-completeness.ts",
     "src/lib/workflow-engine.ts",
+    "src/lib/comparison.ts",
     "src/lib/session-persistence.ts",
     "src/schema/**/*"
   ]
