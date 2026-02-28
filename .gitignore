@@ -15,6 +15,11 @@ memory/scratch/
 # Beads issue tracker (local only)
 .beads/
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+
 # OS
 .DS_Store
 .claude/worktrees/
