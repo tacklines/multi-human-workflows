@@ -56,6 +56,11 @@ export class FlowDiagram extends LitElement {
       height: 100%;
       min-height: 400px;
       cursor: grab;
+      outline: none;
+    }
+    .diagram-wrapper svg:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: -2px;
     }
     .zoom-controls {
       position: absolute;
@@ -205,6 +210,10 @@ export class FlowDiagram extends LitElement {
   @state() private _matchedNodeIndices: number[] = [];
   @state() private _currentMatchIndex = -1;
   @state() private _filters: { confidence: Set<Confidence>; direction: Set<Direction> } = store.get().filters;
+  @state() private _focusedNodeId: string | null = null;
+
+  /** Adjacency list built from _edgeGroups for keyboard navigation (nodeId -> adjacent nodeIds) */
+  private _adjacencyMap: Map<string, string[]> = new Map();
 
   /** Minimap-ready node data, exposed for parent wiring */
   @state() minimapNodes: MinimapNode[] = [];
@@ -272,6 +281,7 @@ export class FlowDiagram extends LitElement {
     this._edgeGroups = result.edgeGroups;
     this._svgWidth = result.width;
     this._svgHeight = result.height;
+    this._buildAdjacencyMap();
 
     if (hasExistingLayout) {
       // After one render at old positions, clear so CSS transitions animate to new
@@ -612,6 +622,112 @@ export class FlowDiagram extends LitElement {
    */
   private _nodeCy(node: LayoutNode): number {
     return node.y + NODE_H / 2;
+  }
+
+  /** Rebuild adjacency map from current edge groups (both directions). */
+  private _buildAdjacencyMap(): void {
+    const map = new Map<string, string[]>();
+    for (const group of this._edgeGroups) {
+      if (group.from === group.to) continue;
+      if (!map.has(group.from)) map.set(group.from, []);
+      if (!map.has(group.to)) map.set(group.to, []);
+      const fromAdj = map.get(group.from)!;
+      if (!fromAdj.includes(group.to)) fromAdj.push(group.to);
+      const toAdj = map.get(group.to)!;
+      if (!toAdj.includes(group.from)) toAdj.push(group.from);
+    }
+    this._adjacencyMap = map;
+  }
+
+  /** Count connections (adjacent nodes) for a given node id. */
+  private _adjacentCount(nodeId: string): number {
+    return this._adjacencyMap.get(nodeId)?.length ?? 0;
+  }
+
+  /** Handle keyboard events on the SVG for node navigation. */
+  private _onSvgKeydown(e: KeyboardEvent): void {
+    if (this._layoutNodes.length === 0) return;
+
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown': {
+        e.preventDefault();
+        this._moveFocus(1);
+        break;
+      }
+      case 'ArrowLeft':
+      case 'ArrowUp': {
+        e.preventDefault();
+        this._moveFocus(-1);
+        break;
+      }
+      case 'Enter':
+      case ' ': {
+        e.preventDefault();
+        if (this._focusedNodeId) {
+          this._activateFocusedNode();
+        }
+        break;
+      }
+      case 'Escape': {
+        e.preventDefault();
+        this._focusedNodeId = null;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  /** Move keyboard focus to adjacent node. direction: +1 = next, -1 = prev. */
+  private _moveFocus(direction: 1 | -1): void {
+    if (this._layoutNodes.length === 0) return;
+
+    if (!this._focusedNodeId) {
+      this._focusedNodeId = this._layoutNodes[0].id;
+      return;
+    }
+
+    const adjacents = this._adjacencyMap.get(this._focusedNodeId) ?? [];
+    if (adjacents.length === 0) return;
+
+    const currentIdx = adjacents.indexOf(this._focusedNodeId);
+    const baseIdx = currentIdx >= 0 ? currentIdx : -1;
+    const nextIdx = ((baseIdx + direction) + adjacents.length) % adjacents.length;
+    this._focusedNodeId = adjacents[nextIdx];
+  }
+
+  /** Activate the currently focused node (same as clicking it). */
+  private _activateFocusedNode(): void {
+    if (!this._focusedNodeId) return;
+
+    const compound = this._layoutCompounds.find((c) => c.id === this._focusedNodeId);
+    if (compound) {
+      this._selectedAggregate = this._selectedAggregate === compound.id ? null : compound.id;
+      this.dispatchEvent(
+        new CustomEvent('aggregate-select', {
+          detail: this._selectedAggregate,
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      return;
+    }
+
+    this.dispatchEvent(
+      new CustomEvent('detail-panel-open', {
+        detail: { nodeId: this._focusedNodeId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /** Handle SVG focus — if no node is focused, focus the first node. */
+  private _onSvgFocus(): void {
+    if (!this._focusedNodeId && this._layoutNodes.length > 0) {
+      this._focusedNodeId = this._layoutNodes[0].id;
+    }
   }
 
   /**
@@ -1158,9 +1274,12 @@ export class FlowDiagram extends LitElement {
 
     // Search state
     const isMatched = this._isMatchedNode(nodeIndex);
-    const isFocused = this._searchActive && this._currentMatchIndex >= 0 &&
+    const isSearchFocused = this._searchActive && this._currentMatchIndex >= 0 &&
       this._matchedNodeIndices[this._currentMatchIndex] === nodeIndex;
     const opacity = this._searchActive && !isMatched ? 0.2 : 1;
+
+    // Keyboard focus state
+    const isKeyboardFocused = this._focusedNodeId === node.id;
 
     // ELK gives absolute top-left coordinates
     const x = node.x;
@@ -1219,17 +1338,22 @@ export class FlowDiagram extends LitElement {
     const prevPos = this._animatingLayout ? this._prevNodePositions.get(node.id) : undefined;
     const tx = prevPos ? prevPos.x : x;
     const ty = prevPos ? prevPos.y : y;
+    const adjCount = this._adjacentCount(node.id);
+    const nodeElemId = `node-${node.id.replace(/[^a-zA-Z0-9]/g, '_')}`;
     const nodeStyle = `cursor: pointer; transform: translate(${tx}px, ${ty}px); opacity: ${opacity}`;
 
     return svg`
       <g
+        id=${nodeElemId}
         class="node-group"
+        role="img"
+        aria-label="${node.id} — ${adjCount} connections"
         style=${nodeStyle}
         @click=${(e: MouseEvent) => this._onLeafNodeClick(node.id, node.kind, e)}
         @mouseenter=${(e: MouseEvent) => this._showTooltip(e, nodeTooltip)}
         @mousemove=${(e: MouseEvent) => this._showTooltip(e, nodeTooltip)}
         @mouseleave=${() => this._hideTooltip()}>
-        ${isFocused
+        ${isSearchFocused
           ? svg`<rect
               x=${-3} y=${-3}
               width=${NODE_W + 6} height=${NODE_H + 6}
@@ -1238,6 +1362,17 @@ export class FlowDiagram extends LitElement {
               stroke="#2563eb"
               stroke-width="2.5"
               stroke-dasharray="5 3"
+            />`
+          : nothing}
+        ${isKeyboardFocused
+          ? svg`<rect
+              x=${-4} y=${-4}
+              width=${NODE_W + 8} height=${NODE_H + 8}
+              rx="11"
+              fill="none"
+              stroke="#2563eb"
+              stroke-width="2"
+              stroke-dasharray="4"
             />`
           : nothing}
         <rect
@@ -1284,6 +1419,14 @@ export class FlowDiagram extends LitElement {
         <svg
           viewBox="0 0 ${this._svgWidth} ${this._svgHeight}"
           xmlns="http://www.w3.org/2000/svg"
+          tabindex="0"
+          role="application"
+          aria-label="Event flow diagram"
+          aria-activedescendant=${this._focusedNodeId
+            ? `node-${this._focusedNodeId.replace(/[^a-zA-Z0-9]/g, '_')}`
+            : nothing}
+          @keydown=${this._onSvgKeydown}
+          @focus=${this._onSvgFocus}
         >
           <defs>
             <!-- Per-confidence-color arrowhead markers for crisp directional arrows -->
