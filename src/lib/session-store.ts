@@ -5,6 +5,8 @@ import {
   OwnershipAssignment,
   ConflictResolution,
   UnresolvedItem,
+  ContractBundle,
+  IntegrationReport,
 } from '../schema/types.js';
 
 export interface Participant {
@@ -26,6 +28,8 @@ export interface Session {
   participants: Map<string, Participant>;
   submissions: Submission[];
   jam: JamArtifacts | null;
+  contracts: ContractBundle | null;
+  integrationReport: IntegrationReport | null;
 }
 
 export interface SerializedSession {
@@ -34,6 +38,8 @@ export interface SerializedSession {
   participants: Participant[];
   submissions: Submission[];
   jam: JamArtifacts | null;
+  contracts: ContractBundle | null;
+  integrationReport: IntegrationReport | null;
 }
 
 function generateCode(): string {
@@ -56,6 +62,8 @@ export function serializeSession(session: Session): SerializedSession {
     participants: Array.from(session.participants.values()),
     submissions: session.submissions,
     jam: session.jam,
+    contracts: session.contracts,
+    integrationReport: session.integrationReport,
   };
 }
 
@@ -81,6 +89,8 @@ export class SessionStore {
       participants: new Map([[creatorId, creator]]),
       submissions: [],
       jam: null,
+      contracts: null,
+      integrationReport: null,
     };
 
     this.sessions.set(code, session);
@@ -191,6 +201,30 @@ export class SessionStore {
     const session = this.sessions.get(code.toUpperCase());
     if (!session?.jam) return null;
     return session.jam;
+  }
+
+  loadContracts(code: string, bundle: ContractBundle): ContractBundle | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return null;
+    session.contracts = bundle;
+    return bundle;
+  }
+
+  getContracts(code: string): ContractBundle | null {
+    const session = this.sessions.get(code.toUpperCase());
+    return session?.contracts ?? null;
+  }
+
+  loadIntegrationReport(code: string, report: IntegrationReport): IntegrationReport | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return null;
+    session.integrationReport = report;
+    return report;
+  }
+
+  getIntegrationReport(code: string): IntegrationReport | null {
+    const session = this.sessions.get(code.toUpperCase());
+    return session?.integrationReport ?? null;
   }
 
   getSessionFiles(code: string): LoadedFile[] {

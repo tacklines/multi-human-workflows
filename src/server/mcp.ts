@@ -339,6 +339,141 @@ async function main(): Promise<void> {
     }
   );
 
+  // Tool: contract_load
+  server.registerTool(
+    'contract_load',
+    {
+      description: 'Load a contract bundle (from /formalize output) into the session',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        bundle: z.string().describe('JSON string of the ContractBundle'),
+      },
+    },
+    ({ code, bundle }) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(bundle);
+      } catch {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Invalid JSON' }) }],
+          isError: true,
+        };
+      }
+      const result = sessionStore.loadContracts(code, parsed as import('../schema/types.js').ContractBundle);
+      if (!result) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, eventContracts: result.eventContracts.length, boundaryContracts: result.boundaryContracts.length }) }],
+      };
+    }
+  );
+
+  // Tool: contract_diff
+  server.registerTool(
+    'contract_diff',
+    {
+      description: 'Compare loaded contracts against the original prep submissions to show what changed',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+      },
+    },
+    ({ code }) => {
+      const contracts = sessionStore.getContracts(code);
+      const files = sessionStore.getSessionFiles(code);
+      if (!contracts) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'No contracts loaded' }) }],
+          isError: true,
+        };
+      }
+      // Diff: events in contracts vs events in submissions
+      const contractEventNames = new Set(contracts.eventContracts.map((c) => c.eventName));
+      const prepEventNames = new Set(files.flatMap((f) => f.data.domain_events.map((e) => e.name)));
+      const added = [...contractEventNames].filter((n) => !prepEventNames.has(n));
+      const removed = [...prepEventNames].filter((n) => !contractEventNames.has(n));
+      const retained = [...contractEventNames].filter((n) => prepEventNames.has(n));
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ added, removed, retained, totalContracts: contracts.eventContracts.length, totalPrepEvents: prepEventNames.size }),
+        }],
+      };
+    }
+  );
+
+  // Tool: integration_load
+  server.registerTool(
+    'integration_load',
+    {
+      description: 'Load an integration report (from /integrate output) into the session',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        report: z.string().describe('JSON string of the IntegrationReport'),
+      },
+    },
+    ({ code, report }) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(report);
+      } catch {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Invalid JSON' }) }],
+          isError: true,
+        };
+      }
+      const result = sessionStore.loadIntegrationReport(code, parsed as import('../schema/types.js').IntegrationReport);
+      if (!result) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, overallStatus: result.overallStatus, checkCount: result.checks.length }) }],
+      };
+    }
+  );
+
+  // Tool: integration_status
+  server.registerTool(
+    'integration_status',
+    {
+      description: 'Get the integration report status for a session — checks, overall status, and go/no-go assessment',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+      },
+    },
+    ({ code }) => {
+      const report = sessionStore.getIntegrationReport(code);
+      if (!report) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'No integration report loaded' }) }],
+          isError: true,
+        };
+      }
+      const passCount = report.checks.filter((c) => c.status === 'pass').length;
+      const failCount = report.checks.filter((c) => c.status === 'fail').length;
+      const warnCount = report.checks.filter((c) => c.status === 'warn').length;
+      const goNoGo = failCount === 0 ? 'GO' : 'NO-GO';
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            overallStatus: report.overallStatus,
+            goNoGo,
+            summary: report.summary,
+            checks: { pass: passCount, fail: failCount, warn: warnCount, total: report.checks.length },
+            details: report.checks,
+          }),
+        }],
+      };
+    }
+  );
+
   const transport = new StdioServerTransport();
 
   console.error('[mcp] starting multi-human-workflows MCP server');

@@ -82,6 +82,52 @@ export interface UnresolvedItem {
   flaggedAt: string;
 }
 
+/** Contract artifacts — output from /formalize */
+
+export interface EventContract {
+  eventName: string;
+  aggregate: string;
+  version: string;
+  schema: Record<string, unknown>;
+  owner: string;
+  consumers: string[];
+  producedBy: string;
+}
+
+export interface BoundaryContract {
+  boundaryName: string;
+  aggregates: string[];
+  events: string[];
+  owner: string;
+  externalDependencies: string[];
+}
+
+export interface ContractBundle {
+  generatedAt: string;
+  sourceJamCode?: string;
+  eventContracts: EventContract[];
+  boundaryContracts: BoundaryContract[];
+}
+
+/** Integration report — output from /integrate */
+
+export type IntegrationCheckStatus = 'pass' | 'fail' | 'warn' | 'skip';
+
+export interface IntegrationCheck {
+  name: string;
+  status: IntegrationCheckStatus;
+  message: string;
+  details?: string;
+}
+
+export interface IntegrationReport {
+  generatedAt: string;
+  sourceContracts: string[];
+  checks: IntegrationCheck[];
+  overallStatus: IntegrationCheckStatus;
+  summary: string;
+}
+
 export interface JamArtifacts {
   startedAt: string;
   ownershipMap: OwnershipAssignment[];
