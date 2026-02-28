@@ -16,6 +16,7 @@ import {
 } from 'd3-force';
 import { zoom as d3Zoom, zoomIdentity, type ZoomBehavior, type D3ZoomEvent } from 'd3-zoom';
 import { select } from 'd3-selection';
+import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
 
 // Hardcoded palette matching --agg-color-N and --agg-bg-N CSS vars
 // (SVG attributes can't resolve CSS custom properties)
@@ -171,8 +172,18 @@ export class FlowDiagram extends LitElement {
   @state() private _selectedAggregate: string | null = null;
   @state() private _tooltip: { x: number; y: number; text: string } | null = null;
 
+  /** Minimap-ready node data, exposed for parent wiring */
+  @state() minimapNodes: MinimapNode[] = [];
+  /** Minimap-ready edge data, exposed for parent wiring */
+  @state() minimapEdges: MinimapEdge[] = [];
+  /** Current view transform, exposed for parent wiring */
+  @state() viewTransform: ViewTransform = { x: 0, y: 0, k: 1 };
+  /** Graph bounds for minimap scaling */
+  @state() graphBounds: GraphBounds = { width: SIM_WIDTH, height: SIM_HEIGHT };
+
   private _zoom: ZoomBehavior<SVGSVGElement, unknown> | null = null;
   private _prevFiles: LoadedFile[] = [];
+  private _updatingFromMinimap = false;
 
   private _buildGraph(): { nodes: SimNode[]; edgeGroups: EdgeGroup[] } {
     const allAggregates = getAllAggregates(this.files);
@@ -307,9 +318,32 @@ export class FlowDiagram extends LitElement {
       .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
         const { x, y, k } = event.transform;
         this._transform = `translate(${x},${y}) scale(${k})`;
+        this.viewTransform = { x, y, k };
+
+        if (!this._updatingFromMinimap) {
+          this.dispatchEvent(
+            new CustomEvent('view-transform-changed', {
+              detail: { x, y, k },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        }
       });
 
     select(svgEl).call(this._zoom);
+  }
+
+  /** Apply a transform from the minimap without triggering a re-entrant loop */
+  applyMinimapTransform(transform: ViewTransform): void {
+    const svgEl = this._getSvgEl();
+    if (!svgEl || !this._zoom) return;
+    this._updatingFromMinimap = true;
+    select(svgEl).call(
+      this._zoom.transform,
+      zoomIdentity.translate(transform.x, transform.y).scale(transform.k),
+    );
+    this._updatingFromMinimap = false;
   }
 
   firstUpdated(): void {
@@ -326,17 +360,69 @@ export class FlowDiagram extends LitElement {
         this._runSimulation(nodes, edgeGroups);
         this._simNodes = [...nodes];
         this._edgeGroups = edgeGroups;
+        this._computeMinimapData(nodes, edgeGroups);
       } else {
         this._simNodes = [];
         this._edgeGroups = [];
+        this.minimapNodes = [];
+        this.minimapEdges = [];
       }
 
       // Reset zoom on file change
       this._transform = '';
+      this.viewTransform = { x: 0, y: 0, k: 1 };
 
       // Re-attach zoom (SVG may have been recreated if going from empty to loaded)
       this.updateComplete.then(() => this._setupZoom());
     }
+  }
+
+  private _computeMinimapData(nodes: SimNode[], edgeGroups: EdgeGroup[]): void {
+    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+
+    this.minimapNodes = nodes.map((n) => {
+      const isAggregate = n.kind === 'aggregate';
+      const color = isAggregate
+        ? AGG_COLORS[n.colorIndex] ?? AGG_COLORS[0]
+        : EXTERNAL_STROKE;
+      return {
+        id: n.id,
+        x: (n.x ?? 0) - NODE_W / 2,
+        y: (n.y ?? 0) - NODE_H / 2,
+        width: NODE_W,
+        height: NODE_H,
+        color,
+      };
+    });
+
+    this.minimapEdges = edgeGroups
+      .filter((g) => g.from !== g.to)
+      .map((g) => {
+        const from = nodeMap.get(g.from);
+        const to = nodeMap.get(g.to);
+        if (!from || !to) return null;
+        return {
+          x1: from.x ?? 0,
+          y1: from.y ?? 0,
+          x2: to.x ?? 0,
+          y2: to.y ?? 0,
+        };
+      })
+      .filter((e): e is MinimapEdge => e !== null);
+
+    this.graphBounds = { width: SIM_WIDTH, height: SIM_HEIGHT };
+
+    this.dispatchEvent(
+      new CustomEvent('graph-data-changed', {
+        detail: {
+          minimapNodes: this.minimapNodes,
+          minimapEdges: this.minimapEdges,
+          graphBounds: this.graphBounds,
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   private _getSvgEl(): SVGSVGElement | null {
