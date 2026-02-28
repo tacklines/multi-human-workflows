@@ -19,6 +19,7 @@ import './file-drop-zone.js';
 import './card-view.js';
 import './flow-diagram.js';
 import './flow-minimap.js';
+import './flow-search.js';
 import './comparison-view.js';
 import './aggregate-nav.js';
 import './filter-panel.js';
@@ -161,6 +162,9 @@ export class AppShell extends LitElement {
   @state() private _minimapEdges: MinimapEdge[] = [];
   @state() private _viewTransform: ViewTransform = { x: 0, y: 0, k: 1 };
   @state() private _graphBounds: GraphBounds = { width: 800, height: 500 };
+  @state() private _searchQuery = '';
+  @state() private _searchMatchCount = 0;
+  @state() private _searchCurrentMatch = -1;
   private unsubscribe?: () => void;
 
   connectedCallback() {
@@ -274,11 +278,19 @@ export class AppShell extends LitElement {
               ></card-view>
             </sl-tab-panel>
             <sl-tab-panel name="flow">
+              <flow-search
+                .matchCount=${this._searchMatchCount}
+                .currentMatch=${this._searchCurrentMatch}
+                @flow-search=${this._onFlowSearch}
+                @flow-search-next=${this._onFlowSearchNext}
+              ></flow-search>
               <div style="position: relative;">
                 <flow-diagram
                   .files=${files}
+                  .searchQuery=${this._searchQuery}
                   @view-transform-changed=${this._onViewTransformChanged}
                   @graph-data-changed=${this._onGraphDataChanged}
+                  @search-match-count=${this._onSearchMatchCount}
                   id="flow-diagram"
                 ></flow-diagram>
                 <flow-minimap
@@ -342,5 +354,19 @@ export class AppShell extends LitElement {
     if (flowDiagram) {
       flowDiagram.applyMinimapTransform(e.detail as ViewTransform);
     }
+  }
+
+  private _onFlowSearch(e: CustomEvent<{ query: string }>) {
+    this._searchQuery = e.detail.query;
+  }
+
+  private _onFlowSearchNext() {
+    const diagram = this.renderRoot.querySelector<FlowDiagram>('#flow-diagram');
+    diagram?.nextMatch();
+  }
+
+  private _onSearchMatchCount(e: CustomEvent<{ count: number; current: number }>) {
+    this._searchMatchCount = e.detail.count;
+    this._searchCurrentMatch = e.detail.current;
   }
 }

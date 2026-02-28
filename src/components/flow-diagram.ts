@@ -5,7 +5,7 @@ import { getAllAggregates } from '../lib/grouping.js';
 import { getAggregateColorIndex } from '../lib/aggregate-colors.js';
 import { runElkLayout, NODE_W, NODE_H } from '../lib/elk-layout.js';
 import type { LayoutNode, LayoutEdgeGroup } from '../lib/elk-layout.js';
-import { zoom as d3Zoom, zoomIdentity, type ZoomBehavior, type D3ZoomEvent } from 'd3-zoom';
+import { zoom as d3Zoom, zoomIdentity, zoomTransform, type ZoomBehavior, type D3ZoomEvent } from 'd3-zoom';
 import { select } from 'd3-selection';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
 
@@ -135,6 +135,7 @@ export class FlowDiagram extends LitElement {
   `;
 
   @property({ attribute: false }) files: LoadedFile[] = [];
+  @property() searchQuery = '';
 
   @state() private _layoutNodes: LayoutNode[] = [];
   @state() private _edgeGroups: LayoutEdgeGroup[] = [];
@@ -143,6 +144,8 @@ export class FlowDiagram extends LitElement {
   @state() private _transform = '';
   @state() private _selectedAggregate: string | null = null;
   @state() private _tooltip: { x: number; y: number; text: string } | null = null;
+  @state() private _matchedNodeIndices: number[] = [];
+  @state() private _currentMatchIndex = -1;
 
   /** Minimap-ready node data, exposed for parent wiring */
   @state() minimapNodes: MinimapNode[] = [];
@@ -155,6 +158,7 @@ export class FlowDiagram extends LitElement {
 
   private _zoom: ZoomBehavior<SVGSVGElement, unknown> | null = null;
   private _prevFiles: LoadedFile[] = [];
+  private _prevSearchQuery = '';
   private _updatingFromMinimap = false;
 
   private async _runElkLayout(): Promise<void> {
@@ -226,8 +230,19 @@ export class FlowDiagram extends LitElement {
       this._runElkLayout().then(() => {
         this._computeMinimapData(this._layoutNodes, this._edgeGroups);
         // Re-attach zoom (SVG may have been recreated if going from empty to loaded)
-        this.updateComplete.then(() => this._setupZoom());
+        this.updateComplete.then(() => {
+          this._setupZoom();
+          if (this.searchQuery) {
+            this._updateSearch();
+          }
+        });
       });
+    }
+
+    // Re-run search when query changes
+    if (this.searchQuery !== this._prevSearchQuery) {
+      this._prevSearchQuery = this.searchQuery;
+      this._updateSearch();
     }
   }
 
@@ -301,6 +316,83 @@ export class FlowDiagram extends LitElement {
     this._zoom.transform(select(svgEl), zoomIdentity);
   }
 
+  private _updateSearch(): void {
+    const query = this.searchQuery.trim().toLowerCase();
+    if (!query) {
+      this._matchedNodeIndices = [];
+      this._currentMatchIndex = -1;
+      this._dispatchMatchCount(0, -1);
+      return;
+    }
+
+    const indices: number[] = [];
+    for (let i = 0; i < this._layoutNodes.length; i++) {
+      if (this._layoutNodes[i].label.toLowerCase().includes(query)) {
+        indices.push(i);
+      }
+    }
+    this._matchedNodeIndices = indices;
+    if (indices.length > 0) {
+      this._currentMatchIndex = 0;
+      this.focusMatch(0);
+    } else {
+      this._currentMatchIndex = -1;
+    }
+    this._dispatchMatchCount(indices.length, indices.length > 0 ? 0 : -1);
+  }
+
+  private _dispatchMatchCount(count: number, current: number): void {
+    this.dispatchEvent(
+      new CustomEvent('search-match-count', {
+        detail: { count, current },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  focusMatch(index: number): void {
+    if (index < 0 || index >= this._matchedNodeIndices.length) return;
+    this._currentMatchIndex = index;
+
+    const nodeIndex = this._matchedNodeIndices[index];
+    const node = this._layoutNodes[nodeIndex];
+    if (!node) return;
+
+    const svgEl = this._getSvgEl();
+    if (!svgEl || !this._zoom) return;
+
+    const cx = this._nodeCx(node);
+    const cy = this._nodeCy(node);
+
+    const svgRect = svgEl.getBoundingClientRect();
+    const viewW = svgRect.width;
+    const viewH = svgRect.height;
+
+    const currentTransform = zoomTransform(svgEl);
+    const k = Math.max(currentTransform.k, 1);
+
+    const tx = viewW / 2 - cx * k;
+    const ty = viewH / 2 - cy * k;
+
+    this._zoom.transform(select(svgEl), zoomIdentity.translate(tx, ty).scale(k));
+    this._dispatchMatchCount(this._matchedNodeIndices.length, index);
+  }
+
+  nextMatch(): void {
+    if (this._matchedNodeIndices.length === 0) return;
+    const next = (this._currentMatchIndex + 1) % this._matchedNodeIndices.length;
+    this.focusMatch(next);
+  }
+
+  private get _searchActive(): boolean {
+    return this.searchQuery.trim().length > 0;
+  }
+
+  private _isMatchedNode(nodeIndex: number): boolean {
+    return this._matchedNodeIndices.includes(nodeIndex);
+  }
+
   private _onNodeClick(nodeId: string, kind: string) {
     if (kind !== 'aggregate') return;
     this._selectedAggregate = this._selectedAggregate === nodeId ? null : nodeId;
@@ -342,10 +434,12 @@ export class FlowDiagram extends LitElement {
     return node.y + NODE_H / 2;
   }
 
-  private _renderEdgeGroup(group: LayoutEdgeGroup, nodeMap: Map<string, LayoutNode>): unknown {
+  private _renderEdgeGroup(group: LayoutEdgeGroup, nodeMap: Map<string, LayoutNode>, matchedNodeIds: Set<string>): unknown {
     const from = nodeMap.get(group.from);
     const to = nodeMap.get(group.to);
     if (!from || !to) return nothing;
+
+    const edgeOpacity = this._searchActive && !matchedNodeIds.has(group.from) && !matchedNodeIds.has(group.to) ? 0.2 : 1;
 
     const fromCx = this._nodeCx(from);
     const fromCy = this._nodeCy(from);
@@ -364,7 +458,7 @@ export class FlowDiagram extends LitElement {
         const tooltipText = `${edge.label}\nTrigger: ${edge.trigger}\nConfidence: ${edge.confidence}`;
 
         return svg`
-          <g class="edge-group"
+          <g class="edge-group" opacity=${edgeOpacity}
             @mouseenter=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
             @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
             @mouseleave=${() => this._hideTooltip()}>
@@ -536,7 +630,7 @@ export class FlowDiagram extends LitElement {
     return { lines, fontSize: lines.length > 1 ? 12 : fontSize };
   }
 
-  private _renderNode(node: LayoutNode): unknown {
+  private _renderNode(node: LayoutNode, nodeIndex: number): unknown {
     const isSelected = this._selectedAggregate === node.id;
     const isAggregate = node.kind === 'aggregate';
 
@@ -544,6 +638,12 @@ export class FlowDiagram extends LitElement {
     const stroke = isAggregate ? AGG_COLORS[node.colorIndex] ?? AGG_COLORS[0] : EXTERNAL_STROKE;
     const textColor = isAggregate ? AGG_TEXT[node.colorIndex] ?? AGG_TEXT[0] : EXTERNAL_TEXT;
     const strokeWidth = isSelected ? 3.5 : 2;
+
+    // Search state
+    const isMatched = this._isMatchedNode(nodeIndex);
+    const isFocused = this._searchActive && this._currentMatchIndex >= 0 &&
+      this._matchedNodeIndices[this._currentMatchIndex] === nodeIndex;
+    const opacity = this._searchActive && !isMatched ? 0.2 : 1;
 
     // ELK gives top-left (x, y) directly
     const x = node.x;
@@ -559,7 +659,19 @@ export class FlowDiagram extends LitElement {
       <g
         class="node"
         style="cursor: ${isAggregate ? 'pointer' : 'default'}"
+        opacity=${opacity}
         @click=${() => this._onNodeClick(node.id, node.kind)}>
+        ${isFocused
+          ? svg`<rect
+              x=${x - 4} y=${y - 4}
+              width=${NODE_W + 8} height=${NODE_H + 8}
+              rx="14"
+              fill="none"
+              stroke="#2563eb"
+              stroke-width="3"
+              stroke-dasharray="6 3"
+            />`
+          : nothing}
         <rect
           x=${x} y=${y}
           width=${NODE_W} height=${NODE_H}
@@ -594,6 +706,10 @@ export class FlowDiagram extends LitElement {
     const allAggregates = getAllAggregates(this.files);
     const nodeMap = new Map(this._layoutNodes.map((n) => [n.id, n]));
 
+    const matchedNodeIds = new Set(
+      this._matchedNodeIndices.map((i) => this._layoutNodes[i]?.id).filter(Boolean) as string[],
+    );
+
     return html`
       <div class="diagram-wrapper">
         <svg
@@ -611,10 +727,10 @@ export class FlowDiagram extends LitElement {
 
           <g transform=${this._transform || nothing}>
             <!-- Edges behind nodes -->
-            ${this._edgeGroups.map((g) => this._renderEdgeGroup(g, nodeMap))}
+            ${this._edgeGroups.map((g) => this._renderEdgeGroup(g, nodeMap, matchedNodeIds))}
 
             <!-- Nodes on top -->
-            ${this._layoutNodes.map((n) => this._renderNode(n))}
+            ${this._layoutNodes.map((n, i) => this._renderNode(n, i))}
           </g>
         </svg>
 
