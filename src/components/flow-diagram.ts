@@ -1,4 +1,4 @@
-import { LitElement, html, css, svg, nothing } from 'lit';
+import { LitElement, html, css, svg, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { LoadedFile } from '../schema/types.js';
 import type { Confidence, Direction } from '../schema/types.js';
@@ -90,13 +90,52 @@ export class FlowDiagram extends LitElement {
       background: #1e293b;
       color: white;
       font-size: 12px;
-      line-height: 1.4;
-      padding: 6px 10px;
-      border-radius: 6px;
-      max-width: 260px;
+      line-height: 1.5;
+      padding: 8px 12px;
+      border-radius: 8px;
+      max-width: 280px;
       z-index: 20;
-      white-space: pre-line;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .tooltip-name {
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 5px;
+    }
+    .tooltip-row {
+      display: flex;
+      gap: 6px;
+      align-items: baseline;
+      margin-bottom: 2px;
+    }
+    .tooltip-key {
+      color: rgba(255,255,255,0.6);
+      font-size: 11px;
+      flex-shrink: 0;
+      min-width: 80px;
+    }
+    .tooltip-val {
+      color: rgba(255,255,255,0.95);
+    }
+    .tooltip-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
+      flex-shrink: 0;
+    }
+    .tooltip-divider {
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.15);
+      margin: 5px 0;
+    }
+    .tooltip-event-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      margin-bottom: 2px;
     }
     .tooltip::after {
       content: '';
@@ -156,7 +195,7 @@ export class FlowDiagram extends LitElement {
   @state() private _svgHeight = DEFAULT_HEIGHT;
   @state() private _transform = '';
   @state() private _selectedAggregate: string | null = null;
-  @state() private _tooltip: { x: number; y: number; text: string } | null = null;
+  @state() private _tooltip: { x: number; y: number; content: TemplateResult | string } | null = null;
   @state() private _matchedNodeIndices: number[] = [];
   @state() private _currentMatchIndex = -1;
   @state() private _filters: { confidence: Set<Confidence>; direction: Set<Direction> } = store.get().filters;
@@ -452,11 +491,19 @@ export class FlowDiagram extends LitElement {
     return this._matchedNodeIndices.includes(nodeIndex);
   }
 
-  private _onCompoundClick(compoundId: string) {
+  private _onCompoundClick(compoundId: string, e: MouseEvent) {
+    e.stopPropagation();
     this._selectedAggregate = this._selectedAggregate === compoundId ? null : compoundId;
     this.dispatchEvent(
       new CustomEvent('aggregate-select', {
         detail: this._selectedAggregate,
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    this.dispatchEvent(
+      new CustomEvent('node-detail', {
+        detail: { kind: 'aggregate', id: compoundId },
         bubbles: true,
         composed: true,
       }),
@@ -477,14 +524,25 @@ export class FlowDiagram extends LitElement {
     });
   }
 
-  private _showTooltip(e: MouseEvent, text: string) {
+  private _onLeafNodeClick(nodeId: string, kind: 'aggregate' | 'external', e: MouseEvent) {
+    e.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent('node-detail', {
+        detail: { kind, id: nodeId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private _showTooltip(e: MouseEvent, content: TemplateResult | string) {
     const wrapper = this.renderRoot.querySelector('.diagram-wrapper') as HTMLElement;
     if (!wrapper) return;
     const rect = wrapper.getBoundingClientRect();
     this._tooltip = {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top - 40,
-      text,
+      content,
     };
   }
 
@@ -569,7 +627,24 @@ export class FlowDiagram extends LitElement {
         const endY = ry + 6;
         const pathId = `loop-${group.from.replace(/[^a-zA-Z0-9]/g, '_')}-${i}`;
         const color = CONFIDENCE_COLOR[edge.confidence] ?? '#64748b';
-        const tooltipText = `${edge.label}\nTrigger: ${edge.trigger}\nConfidence: ${edge.confidence}`;
+        const loopTooltip = html`
+          <div class="tooltip-name">${edge.label}</div>
+          <hr class="tooltip-divider" />
+          <div class="tooltip-row">
+            <span class="tooltip-key">What triggers?</span>
+            <span class="tooltip-val">${edge.trigger}</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-key">Confidence</span>
+            <span class="tooltip-val">
+              <span class="tooltip-dot" style="background:${color}"></span>${edge.confidence}
+            </span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-key">Integration</span>
+            <span class="tooltip-val">Internal</span>
+          </div>
+        `;
 
         // Cubic bezier: go out to the right and loop back
         const cpX = rx + loopW;
@@ -577,8 +652,8 @@ export class FlowDiagram extends LitElement {
 
         return svg`
           <g class="edge-group" opacity=${edgeOpacity} style="pointer-events:${pointerEvents}"
-            @mouseenter=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
-            @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
+            @mouseenter=${(e: MouseEvent) => this._showTooltip(e, loopTooltip)}
+            @mousemove=${(e: MouseEvent) => this._showTooltip(e, loopTooltip)}
             @mouseleave=${() => this._hideTooltip()}>
             <defs>
               <path id=${pathId} d=${loopPath} />
@@ -617,12 +692,28 @@ export class FlowDiagram extends LitElement {
       const bundlePath = this._edgePath(x1, y1, x2, y2, 0, bundleSection);
       const mx = (x1 + x2) / 2;
       const my = (y1 + y2) / 2;
-      const tooltipText = group.edges.map((e) => `${e.label} (${e.confidence})`).join('\n');
+      const fromLabel = group.from.includes('::') ? group.from.split('::')[1] : group.from;
+      const toLabel = group.to.includes('::') ? group.to.split('::')[1] : group.to;
+      const bundleTooltip = html`
+        <div class="tooltip-name">${fromLabel} &rarr; ${toLabel}</div>
+        <div class="tooltip-row">
+          <span class="tooltip-key">Events</span>
+          <span class="tooltip-val">${count} bundled</span>
+        </div>
+        <hr class="tooltip-divider" />
+        ${group.edges.map((ev) => {
+          const dotColor = CONFIDENCE_COLOR[ev.confidence] ?? '#64748b';
+          return html`<div class="tooltip-event-item">
+            <span class="tooltip-dot" style="background:${dotColor}"></span>
+            <span>${ev.label}</span>
+          </div>`;
+        })}
+      `;
 
       return svg`
         <g class="edge-group" opacity=${edgeOpacity} style="pointer-events:${pointerEvents}"
-          @mouseenter=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
-          @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
+          @mouseenter=${(e: MouseEvent) => this._showTooltip(e, bundleTooltip)}
+          @mousemove=${(e: MouseEvent) => this._showTooltip(e, bundleTooltip)}
           @mouseleave=${() => this._hideTooltip()}>
           <defs>
             <path id=${bundlePathId} d=${bundlePath} />
@@ -650,7 +741,30 @@ export class FlowDiagram extends LitElement {
       const oy2 = y2 + perpY * offset;
 
       const color = CONFIDENCE_COLOR[edge.confidence] ?? '#64748b';
-      const tooltipText = `${edge.label}\nTrigger: ${edge.trigger}\nConfidence: ${edge.confidence}`;
+      const edgeFromLabel = group.from.includes('::') ? group.from.split('::')[1] : group.from;
+      const edgeToLabel = group.to.includes('::') ? group.to.split('::')[1] : group.to;
+      const edgeTooltip = html`
+        <div class="tooltip-name">${edge.label}</div>
+        <hr class="tooltip-divider" />
+        <div class="tooltip-row">
+          <span class="tooltip-key">Flow</span>
+          <span class="tooltip-val">${edgeFromLabel} &rarr; ${edgeToLabel}</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-key">What triggers?</span>
+          <span class="tooltip-val">${edge.trigger}</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-key">Confidence</span>
+          <span class="tooltip-val">
+            <span class="tooltip-dot" style="background:${color}"></span>${edge.confidence}
+          </span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-key">Direction</span>
+          <span class="tooltip-val">${edge.direction}</span>
+        </div>
+      `;
 
       // Use ELK section if available for this edge index, else computed offset line
       const elkSection = group.sections?.[i];
@@ -661,8 +775,8 @@ export class FlowDiagram extends LitElement {
 
       return svg`
         <g class="edge-group" opacity=${edgeOpacity} style="pointer-events:${pointerEvents}"
-          @mouseenter=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
-          @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
+          @mouseenter=${(e: MouseEvent) => this._showTooltip(e, edgeTooltip)}
+          @mousemove=${(e: MouseEvent) => this._showTooltip(e, edgeTooltip)}
           @mouseleave=${() => this._hideTooltip()}>
           <defs>
             <path id=${pathId} d=${pathData} />
@@ -750,7 +864,7 @@ export class FlowDiagram extends LitElement {
         class="compound-node"
         opacity=${opacity}
         style="cursor: pointer"
-        @click=${() => this._onCompoundClick(compound.id)}
+        @click=${(e: MouseEvent) => this._onCompoundClick(compound.id, e)}
         @dblclick=${(e: Event) => this._toggleCollapse(compound.id, e)}>
         <!-- Container background -->
         <rect
@@ -842,7 +956,7 @@ export class FlowDiagram extends LitElement {
         class="collapsed-aggregate"
         opacity=${opacity}
         style="cursor: pointer"
-        @click=${() => this._onCompoundClick(ca.id)}
+        @click=${(e: MouseEvent) => this._onCompoundClick(ca.id, e)}
         @dblclick=${(e: Event) => this._toggleCollapse(ca.id, e)}>
         <!-- Node background -->
         <rect
@@ -909,8 +1023,30 @@ export class FlowDiagram extends LitElement {
     `;
   }
 
+  /** Build a map from node ID to its DomainEvent data for rich tooltips */
+  private _buildEventDataMap(): Map<string, { trigger: string; confidence: string; direction: string; channel?: string; aggregate: string }> {
+    const map = new Map<string, { trigger: string; confidence: string; direction: string; channel?: string; aggregate: string }>();
+    for (const file of this.files) {
+      for (const event of file.data.domain_events) {
+        const nodeId = `${event.aggregate}::${event.name}`;
+        map.set(nodeId, {
+          trigger: event.trigger,
+          confidence: event.confidence,
+          direction: event.integration.direction,
+          channel: event.integration.channel,
+          aggregate: event.aggregate,
+        });
+      }
+    }
+    return map;
+  }
+
   /** Render a leaf event node (child inside a compound, or external system) */
-  private _renderNode(node: LayoutNode, nodeIndex: number): unknown {
+  private _renderNode(
+    node: LayoutNode,
+    nodeIndex: number,
+    eventDataMap: Map<string, { trigger: string; confidence: string; direction: string; channel?: string; aggregate: string }>,
+  ): unknown {
     const isExternal = node.kind === 'external';
 
     const fill = isExternal ? EXTERNAL_FILL : (AGG_BGS[node.colorIndex] ?? AGG_BGS[0]);
@@ -934,17 +1070,57 @@ export class FlowDiagram extends LitElement {
     const textBlockHeight = lines.length * lineHeight;
     const startY = y + NODE_H / 2 - textBlockHeight / 2 + fontSize * 0.8;
 
-    const tooltipText = isExternal
-      ? `External: ${node.label}`
-      : `Event: ${node.label}`;
+    // Build rich tooltip content
+    let nodeTooltip: TemplateResult | string;
+    if (isExternal) {
+      nodeTooltip = html`
+        <div class="tooltip-name">${node.label}</div>
+        <div class="tooltip-row">
+          <span class="tooltip-key">Type</span>
+          <span class="tooltip-val">External System</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-key">Hint</span>
+          <span class="tooltip-val">Click to see connected events</span>
+        </div>
+      `;
+    } else {
+      const eventData = eventDataMap.get(node.id);
+      const confColor = eventData ? (CONFIDENCE_COLOR[eventData.confidence] ?? '#64748b') : '#64748b';
+      nodeTooltip = html`
+        <div class="tooltip-name">${node.label}</div>
+        <hr class="tooltip-divider" />
+        ${eventData ? html`
+          <div class="tooltip-row">
+            <span class="tooltip-key">Aggregate</span>
+            <span class="tooltip-val">${eventData.aggregate}</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-key">What triggers?</span>
+            <span class="tooltip-val">${eventData.trigger}</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-key">Confidence</span>
+            <span class="tooltip-val">
+              <span class="tooltip-dot" style="background:${confColor}"></span>${eventData.confidence}
+            </span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-key">Integration</span>
+            <span class="tooltip-val">${eventData.direction}${eventData.channel ? ` via ${eventData.channel}` : ''}</span>
+          </div>
+        ` : nothing}
+      `;
+    }
 
     return svg`
       <g
         class="node"
-        style="cursor: default"
+        style="cursor: pointer"
         opacity=${opacity}
-        @mouseenter=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
-        @mousemove=${(e: MouseEvent) => this._showTooltip(e, tooltipText)}
+        @click=${(e: MouseEvent) => this._onLeafNodeClick(node.id, node.kind, e)}
+        @mouseenter=${(e: MouseEvent) => this._showTooltip(e, nodeTooltip)}
+        @mousemove=${(e: MouseEvent) => this._showTooltip(e, nodeTooltip)}
         @mouseleave=${() => this._hideTooltip()}>
         ${isFocused
           ? svg`<rect
@@ -990,6 +1166,7 @@ export class FlowDiagram extends LitElement {
 
     const allAggregates = getAllAggregates(this.files);
     const nodeMap = new Map(this._layoutNodes.map((n) => [n.id, n]));
+    const eventDataMap = this._buildEventDataMap();
 
     const matchedNodeIds = new Set(
       this._matchedNodeIndices.map((i) => this._layoutNodes[i]?.id).filter(Boolean) as string[],
@@ -1040,7 +1217,7 @@ export class FlowDiagram extends LitElement {
             ${this._layoutNodes
               .map((n, i) => ({ n, i }))
               .filter(({ n }) => !this._collapsedAggregates.has(n.id))
-              .map(({ n, i }) => this._renderNode(n, i))}
+              .map(({ n, i }) => this._renderNode(n, i, eventDataMap))}
           </g>
         </svg>
 
@@ -1053,7 +1230,7 @@ export class FlowDiagram extends LitElement {
         ${this._tooltip
           ? html`
               <div class="tooltip" style="left:${this._tooltip.x}px;top:${this._tooltip.y}px">
-                ${this._tooltip.text}
+                ${this._tooltip.content}
               </div>
             `
           : nothing}
