@@ -39,5 +39,28 @@
 - `LoadedFile` lives in `src/schema/types.ts`, not `src/lib/session-store.ts` — session-store imports it from schema (added: 2026-02-28, dispatch: a6r.16)
 - When adding contexts that server code imports, add them to `tsconfig.server.json` include array (added: 2026-02-28, dispatch: a6r.16)
 
+## CQRS Projections
+- When spreading a `DomainEvent` union variable into an object literal, TypeScript flags excess properties because it checks against every union arm — spell out fresh object literals in tests instead (added: 2026-02-28, dispatch: a6r.10)
+- `ProjectionEngine` subscribes at construction time, so `rebuild()` must `reset()` before replaying — live events and replay events would otherwise double-count (added: 2026-02-28, dispatch: a6r.10)
+- For `Map`-valued projection state, `new Map(this.state.ownership)` in `getState()` is the right defensive copy pattern — same principle as spreading arrays (added: 2026-02-28, dispatch: a6r.10)
+
+## SSE / Event Streaming
+- Server entry-point modules (`src/server/*.ts`) that call `server.listen()` at module scope need `if (process.env.NODE_ENV !== 'test')` guard to avoid `EADDRINUSE` in vitest (added: 2026-02-28, dispatch: a6r.9)
+- Use `createSseHandler(eventStore)` factory pattern for testable SSE — decouples transport from logic, no HTTP mocking needed (added: 2026-02-28, dispatch: a6r.9)
+
+## Auto-Persistence
+- Move singleton creation (EventStore) to the module that also manages persistence (`store.ts`) to avoid circular imports between store.ts and gateway.ts (added: 2026-02-28, dispatch: a6r.13)
+- Debounced event-subscription persistence (100ms setTimeout) replaces manual `persistSessions()` calls — single subscription in store.ts, clearTimeout on rapid bursts (added: 2026-02-28, dispatch: a6r.13)
+
+## State Machine
+- Transition tables as `Record<State, Partial<Record<Action, State>>>` are preferable to switch statements — exhaustiveness enforced by TypeScript, transitions readable at a glance (added: 2026-02-28, dispatch: a6r.17)
+- When adding a required field to a core interface (`Session`), run `tsc --noEmit` immediately to discover all fixture helpers that need `status` added (added: 2026-02-28, dispatch: a6r.17)
+- `?? 'active'` default in `sessionFromJson`/`deserializeSession` is the right pattern for adding required fields to persisted data — backward compat without migration (added: 2026-02-28, dispatch: a6r.17)
+
+## Artifact Versioning
+- Version chains keyed by `participant+fileName` composite — each unique combo gets independent version numbering starting at 1 (added: 2026-02-28, dispatch: a6r.18)
+- `SubmissionProtocol = 'web' | 'mcp' | 'a2a'` lives in `src/schema/types.ts` alongside other shared types — not in the context module (added: 2026-02-28, dispatch: a6r.18)
+- ArtifactService follows same optional EventStore injection pattern as AgreementService — `constructor(eventStore?: EventStore)` (added: 2026-02-28, dispatch: a6r.18)
+
 ## Cross-Agent Notes
 - (none yet)

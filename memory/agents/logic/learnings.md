@@ -32,5 +32,10 @@
 - Use `src/contexts/<context>/adapter.ts` to decouple lib/ functions from concrete types — adapter maps LoadedFile → ComparableArtifact, keeping lib/ functions pure against abstract interfaces (added: 2026-02-28, dispatch: a6r.20)
 - When mapping schema field names (snake_case `affects_events` → camelCase `affectsEvents`), do it in the adapter layer, not in lib/ functions — keeps lib/ aligned with the abstract interface (added: 2026-02-28, dispatch: a6r.20)
 
+## Temporal Queries
+- `getEventCount` optimization: access `this.store.get(code)?.length` directly rather than creating a defensive copy via `getEvents()` (added: 2026-02-28, dispatch: a6r.11)
+- For late-join/pagination: capture `totalCount` from filtered set before applying `maxEvents` slicing so callers know how many were skipped (added: 2026-02-28, dispatch: a6r.11)
+- Pure functions that depend on domain-specific types (DomainEvent) belong in `src/contexts/session/` not `src/lib/` (added: 2026-02-28, dispatch: a6r.11)
+
 ## Cross-Agent Notes
 - (none yet)

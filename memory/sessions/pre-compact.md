@@ -1,36 +1,40 @@
 ## Pre-Compact Snapshot
-**Time**: 2026-02-28T16:19:11Z
+**Time**: 2026-02-28T21:26:31Z
 
 ### In-Progress Tasks
-◐ multi-human-workflows-ppc.6 [● P1] [feature] - Add HTTP POST /api/sessions/:code/jam/flag endpoint (blocked by: multi-human-workflows-ppc, blocks: multi-human-workflows-ppc.7)
-◐ multi-human-workflows-ppc.7 [● P1] [task] - Add SSE broadcast for flagUnresolved events (blocked by: multi-human-workflows-ppc, multi-human-workflows-ppc.6)
+◐ multi-human-workflows-a6r.18 [● P2] [task] - Add Artifact versioning and provenance tracking (blocked by: multi-human-workflows-a6r, blocks: multi-human-workflows-a6r.19)
 
 ### Recent Commits
-4ced0e0 chore: update agent learnings and session snapshots
-683b43b feat: add force-directed layout as alternate view mode
-214c593 feat: add file-based session persistence
-5b4299e feat: add comparison-diff overlay component
-433b787 feat: add workflow phase engine and MCP tool
+1594403 feat: add ArtifactService with versioning and provenance tracking
+2dabdaf Merge branch 'worktree-agent-a576f3f8'
+fc54728 feat: add temporal queries and late-join replay to EventStore
+f7a3b24 Merge branch 'worktree-agent-a66f440e'
+a2a91db feat: add explicit Session state machine with Active/Paused/Closed states
 
 ### Working Tree
- M CLAUDE.md
- D memory/sessions/2026-02-28T07-46-35Z.md
- D memory/sessions/2026-02-28T07-54-57Z.md
- D memory/sessions/2026-02-28T08-28-20Z.md
- D memory/sessions/2026-02-28T08-51-02Z.md
- D memory/sessions/2026-02-28T09-06-35Z.md
+ M .claude/rules/definition-of-done.md
+ M data/sessions.json
+ M docs/vision.md
+ M memory/agents/architect/learnings.md
+ M memory/agents/component/learnings.md
+ M memory/agents/logic/learnings.md
+ D memory/sessions/2026-02-28T07-39-57Z.md
+ D memory/sessions/2026-02-28T15-46-33Z.md
+ D memory/sessions/2026-02-28T15-54-56Z.md
  M memory/sessions/last.md
  M memory/sessions/pre-compact.md
- M src/components/session-lobby.ts
- M src/server/http.ts
-?? contracts/
-?? data/
-?? events/
-?? justfile
-?? memory/epics/
-?? memory/sessions/2026-02-28T15-46-33Z.md
-?? memory/sessions/2026-02-28T15-54-56Z.md
-?? mocks/
+?? .claire/
+?? docs/.~lock.from-idea-to-execution.docx#
+?? docs/.~lock.open-collaborative-sessions.docx#
+?? docs/from-idea-to-execution.docx
+?? docs/multi-human-howto.md
+?? docs/multi-human-intro.md
+?? docs/open-collaborative-sessions.docx
+?? memory/sessions/2026-02-28T18-11-34Z.md
+?? memory/sessions/2026-02-28T19-07-54Z.md
+?? memory/sessions/2026-02-28T19-48-56Z.md
+?? multi-human-howto.md
+?? multi-human-intro.md
 
 ### Open Questions
 (fill in before context is lost)

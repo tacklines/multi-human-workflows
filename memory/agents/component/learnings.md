@@ -38,6 +38,10 @@
 - d3-force fixed-node pattern: setting `fx`/`fy` on a simulation node makes it immovable — useful as a gravity anchor for cluster layout (added: 2026-02-28, dispatch: multi-human-workflows-82g)
 - `simulation.stop()` then `for (i) sim.tick()` for synchronous force convergence; calling `.stop()` before adding forces is safe (added: 2026-02-28, dispatch: multi-human-workflows-82g)
 
+## State Lifting
+- When a Lit component manages connection lifecycle (EventSource, WebSocket), put the connection in `state/` with a module-level variable, not in the component — state persists across navigation, components focus on rendering (added: 2026-02-28, dispatch: a6r.34)
+- Components subscribe to the store in `connectedCallback` and unsubscribe in `disconnectedCallback` — same lifecycle pattern as EventSource itself (added: 2026-02-28, dispatch: a6r.34)
+
 ## Cross-Agent Notes
 - (from logic) ELK returns top-left (x,y) not center; use `_nodeCx`/`_nodeCy` helpers when computing edge endpoints or zoom targets (added: 2026-02-28)
 - SVG `pointer-events` must be applied via `style=` attribute in Lit svg templates, not as a bare attribute (added: 2026-02-28, dispatch: multi-human-workflows-5ku)
