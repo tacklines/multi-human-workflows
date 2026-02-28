@@ -148,7 +148,13 @@ export class FlowDiagram extends LitElement {
       background: #1e293b;
     }
     .edge-group {
-      transition: opacity 0.2s ease;
+      transition: opacity 0.35s ease;
+    }
+    .node-group {
+      transition: opacity 0.35s ease, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .compound-node {
+      transition: opacity 0.35s ease, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .empty {
       text-align: center;
@@ -215,6 +221,13 @@ export class FlowDiagram extends LitElement {
   private _updatingFromMinimap = false;
   private _unsubscribeStore: (() => void) | null = null;
 
+  /** Previous node positions for two-frame animation */
+  private _prevNodePositions: Map<string, { x: number; y: number }> = new Map();
+  /** Previous compound positions for two-frame animation */
+  private _prevCompoundPositions: Map<string, { x: number; y: number }> = new Map();
+  /** True during the brief window between layout update and RAF callback */
+  private _animatingLayout = false;
+
   private async _runElkLayout(): Promise<void> {
     if (this.files.length === 0) {
       this._layoutNodes = [];
@@ -222,16 +235,41 @@ export class FlowDiagram extends LitElement {
       this._edgeGroups = [];
       this._svgWidth = DEFAULT_WIDTH;
       this._svgHeight = DEFAULT_HEIGHT;
+      this._prevNodePositions = new Map();
+      this._prevCompoundPositions = new Map();
       return;
     }
 
+    // Snapshot current positions before re-layout for transition animation
+    const oldNodePositions = new Map(this._layoutNodes.map((n) => [n.id, { x: n.x, y: n.y }]));
+    const oldCompoundPositions = new Map(this._layoutCompounds.map((c) => [c.id, { x: c.x, y: c.y }]));
+    const hasExistingLayout = oldNodePositions.size > 0;
+
     const result = await runElkLayout(this.files, this._collapsedAggregates);
+
+    if (hasExistingLayout) {
+      // Store old positions so render places nodes at old spots first
+      this._prevNodePositions = oldNodePositions;
+      this._prevCompoundPositions = oldCompoundPositions;
+      this._animatingLayout = true;
+    }
+
     this._layoutNodes = result.nodes;
     this._layoutCompounds = result.compounds;
     this._layoutCollapsedAggregates = result.collapsedAggregates;
     this._edgeGroups = result.edgeGroups;
     this._svgWidth = result.width;
     this._svgHeight = result.height;
+
+    if (hasExistingLayout) {
+      // After one render at old positions, clear so CSS transitions animate to new
+      await this.updateComplete;
+      requestAnimationFrame(() => {
+        this._animatingLayout = false;
+        this._prevNodePositions = new Map();
+        this._prevCompoundPositions = new Map();
+      });
+    }
   }
 
   private _setupZoom(): void {
@@ -859,11 +897,16 @@ export class FlowDiagram extends LitElement {
     const chevronX = x + width - 18;
     const chevronY = y + COMPOUND_HEADER_H / 2;
 
+    // Animation: apply offset transform during two-frame transition
+    const prevPos = this._animatingLayout ? this._prevCompoundPositions.get(compound.id) : undefined;
+    const dx = prevPos ? prevPos.x - x : 0;
+    const dy = prevPos ? prevPos.y - y : 0;
+    const compoundStyle = `cursor: pointer; transform: translate(${dx}px, ${dy}px); opacity: ${opacity}`;
+
     return svg`
       <g
         class="compound-node"
-        opacity=${opacity}
-        style="cursor: pointer"
+        style=${compoundStyle}
         @click=${(e: MouseEvent) => this._onCompoundClick(compound.id, e)}
         @dblclick=${(e: Event) => this._toggleCollapse(compound.id, e)}>
         <!-- Container background -->
@@ -951,11 +994,16 @@ export class FlowDiagram extends LitElement {
     const chevronX = x + NODE_W - 10;
     const chevronY = y + 10;
 
+    // Animation: apply offset transform during two-frame transition
+    const prevPos = this._animatingLayout ? this._prevCompoundPositions.get(ca.id) : undefined;
+    const dx = prevPos ? prevPos.x - x : 0;
+    const dy = prevPos ? prevPos.y - y : 0;
+    const caStyle = `cursor: pointer; transform: translate(${dx}px, ${dy}px); opacity: ${opacity}`;
+
     return svg`
       <g
-        class="collapsed-aggregate"
-        opacity=${opacity}
-        style="cursor: pointer"
+        class="compound-node"
+        style=${caStyle}
         @click=${(e: MouseEvent) => this._onCompoundClick(ca.id, e)}
         @dblclick=${(e: Event) => this._toggleCollapse(ca.id, e)}>
         <!-- Node background -->
@@ -1065,10 +1113,10 @@ export class FlowDiagram extends LitElement {
     const y = node.y;
     const { lines, fontSize } = this._fitLabel(node.label);
 
-    // Vertical centering
+    // Vertical centering (relative to local 0,0 since we use CSS transform for position)
     const lineHeight = fontSize + 3;
     const textBlockHeight = lines.length * lineHeight;
-    const startY = y + NODE_H / 2 - textBlockHeight / 2 + fontSize * 0.8;
+    const startY = NODE_H / 2 - textBlockHeight / 2 + fontSize * 0.8;
 
     // Build rich tooltip content
     let nodeTooltip: TemplateResult | string;
@@ -1113,18 +1161,23 @@ export class FlowDiagram extends LitElement {
       `;
     }
 
+    // Use previous position during animation frame, new position otherwise
+    const prevPos = this._animatingLayout ? this._prevNodePositions.get(node.id) : undefined;
+    const tx = prevPos ? prevPos.x : x;
+    const ty = prevPos ? prevPos.y : y;
+    const nodeStyle = `cursor: pointer; transform: translate(${tx}px, ${ty}px); opacity: ${opacity}`;
+
     return svg`
       <g
-        class="node"
-        style="cursor: pointer"
-        opacity=${opacity}
+        class="node-group"
+        style=${nodeStyle}
         @click=${(e: MouseEvent) => this._onLeafNodeClick(node.id, node.kind, e)}
         @mouseenter=${(e: MouseEvent) => this._showTooltip(e, nodeTooltip)}
         @mousemove=${(e: MouseEvent) => this._showTooltip(e, nodeTooltip)}
         @mouseleave=${() => this._hideTooltip()}>
         ${isFocused
           ? svg`<rect
-              x=${x - 3} y=${y - 3}
+              x=${-3} y=${-3}
               width=${NODE_W + 6} height=${NODE_H + 6}
               rx="11"
               fill="none"
@@ -1134,7 +1187,7 @@ export class FlowDiagram extends LitElement {
             />`
           : nothing}
         <rect
-          x=${x} y=${y}
+          x=${0} y=${0}
           width=${NODE_W} height=${NODE_H}
           rx=${isExternal ? 8 : 6}
           fill=${fill}
@@ -1145,7 +1198,7 @@ export class FlowDiagram extends LitElement {
         ${lines.map(
           (line, i) => svg`
             <text
-              x=${x + NODE_W / 2}
+              x=${NODE_W / 2}
               y=${startY + i * lineHeight}
               text-anchor="middle"
               font-weight="500"
