@@ -56,3 +56,35 @@ export interface LoadedFile {
   role: string;
   data: CandidateEventsFile;
 }
+
+/** Jam session artifacts — outcomes from collaborative resolution */
+
+export interface OwnershipAssignment {
+  aggregate: string;
+  ownerRole: string;
+  assignedBy: string;
+  assignedAt: string;
+}
+
+export interface ConflictResolution {
+  overlapLabel: string;
+  resolution: string;
+  chosenApproach: string;
+  resolvedBy: string[];
+  resolvedAt: string;
+}
+
+export interface UnresolvedItem {
+  id: string;
+  description: string;
+  relatedOverlap?: string;
+  flaggedBy: string;
+  flaggedAt: string;
+}
+
+export interface JamArtifacts {
+  startedAt: string;
+  ownershipMap: OwnershipAssignment[];
+  resolutions: ConflictResolution[];
+  unresolved: UnresolvedItem[];
+}

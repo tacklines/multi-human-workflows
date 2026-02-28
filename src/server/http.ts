@@ -147,6 +147,89 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // POST /api/sessions/:code/jam/start — Start jam session
+    const jamStartMatch = url.match(/^\/api\/sessions\/([^/]+)\/jam\/start$/);
+    if (method === 'POST' && jamStartMatch) {
+      const code = jamStartMatch[1];
+      const jam = store.startJam(code);
+      if (!jam) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      pushSseEvent(code, 'jam', { action: 'started', jam });
+      sendJson(res, 200, { jam });
+      return;
+    }
+
+    // POST /api/sessions/:code/jam/resolve — Resolve a conflict
+    const jamResolveMatch = url.match(/^\/api\/sessions\/([^/]+)\/jam\/resolve$/);
+    if (method === 'POST' && jamResolveMatch) {
+      const code = jamResolveMatch[1];
+      const body = await parseBody(req) as {
+        overlapLabel?: string;
+        resolution?: string;
+        chosenApproach?: string;
+        resolvedBy?: string[];
+      };
+      if (!body.overlapLabel || !body.resolution || !body.chosenApproach || !body.resolvedBy) {
+        sendJson(res, 400, { error: 'overlapLabel, resolution, chosenApproach, and resolvedBy are required' });
+        return;
+      }
+      const result = store.resolveConflict(code, {
+        overlapLabel: body.overlapLabel,
+        resolution: body.resolution,
+        chosenApproach: body.chosenApproach,
+        resolvedBy: body.resolvedBy,
+      });
+      if (!result) {
+        sendJson(res, 404, { error: 'Session not found or jam not started' });
+        return;
+      }
+      pushSseEvent(code, 'jam', { action: 'resolved', resolution: result });
+      sendJson(res, 200, { resolution: result });
+      return;
+    }
+
+    // POST /api/sessions/:code/jam/assign — Assign aggregate ownership
+    const jamAssignMatch = url.match(/^\/api\/sessions\/([^/]+)\/jam\/assign$/);
+    if (method === 'POST' && jamAssignMatch) {
+      const code = jamAssignMatch[1];
+      const body = await parseBody(req) as {
+        aggregate?: string;
+        ownerRole?: string;
+        assignedBy?: string;
+      };
+      if (!body.aggregate || !body.ownerRole || !body.assignedBy) {
+        sendJson(res, 400, { error: 'aggregate, ownerRole, and assignedBy are required' });
+        return;
+      }
+      const result = store.assignOwnership(code, {
+        aggregate: body.aggregate,
+        ownerRole: body.ownerRole,
+        assignedBy: body.assignedBy,
+      });
+      if (!result) {
+        sendJson(res, 404, { error: 'Session not found or jam not started' });
+        return;
+      }
+      pushSseEvent(code, 'jam', { action: 'assigned', assignment: result });
+      sendJson(res, 200, { assignment: result });
+      return;
+    }
+
+    // GET /api/sessions/:code/jam — Export jam artifacts
+    const jamExportMatch = url.match(/^\/api\/sessions\/([^/]+)\/jam$/);
+    if (method === 'GET' && jamExportMatch) {
+      const code = jamExportMatch[1];
+      const jam = store.exportJam(code);
+      if (!jam) {
+        sendJson(res, 404, { error: 'Session not found or jam not started' });
+        return;
+      }
+      sendJson(res, 200, { jam });
+      return;
+    }
+
     // GET /api/sessions/:code/events — SSE stream
     const eventsMatch = url.match(/^\/api\/sessions\/([^/]+)\/events$/);
     if (method === 'GET' && eventsMatch) {

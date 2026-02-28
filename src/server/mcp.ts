@@ -184,6 +184,105 @@ async function main(): Promise<void> {
     }
   );
 
+  // Tool: jam_start
+  server.registerTool(
+    'jam_start',
+    {
+      description: 'Start a jam session for collaborative conflict resolution. Must be called before resolve/assign/flag tools.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+      },
+    },
+    ({ code }) => {
+      const jam = sessionStore.startJam(code);
+      if (!jam) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, jam }) }],
+      };
+    }
+  );
+
+  // Tool: jam_resolve
+  server.registerTool(
+    'jam_resolve',
+    {
+      description: 'Record a conflict resolution decision in the jam session',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        overlapLabel: z.string().describe('Label of the overlap being resolved (from comparison)'),
+        resolution: z.string().describe('Description of how the conflict was resolved'),
+        chosenApproach: z.string().describe('Which approach was chosen (e.g., "merge", role name, or custom)'),
+        resolvedBy: z.array(z.string()).describe('Names of participants who agreed to this resolution'),
+      },
+    },
+    ({ code, overlapLabel, resolution, chosenApproach, resolvedBy }) => {
+      const result = sessionStore.resolveConflict(code, { overlapLabel, resolution, chosenApproach, resolvedBy });
+      if (!result) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found or jam not started' }) }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, resolution: result }) }],
+      };
+    }
+  );
+
+  // Tool: jam_assign
+  server.registerTool(
+    'jam_assign',
+    {
+      description: 'Assign aggregate ownership to a role in the jam session',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        aggregate: z.string().describe('Name of the aggregate'),
+        ownerRole: z.string().describe('Role that owns this aggregate'),
+        assignedBy: z.string().describe('Name of participant making the assignment'),
+      },
+    },
+    ({ code, aggregate, ownerRole, assignedBy }) => {
+      const result = sessionStore.assignOwnership(code, { aggregate, ownerRole, assignedBy });
+      if (!result) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found or jam not started' }) }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, assignment: result }) }],
+      };
+    }
+  );
+
+  // Tool: jam_export
+  server.registerTool(
+    'jam_export',
+    {
+      description: 'Export all jam session artifacts (resolutions, ownership map, unresolved items)',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+      },
+    },
+    ({ code }) => {
+      const jam = sessionStore.exportJam(code);
+      if (!jam) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found or jam not started' }) }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(jam) }],
+      };
+    }
+  );
+
   // Tool: prep_load
   server.registerTool(
     'prep_load',

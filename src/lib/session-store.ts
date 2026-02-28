@@ -1,4 +1,11 @@
-import { CandidateEventsFile, LoadedFile } from '../schema/types.js';
+import {
+  CandidateEventsFile,
+  LoadedFile,
+  JamArtifacts,
+  OwnershipAssignment,
+  ConflictResolution,
+  UnresolvedItem,
+} from '../schema/types.js';
 
 export interface Participant {
   id: string;
@@ -18,6 +25,7 @@ export interface Session {
   createdAt: string;
   participants: Map<string, Participant>;
   submissions: Submission[];
+  jam: JamArtifacts | null;
 }
 
 export interface SerializedSession {
@@ -25,6 +33,7 @@ export interface SerializedSession {
   createdAt: string;
   participants: Participant[];
   submissions: Submission[];
+  jam: JamArtifacts | null;
 }
 
 function generateCode(): string {
@@ -46,6 +55,7 @@ export function serializeSession(session: Session): SerializedSession {
     createdAt: session.createdAt,
     participants: Array.from(session.participants.values()),
     submissions: session.submissions,
+    jam: session.jam,
   };
 }
 
@@ -70,6 +80,7 @@ export class SessionStore {
       createdAt: new Date().toISOString(),
       participants: new Map([[creatorId, creator]]),
       submissions: [],
+      jam: null,
     };
 
     this.sessions.set(code, session);
@@ -114,6 +125,72 @@ export class SessionStore {
 
   getSession(code: string): Session | null {
     return this.sessions.get(code.toUpperCase()) ?? null;
+  }
+
+  startJam(code: string): JamArtifacts | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return null;
+    if (session.jam) return session.jam;
+    session.jam = {
+      startedAt: new Date().toISOString(),
+      ownershipMap: [],
+      resolutions: [],
+      unresolved: [],
+    };
+    return session.jam;
+  }
+
+  resolveConflict(
+    code: string,
+    resolution: Omit<ConflictResolution, 'resolvedAt'>
+  ): ConflictResolution | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session?.jam) return null;
+    const full: ConflictResolution = {
+      ...resolution,
+      resolvedAt: new Date().toISOString(),
+    };
+    session.jam.resolutions.push(full);
+    return full;
+  }
+
+  assignOwnership(
+    code: string,
+    assignment: Omit<OwnershipAssignment, 'assignedAt'>
+  ): OwnershipAssignment | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session?.jam) return null;
+    const full: OwnershipAssignment = {
+      ...assignment,
+      assignedAt: new Date().toISOString(),
+    };
+    // Replace existing assignment for the same aggregate
+    session.jam.ownershipMap = session.jam.ownershipMap.filter(
+      (o) => o.aggregate !== full.aggregate
+    );
+    session.jam.ownershipMap.push(full);
+    return full;
+  }
+
+  flagUnresolved(
+    code: string,
+    item: Omit<UnresolvedItem, 'id' | 'flaggedAt'>
+  ): UnresolvedItem | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session?.jam) return null;
+    const full: UnresolvedItem = {
+      ...item,
+      id: generateId(),
+      flaggedAt: new Date().toISOString(),
+    };
+    session.jam.unresolved.push(full);
+    return full;
+  }
+
+  exportJam(code: string): JamArtifacts | null {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session?.jam) return null;
+    return session.jam;
   }
 
   getSessionFiles(code: string): LoadedFile[] {
