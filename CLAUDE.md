@@ -33,6 +33,7 @@ npm test             # vitest run (all tests)
 npm run test:watch   # vitest watch mode
 npm run server       # HTTP session server (port 3001)
 npm run mcp          # MCP server (stdio transport)
+docker compose up -d # Keycloak (port 8080, admin/admin)
 ```
 
 ## Project Structure
