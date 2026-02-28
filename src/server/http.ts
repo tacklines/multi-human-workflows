@@ -1,14 +1,14 @@
 import http from 'node:http';
 import { serializeSession } from '../lib/session-store.js';
 import { sessionStore as store, persistSessions } from './store.js';
+import { eventStore } from './gateway.js';
 import type { CandidateEventsFile } from '../schema/types.js';
 import type { ServerResponse } from 'node:http';
+import type { EventStore } from '../contexts/session/event-store.js';
+import type { DomainEvent } from '../contexts/session/domain-events.js';
 
 const PORT = Number(process.env.PORT ?? 3002);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
-
-// SSE clients per session code: code -> Set of response objects
-const sseClients: Map<string, Set<ServerResponse>> = new Map();
 
 function addCorsHeaders(res: ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);
@@ -44,14 +44,68 @@ function parseBody(req: http.IncomingMessage): Promise<unknown> {
   });
 }
 
-function pushSseEvent(code: string, eventName: string, data: unknown): void {
-  const clients = sseClients.get(code);
-  if (!clients) return;
-  const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const client of clients) {
-    client.write(payload);
-  }
+/**
+ * Create an SSE handler for domain event streaming.
+ *
+ * Extracted as a pure factory so it can be tested without starting an HTTP server.
+ * The handler:
+ *   - Optionally replays historical events (via ?since=<ISO timestamp>)
+ *   - Subscribes to live EventStore events, forwarding only those matching sessionCode
+ *   - Sends events in SSE format: `event: <type>\ndata: <JSON>\n\n`
+ *   - Sends a keep-alive comment every 30 seconds
+ *   - Cleans up the subscription when the client disconnects
+ */
+export function createSseHandler(es: EventStore) {
+  return function handleSseRequest(
+    req: http.IncomingMessage,
+    res: ServerResponse,
+    sessionCode: string,
+    sinceTimestamp?: string
+  ): void {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': CORS_ORIGIN,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
+
+    // Send connection confirmation comment
+    res.write(`: connected\n\n`);
+
+    // Replay historical events if ?since= was provided
+    if (sinceTimestamp !== undefined) {
+      const historical = es.getEventsSince(sessionCode, sinceTimestamp);
+      for (const event of historical) {
+        sendSseEvent(res, event);
+      }
+    }
+
+    // Subscribe to live events, forwarding only those for this session
+    const unsubscribe = es.subscribe((event: DomainEvent) => {
+      if (event.sessionCode === sessionCode) {
+        sendSseEvent(res, event);
+      }
+    });
+
+    // Keep-alive every 30 seconds
+    const keepAlive = setInterval(() => {
+      res.write(`: keep-alive\n\n`);
+    }, 30_000);
+
+    req.on('close', () => {
+      clearInterval(keepAlive);
+      unsubscribe();
+    });
+  };
 }
+
+function sendSseEvent(res: ServerResponse, event: DomainEvent): void {
+  res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+}
+
+const sseHandler = createSseHandler(eventStore);
 
 const server = http.createServer(async (req, res) => {
   const url = req.url ?? '/';
@@ -101,10 +155,6 @@ const server = http.createServer(async (req, res) => {
       }
       const { session, participantId } = result;
       persistSessions();
-      pushSseEvent(session.code, 'participant', {
-        participantId,
-        session: serializeSession(session),
-      });
       sendJson(res, 200, {
         participantId,
         session: serializeSession(session),
@@ -145,7 +195,6 @@ const server = http.createServer(async (req, res) => {
       }
 
       persistSessions();
-      pushSseEvent(code, 'submission', { submission });
       sendJson(res, 200, { submission });
       return;
     }
@@ -160,7 +209,6 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       persistSessions();
-      pushSseEvent(code, 'jam', { action: 'started', jam });
       sendJson(res, 200, { jam });
       return;
     }
@@ -190,7 +238,6 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       persistSessions();
-      pushSseEvent(code, 'jam', { action: 'resolved', resolution: result });
       sendJson(res, 200, { resolution: result });
       return;
     }
@@ -218,7 +265,6 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       persistSessions();
-      pushSseEvent(code, 'jam', { action: 'assigned', assignment: result });
       sendJson(res, 200, { assignment: result });
       return;
     }
@@ -249,7 +295,6 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       persistSessions();
-      pushSseEvent(code, 'jam', { action: 'flagged', item: result });
       sendJson(res, 200, { item: result });
       return;
     }
@@ -267,8 +312,8 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // GET /api/sessions/:code/events — SSE stream
-    const eventsMatch = url.match(/^\/api\/sessions\/([^/]+)\/events$/);
+    // GET /api/sessions/:code/events — SSE domain event stream
+    const eventsMatch = url.match(/^\/api\/sessions\/([^/]+)\/events(\?.*)?$/);
     if (method === 'GET' && eventsMatch) {
       const code = eventsMatch[1].toUpperCase();
       const session = store.getSession(code);
@@ -277,38 +322,10 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-        'Access-Control-Allow-Origin': CORS_ORIGIN,
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      });
+      const urlObj = new URL(url, `http://localhost:${PORT}`);
+      const sinceParam = urlObj.searchParams.get('since') ?? undefined;
 
-      // Register client
-      if (!sseClients.has(code)) {
-        sseClients.set(code, new Set());
-      }
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      sseClients.get(code)!.add(res);
-
-      // Send initial state
-      res.write(`: connected\n\n`);
-
-      // Keep-alive every 30 seconds
-      const keepAlive = setInterval(() => {
-        res.write(`: keep-alive\n\n`);
-      }, 30_000);
-
-      req.on('close', () => {
-        clearInterval(keepAlive);
-        sseClients.get(code)?.delete(res);
-        if (sseClients.get(code)?.size === 0) {
-          sseClients.delete(code);
-        }
-      });
-
+      sseHandler(req, res, code, sinceParam);
       return;
     }
 
@@ -331,7 +348,6 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       persistSessions();
-      pushSseEvent(code.toUpperCase(), 'message', msg);
       sendJson(res, 201, { message: msg });
       return;
     }
@@ -373,6 +389,9 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`[http] session server listening on http://localhost:${PORT}`);
-});
+// Guard against starting the server during test runs (vitest sets NODE_ENV=test)
+if (process.env.NODE_ENV !== 'test') {
+  server.listen(PORT, () => {
+    console.log(`[http] session server listening on http://localhost:${PORT}`);
+  });
+}

@@ -8,7 +8,7 @@ import { EventStore } from '../contexts/session/event-store.js';
 import { AgreementService } from '../contexts/agreement/agreement-service.js';
 import { GatewayService } from '../contexts/gateway/gateway-service.js';
 
-const eventStore = new EventStore();
+export const eventStore = new EventStore();
 const agreementService = new AgreementService(
   (code) => sessionStore.getSession(code),
   eventStore
