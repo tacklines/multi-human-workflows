@@ -2,6 +2,9 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { LoadedFile } from '../schema/types.js';
 import { loadFile } from '../lib/yaml-loader.js';
+import { store } from '../state/app-state.js';
+import type { SessionState } from '../state/app-state.js';
+import { connectSession, disconnectSession } from '../state/session-connection.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -15,25 +18,6 @@ import '@shoelace-style/shoelace/dist/components/alert/alert.js';
 const API_BASE = 'http://localhost:3002';
 
 type LobbyState = 'landing' | 'creating' | 'joining' | 'in-session';
-
-interface Participant {
-  id: string;
-  name: string;
-  joinedAt: string;
-}
-
-interface Submission {
-  participantId: string;
-  fileName: string;
-  submittedAt: string;
-}
-
-interface Session {
-  code: string;
-  createdAt: string;
-  participants: Participant[];
-  submissions: Submission[];
-}
 
 @customElement('session-lobby')
 export class SessionLobby extends LitElement {
@@ -331,65 +315,39 @@ export class SessionLobby extends LitElement {
   @state() private _joinCode = '';
   @state() private _loading = false;
   @state() private _error = '';
-  @state() private _session: Session | null = null;
-  @state() private _participantId = '';
   @state() private _submitting = false;
+  @state() private _sessionState: SessionState | null = store.get().sessionState;
 
-  private _eventSource: EventSource | null = null;
+  private _unsubscribe: (() => void) | null = null;
 
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    this._closeSSE();
-  }
-
-  private _closeSSE() {
-    if (this._eventSource) {
-      this._eventSource.close();
-      this._eventSource = null;
+  connectedCallback() {
+    super.connectedCallback();
+    this._unsubscribe = store.subscribe((event) => {
+      if (
+        event.type === 'session-connected' ||
+        event.type === 'session-updated' ||
+        event.type === 'session-disconnected'
+      ) {
+        this._sessionState = store.get().sessionState;
+        if (event.type === 'session-connected') {
+          this._lobbyState = 'in-session';
+        } else if (event.type === 'session-disconnected') {
+          this._lobbyState = 'landing';
+        }
+      }
+    });
+    // If already in a session (e.g. navigated back), restore in-session view
+    if (this._sessionState) {
+      this._lobbyState = 'in-session';
     }
   }
 
-  private _connectSSE(code: string) {
-    this._closeSSE();
-    const es = new EventSource(`${API_BASE}/api/sessions/${code}/events`);
-    es.addEventListener('participant', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data) as Participant;
-        if (this._session) {
-          const already = this._session.participants.find((p) => p.id === data.id);
-          if (!already) {
-            this._session = {
-              ...this._session,
-              participants: [...this._session.participants, data],
-            };
-          }
-        }
-      } catch {
-        // ignore malformed events
-      }
-    });
-    es.addEventListener('submission', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data) as Submission;
-        if (this._session) {
-          const already = this._session.submissions.find(
-            (s) => s.participantId === data.participantId && s.fileName === data.fileName
-          );
-          if (!already) {
-            this._session = {
-              ...this._session,
-              submissions: [...this._session.submissions, data],
-            };
-          }
-        }
-      } catch {
-        // ignore malformed events
-      }
-    });
-    es.onerror = () => {
-      // SSE may disconnect and reconnect; non-fatal
-    };
-    this._eventSource = es;
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._unsubscribe) {
+      this._unsubscribe();
+      this._unsubscribe = null;
+    }
   }
 
   private async _createSession() {
@@ -412,13 +370,11 @@ export class SessionLobby extends LitElement {
       const { code, participantId, session } = (await res.json()) as {
         code: string;
         participantId: string;
-        session: Session;
+        session: import('../state/app-state.js').ActiveSession;
       };
-      this._participantId = participantId;
-      this._session = session;
       this._joinCode = code;
-      this._lobbyState = 'in-session';
-      this._connectSSE(code);
+      store.setSession(code, participantId, session);
+      connectSession(code);
     } catch (err) {
       this._error = (err as Error).message;
     } finally {
@@ -450,12 +406,10 @@ export class SessionLobby extends LitElement {
       }
       const { participantId, session } = (await res.json()) as {
         participantId: string;
-        session: Session;
+        session: import('../state/app-state.js').ActiveSession;
       };
-      this._participantId = participantId;
-      this._session = session;
-      this._lobbyState = 'in-session';
-      this._connectSSE(code);
+      store.setSession(code, participantId, session);
+      connectSession(code);
     } catch (err) {
       this._error = (err as Error).message;
     } finally {
@@ -464,7 +418,7 @@ export class SessionLobby extends LitElement {
   }
 
   private async _submitFiles(files: FileList) {
-    if (!this._session) return;
+    if (!this._sessionState) return;
     this._submitting = true;
     this._error = '';
     try {
@@ -474,11 +428,11 @@ export class SessionLobby extends LitElement {
           this._error = `${file.name}: ${result.errors.join(', ')}`;
           continue;
         }
-        const res = await fetch(`${API_BASE}/api/sessions/${this._session.code}/submit`, {
+        const res = await fetch(`${API_BASE}/api/sessions/${this._sessionState.code}/submit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            participantId: this._participantId,
+            participantId: this._sessionState.participantId,
             fileName: result.file.filename,
             data: result.file.data,
           }),
@@ -496,23 +450,19 @@ export class SessionLobby extends LitElement {
   }
 
   private async _viewCombined() {
-    if (!this._session) return;
+    if (!this._sessionState) return;
     this._loading = true;
     this._error = '';
     try {
-      const res = await fetch(`${API_BASE}/api/sessions/${this._session.code}`);
+      const res = await fetch(`${API_BASE}/api/sessions/${this._sessionState.code}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const { session } = (await res.json()) as { session: Session };
-      // Build LoadedFile[] from submissions — fetch each file data from the session
-      // The session object returned by GET /api/sessions/:code contains submission data
-      // We re-use the already-stored session data in submissions (data field)
-      // Since the server returns session.submissions with data, we cast appropriately
-      type SubmissionWithData = Submission & { data?: unknown };
-      const submissionsWithData = session.submissions as SubmissionWithData[];
-      const files: LoadedFile[] = submissionsWithData
-        .filter((s) => s.data)
+      type SubmissionWithData = { participantId: string; fileName: string; submittedAt: string; data?: unknown };
+      type SessionResponse = { code: string; createdAt: string; participants: import('../state/app-state.js').SessionParticipant[]; submissions: SubmissionWithData[] };
+      const { session } = (await res.json()) as { session: SessionResponse };
+      // Build LoadedFile[] from submissions — data field is included in server response
+      const files: LoadedFile[] = session.submissions
+        .filter((s) => s.data != null)
         .map((s) => {
-          // We need to cast to the correct type; trust the server-validated data
           const data = s.data as import('../schema/types.js').CandidateEventsFile;
           return {
             filename: s.fileName,
@@ -681,8 +631,9 @@ export class SessionLobby extends LitElement {
   }
 
   private _renderInSession() {
-    const session = this._session!;
-    const mySubmission = session.submissions.find((s) => s.participantId === this._participantId);
+    if (!this._sessionState) return nothing;
+    const { session, participantId } = this._sessionState;
+    const mySubmission = session.submissions.find((s) => s.participantId === participantId);
     const hasAnySubmissions = session.submissions.length > 0;
 
     return html`
@@ -700,7 +651,7 @@ export class SessionLobby extends LitElement {
           </div>
 
           <!-- Join code prominent display after creation -->
-          ${this._joinCode && !this._participantId
+          ${this._joinCode
             ? html`
                 <div class="join-code-box">
                   <div class="join-code-label">Share this code</div>
@@ -733,7 +684,7 @@ export class SessionLobby extends LitElement {
           <ul class="participant-list">
             ${session.participants.map((p) => {
               const submitted = session.submissions.some((s) => s.participantId === p.id);
-              const isMe = p.id === this._participantId;
+              const isMe = p.id === participantId;
               return html`
                 <li class="participant-item">
                   <span class="participant-name">
