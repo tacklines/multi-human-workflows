@@ -3,6 +3,31 @@ import type { Confidence, Direction } from '../schema/types.js';
 
 export type ViewMode = 'cards' | 'flow' | 'comparison';
 
+export interface SessionParticipant {
+  id: string;
+  name: string;
+  joinedAt: string;
+}
+
+export interface SessionSubmission {
+  participantId: string;
+  fileName: string;
+  submittedAt: string;
+}
+
+export interface ActiveSession {
+  code: string;
+  createdAt: string;
+  participants: SessionParticipant[];
+  submissions: SessionSubmission[];
+}
+
+export interface SessionState {
+  code: string;
+  participantId: string;
+  session: ActiveSession;
+}
+
 export interface AppState {
   files: LoadedFile[];
   activeView: ViewMode;
@@ -14,6 +39,7 @@ export interface AppState {
   selectedAggregate: string | null;
   sidebarCollapsed: boolean;
   fileManagerOpen: boolean;
+  sessionState: SessionState | null;
 }
 
 export type AppStateEvent =
@@ -24,7 +50,10 @@ export type AppStateEvent =
   | { type: 'aggregate-selected'; aggregate: string | null }
   | { type: 'errors-changed' }
   | { type: 'sidebar-toggled' }
-  | { type: 'file-manager-toggled' };
+  | { type: 'file-manager-toggled' }
+  | { type: 'session-connected'; code: string; participantId: string }
+  | { type: 'session-updated' }
+  | { type: 'session-disconnected' };
 
 type Listener = (event: AppStateEvent) => void;
 
@@ -43,6 +72,7 @@ class Store {
     selectedAggregate: null,
     sidebarCollapsed: false,
     fileManagerOpen: false,
+    sessionState: null,
   };
 
   private listeners = new Set<Listener>();
@@ -140,6 +170,25 @@ class Store {
   setFileManagerOpen(open: boolean) {
     this.state = { ...this.state, fileManagerOpen: open };
     this.notify({ type: 'file-manager-toggled' });
+  }
+
+  setSession(code: string, participantId: string, session: ActiveSession) {
+    this.state = { ...this.state, sessionState: { code, participantId, session } };
+    this.notify({ type: 'session-connected', code, participantId });
+  }
+
+  updateSession(session: ActiveSession) {
+    if (!this.state.sessionState) return;
+    this.state = {
+      ...this.state,
+      sessionState: { ...this.state.sessionState, session },
+    };
+    this.notify({ type: 'session-updated' });
+  }
+
+  clearSession() {
+    this.state = { ...this.state, sessionState: null };
+    this.notify({ type: 'session-disconnected' });
   }
 }
 
