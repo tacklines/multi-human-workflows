@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { sessionStore } from './store.js';
 import { parseAndValidate } from '../lib/yaml-validator-server.js';
+import { computePrepStatus, computeSessionStatus } from '../lib/prep-completeness.js';
 
 async function main(): Promise<void> {
   const server = new McpServer({
@@ -141,6 +142,98 @@ async function main(): Promise<void> {
           {
             type: 'text' as const,
             text: JSON.stringify({ session }),
+          },
+        ],
+      };
+    }
+  );
+
+  // Tool: prep_status
+  server.registerTool(
+    'prep_status',
+    {
+      description:
+        'Get completeness analysis for a session — event counts, confidence breakdown, gaps, and a 0-100 score per file and overall',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+      },
+    },
+    ({ code }) => {
+      const files = sessionStore.getSessionFiles(code);
+      if (files.length === 0) {
+        const session = sessionStore.getSession(code);
+        if (!session) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({ message: 'No submissions yet', participantCount: session.participants.size }),
+            },
+          ],
+        };
+      }
+      const status = computeSessionStatus(files);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(status) }],
+      };
+    }
+  );
+
+  // Tool: prep_load
+  server.registerTool(
+    'prep_load',
+    {
+      description:
+        'Submit a YAML file directly to a session (parse + validate + submit in one step). Returns completeness analysis of the submitted file.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        participantId: z.string().describe('Participant ID from create_session or join_session'),
+        fileName: z.string().describe('File name for the submission'),
+        yamlContent: z.string().describe('Raw YAML string to parse and validate'),
+      },
+    },
+    ({ code, participantId, fileName, yamlContent }) => {
+      const outcome = parseAndValidate(fileName, yamlContent);
+      if (!outcome.ok) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({ error: 'YAML validation failed', errors: outcome.errors }),
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const submission = sessionStore.submitYaml(code, participantId, fileName, outcome.file.data);
+      if (!submission) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({ error: 'Session not found or participant not in session' }),
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const prepStatus = computePrepStatus(outcome.file.data);
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({
+              success: true,
+              submittedAt: submission.submittedAt,
+              completeness: prepStatus,
+            }),
           },
         ],
       };

@@ -116,7 +116,6 @@ function detectGaps(
 
   for (const direction of ALL_DIRECTIONS) {
     if (directionBreakdown[direction] === 0) {
-      const label = direction.charAt(0).toUpperCase() + direction.slice(1);
       gaps.push(`Missing ${direction} events`);
     }
   }
