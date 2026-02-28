@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { sessionStore } from './store.js';
+import { sessionStore, persistSessions } from './store.js';
 import { parseAndValidate } from '../lib/yaml-validator-server.js';
 import { computePrepStatus, computeSessionStatus } from '../lib/prep-completeness.js';
 import { computeWorkflowStatus } from '../lib/workflow-engine.js';
@@ -23,6 +23,7 @@ async function main(): Promise<void> {
     },
     ({ creatorName }) => {
       const { session, creatorId } = sessionStore.createSession(creatorName);
+      persistSessions();
       return {
         content: [
           {
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
           isError: true,
         };
       }
+      persistSessions();
       return {
         content: [
           {
@@ -105,6 +107,7 @@ async function main(): Promise<void> {
         };
       }
 
+      persistSessions();
       return {
         content: [
           {
@@ -202,6 +205,7 @@ async function main(): Promise<void> {
           isError: true,
         };
       }
+      persistSessions();
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ success: true, jam }) }],
       };
@@ -229,6 +233,7 @@ async function main(): Promise<void> {
           isError: true,
         };
       }
+      persistSessions();
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ success: true, resolution: result }) }],
       };
@@ -255,6 +260,7 @@ async function main(): Promise<void> {
           isError: true,
         };
       }
+      persistSessions();
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ success: true, assignment: result }) }],
       };
@@ -324,6 +330,7 @@ async function main(): Promise<void> {
         };
       }
 
+      persistSessions();
       const prepStatus = computePrepStatus(outcome.file.data);
       return {
         content: [
@@ -367,6 +374,7 @@ async function main(): Promise<void> {
           isError: true,
         };
       }
+      persistSessions();
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ success: true, eventContracts: result.eventContracts.length, boundaryContracts: result.boundaryContracts.length }) }],
       };
@@ -433,6 +441,7 @@ async function main(): Promise<void> {
           isError: true,
         };
       }
+      persistSessions();
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ success: true, overallStatus: result.overallStatus, checkCount: result.checks.length }) }],
       };

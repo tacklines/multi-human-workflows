@@ -18,6 +18,7 @@
     "src/lib/yaml-validator-server.ts",
     "src/lib/prep-completeness.ts",
     "src/lib/workflow-engine.ts",
+    "src/lib/session-persistence.ts",
     "src/schema/**/*"
   ]
 }

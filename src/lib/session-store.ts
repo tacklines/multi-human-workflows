@@ -227,6 +227,16 @@ export class SessionStore {
     return session?.integrationReport ?? null;
   }
 
+  loadSessions(sessions: Map<string, Session>): void {
+    for (const [code, session] of sessions) {
+      this.sessions.set(code, session);
+    }
+  }
+
+  exportSessions(): Map<string, Session> {
+    return new Map(this.sessions);
+  }
+
   getSessionFiles(code: string): LoadedFile[] {
     const session = this.sessions.get(code.toUpperCase());
     if (!session) return [];

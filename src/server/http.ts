@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { serializeSession } from '../lib/session-store.js';
-import { sessionStore as store } from './store.js';
+import { sessionStore as store, persistSessions } from './store.js';
 import type { CandidateEventsFile } from '../schema/types.js';
 import type { ServerResponse } from 'node:http';
 
@@ -75,6 +75,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const { session, creatorId } = store.createSession(creatorName.trim());
+      persistSessions();
       sendJson(res, 201, {
         code: session.code,
         participantId: creatorId,
@@ -99,6 +100,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const { session, participantId } = result;
+      persistSessions();
       pushSseEvent(session.code, 'participant', {
         participantId,
         session: serializeSession(session),
@@ -142,6 +144,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      persistSessions();
       pushSseEvent(code, 'submission', { submission });
       sendJson(res, 200, { submission });
       return;
@@ -156,6 +159,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Session not found' });
         return;
       }
+      persistSessions();
       pushSseEvent(code, 'jam', { action: 'started', jam });
       sendJson(res, 200, { jam });
       return;
@@ -185,6 +189,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Session not found or jam not started' });
         return;
       }
+      persistSessions();
       pushSseEvent(code, 'jam', { action: 'resolved', resolution: result });
       sendJson(res, 200, { resolution: result });
       return;
@@ -212,6 +217,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: 'Session not found or jam not started' });
         return;
       }
+      persistSessions();
       pushSseEvent(code, 'jam', { action: 'assigned', assignment: result });
       sendJson(res, 200, { assignment: result });
       return;
