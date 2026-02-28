@@ -1,18 +1,18 @@
 import { LitElement, html, css, svg, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { LoadedFile } from '../schema/types.js';
-import type { Confidence, Direction } from '../schema/types.js';
-import { getAllAggregates } from '../lib/grouping.js';
-import { getAggregateColorIndex } from '../lib/aggregate-colors.js';
-import { runElkLayout, NODE_W, NODE_H, elkSectionToPath, straightEdgePath } from '../lib/elk-layout.js';
-import type { LayoutNode, LayoutCompound, LayoutEdgeGroup, CollapsedAggregate } from '../lib/elk-layout.js';
-import { runForceLayout } from '../lib/force-layout.js';
-import { isEdgeGroupVisible } from '../lib/edge-filters.js';
+import type { LoadedFile } from '../../schema/types.js';
+import type { Confidence, Direction } from '../../schema/types.js';
+import { getAllAggregates } from '../../lib/grouping.js';
+import { getAggregateColorIndex } from '../../lib/aggregate-colors.js';
+import { runElkLayout, NODE_W, NODE_H, elkSectionToPath, straightEdgePath } from '../../lib/elk-layout.js';
+import type { LayoutNode, LayoutCompound, LayoutEdgeGroup, CollapsedAggregate } from '../../lib/elk-layout.js';
+import { runForceLayout } from '../../lib/force-layout.js';
+import { isEdgeGroupVisible } from '../../lib/edge-filters.js';
 import { zoom as d3Zoom, zoomIdentity, zoomTransform, type ZoomBehavior, type D3ZoomEvent } from 'd3-zoom';
 import { select } from 'd3-selection';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
-import { store } from '../state/app-state.js';
-import { StoreController } from './controllers/store-controller.js';
+import { store } from '../../state/app-state.js';
+import { StoreController } from '../controllers/store-controller.js';
 
 // Hardcoded palette matching --agg-color-N and --agg-bg-N CSS vars
 // (SVG attributes can't resolve CSS custom properties)

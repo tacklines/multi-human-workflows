@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { Confidence, Direction } from '../schema/types.js';
-import { store } from '../state/app-state.js';
+import type { Confidence, Direction } from '../../schema/types.js';
+import { store } from '../../state/app-state.js';
 
 import '@shoelace-style/shoelace/dist/components/checkbox/checkbox.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';

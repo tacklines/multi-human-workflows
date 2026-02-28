@@ -1,13 +1,13 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { store, type AppState } from '../state/app-state.js';
-import { getAllAggregates } from '../lib/grouping.js';
-import { getAggregateColorIndex } from '../lib/aggregate-colors.js';
-import { StoreController } from './controllers/store-controller.js';
-import { ComparisonController } from './controllers/comparison-controller.js';
-import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
-import type { FlowDiagram } from './flow-diagram.js';
-import type { DetailNodeData } from './detail-panel.js';
+import { store, type AppState } from '../../state/app-state.js';
+import { getAllAggregates } from '../../lib/grouping.js';
+import { getAggregateColorIndex } from '../../lib/aggregate-colors.js';
+import { StoreController } from '../controllers/store-controller.js';
+import { ComparisonController } from '../controllers/comparison-controller.js';
+import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from '../visualization/flow-minimap.js';
+import type { FlowDiagram } from '../visualization/flow-diagram.js';
+import type { DetailNodeData } from '../visualization/detail-panel.js';
 
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
@@ -19,16 +19,16 @@ import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/tag/tag.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 
-import './file-drop-zone.js';
-import './session-lobby.js';
-import './card-view.js';
-import './flow-diagram.js';
-import './flow-minimap.js';
-import './flow-search.js';
-import './comparison-view.js';
+import '../artifact/file-drop-zone.js';
+import '../session/session-lobby.js';
+import '../artifact/card-view.js';
+import '../visualization/flow-diagram.js';
+import '../visualization/flow-minimap.js';
+import '../visualization/flow-search.js';
+import '../comparison/comparison-view.js';
 import './aggregate-nav.js';
 import './filter-panel.js';
-import './detail-panel.js';
+import '../visualization/detail-panel.js';
 
 @customElement('app-shell')
 export class AppShell extends LitElement {
@@ -329,7 +329,7 @@ export class AppShell extends LitElement {
     `;
   }
 
-  private _onSessionFilesReady(e: CustomEvent<{ files: import('../schema/types.js').LoadedFile[] }>) {
+  private _onSessionFilesReady(e: CustomEvent<{ files: import('../../schema/types.js').LoadedFile[] }>) {
     store.clearErrors();
     for (const file of e.detail.files) {
       store.addFile(file);

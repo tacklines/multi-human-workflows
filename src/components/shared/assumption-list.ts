@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { BoundaryAssumption, AssumptionType, Confidence } from '../schema/types.js';
-import type { Overlap } from '../lib/comparison.js';
+import type { BoundaryAssumption, AssumptionType, Confidence } from '../../schema/types.js';
+import type { Overlap } from '../../lib/comparison.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';

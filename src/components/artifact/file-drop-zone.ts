@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { loadFile } from '../lib/yaml-loader.js';
-import { store } from '../state/app-state.js';
+import { loadFile } from '../../lib/yaml-loader.js';
+import { store } from '../../state/app-state.js';
 
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';

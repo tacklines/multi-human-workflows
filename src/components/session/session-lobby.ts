@@ -1,10 +1,10 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import type { LoadedFile } from '../schema/types.js';
-import { loadFile } from '../lib/yaml-loader.js';
-import { store } from '../state/app-state.js';
-import type { SessionState } from '../state/app-state.js';
-import { connectSession, disconnectSession } from '../state/session-connection.js';
+import type { LoadedFile } from '../../schema/types.js';
+import { loadFile } from '../../lib/yaml-loader.js';
+import { store } from '../../state/app-state.js';
+import type { SessionState } from '../../state/app-state.js';
+import { connectSession, disconnectSession } from '../../state/session-connection.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -370,7 +370,7 @@ export class SessionLobby extends LitElement {
       const { code, participantId, session } = (await res.json()) as {
         code: string;
         participantId: string;
-        session: import('../state/app-state.js').ActiveSession;
+        session: import('../../state/app-state.js').ActiveSession;
       };
       this._joinCode = code;
       store.setSession(code, participantId, session);
@@ -406,7 +406,7 @@ export class SessionLobby extends LitElement {
       }
       const { participantId, session } = (await res.json()) as {
         participantId: string;
-        session: import('../state/app-state.js').ActiveSession;
+        session: import('../../state/app-state.js').ActiveSession;
       };
       store.setSession(code, participantId, session);
       connectSession(code);
@@ -457,13 +457,13 @@ export class SessionLobby extends LitElement {
       const res = await fetch(`${API_BASE}/api/sessions/${this._sessionState.code}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       type SubmissionWithData = { participantId: string; fileName: string; submittedAt: string; data?: unknown };
-      type SessionResponse = { code: string; createdAt: string; participants: import('../state/app-state.js').SessionParticipant[]; submissions: SubmissionWithData[] };
+      type SessionResponse = { code: string; createdAt: string; participants: import('../../state/app-state.js').SessionParticipant[]; submissions: SubmissionWithData[] };
       const { session } = (await res.json()) as { session: SessionResponse };
       // Build LoadedFile[] from submissions — data field is included in server response
       const files: LoadedFile[] = session.submissions
         .filter((s) => s.data != null)
         .map((s) => {
-          const data = s.data as import('../schema/types.js').CandidateEventsFile;
+          const data = s.data as import('../../schema/types.js').CandidateEventsFile;
           return {
             filename: s.fileName,
             role: data.metadata?.role ?? s.fileName,

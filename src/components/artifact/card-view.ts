@@ -1,15 +1,15 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { LoadedFile, Confidence, Direction } from '../schema/types.js';
-import { getAllAggregates } from '../lib/grouping.js';
-import { getAggregateColor } from '../lib/aggregate-colors.js';
-import { EventFilterController } from './controllers/event-filter-controller.js';
+import type { LoadedFile, Confidence, Direction } from '../../schema/types.js';
+import { getAllAggregates } from '../../lib/grouping.js';
+import { getAggregateColor } from '../../lib/aggregate-colors.js';
+import { EventFilterController } from '../controllers/event-filter-controller.js';
 
 import '@shoelace-style/shoelace/dist/components/tag/tag.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
-import './event-card.js';
-import './assumption-list.js';
+import '../shared/event-card.js';
+import '../shared/assumption-list.js';
 
 @customElement('card-view')
 export class CardView extends LitElement {

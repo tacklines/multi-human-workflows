@@ -1,8 +1,8 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { LoadedFile, DomainEvent } from '../schema/types.js';
-import { getAllAggregates } from '../lib/grouping.js';
-import { getAggregateColor, getAggregateBg } from '../lib/aggregate-colors.js';
+import type { LoadedFile, DomainEvent } from '../../schema/types.js';
+import { getAllAggregates } from '../../lib/grouping.js';
+import { getAggregateColor, getAggregateBg } from '../../lib/aggregate-colors.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 

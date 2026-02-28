@@ -1,12 +1,12 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { LoadedFile } from '../schema/types.js';
-import { ComparisonController } from './controllers/comparison-controller.js';
+import type { LoadedFile } from '../../schema/types.js';
+import { ComparisonController } from '../controllers/comparison-controller.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import './conflict-card.js';
-import './event-card.js';
-import './assumption-list.js';
+import '../shared/event-card.js';
+import '../shared/assumption-list.js';
 
 @customElement('comparison-view')
 export class ComparisonView extends LitElement {
