@@ -28,8 +28,17 @@ fixtures/     Sample data (no code imports)
 - Keep the store in `state/` framework-agnostic -- no Lit imports
 - Put new components in `components/`, one element per file
 
+## New Work: Check the Design Doc
+
+Before implementing a new feature, read the relevant phase in `docs/experience-design.md`:
+- Check the **Scope** label (existing / new / enhanced) to understand what already exists
+- Check the **MCP tool schemas** in the appendix for input/output contracts
+- Check the **Defaults and configuration** table for settings behavior
+- Ensure UI and MCP tool produce the same domain event (core rule)
+
 ## Don't Do This
 
 - Do not import the full Shoelace bundle -- import individual components
 - Do not add framework state management (Redux, MobX) -- the pub/sub store is intentional
 - Do not put business logic in components -- extract to `lib/`
+- Do not invent UX patterns that contradict `docs/experience-design.md`

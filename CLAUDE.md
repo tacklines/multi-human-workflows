@@ -50,13 +50,21 @@ src/
   fixtures/      # Sample YAML files for development
 ```
 
+## Guiding Documents
+
+- **[Experience Design](docs/experience-design.md)** -- the authoritative spec for all new UI surfaces, MCP tools, and phase interactions. Every implementation task should trace back to this document.
+- **[The Complete Story](docs/the-complete-story.md)** -- the seven-act narrative arc from idea to production
+- **[Vision](docs/vision.md)** -- design principles and protocol architecture
+
+When implementing a new feature, read the relevant phase section in `docs/experience-design.md` first. It specifies: what the user sees, scope labels (existing/new/enhanced), MCP tool schemas (appendix), defaults, configuration, and how the phase blends into the next. Do not invent UX patterns that contradict this document.
+
 ## Architecture
 
 - **Schema is the contract** -- YAML files validate against `candidate-events.schema.json`
 - **State flows down** via properties, **events bubble up** from child components
 - **Store** is a singleton pub/sub (`src/state/app-state.ts`), not framework-coupled
 - **Session server** -- HTTP REST + SSE on port 3001; shared `SessionStore` singleton in `src/server/store.ts`
-- **MCP server** -- stdio transport with 4 tools (create/join/submit/get session) for AI-assisted workflows
+- **MCP server** -- stdio transport with 22 tools (see `docs/experience-design.md` appendix for the full surface); 17 additional tools planned
 - **Path alias**: `@` maps to `/src` in both Vite and vitest configs
 - **Server tsconfig** -- `tsconfig.server.json` for Node-only code (separate from browser tsconfig)
 

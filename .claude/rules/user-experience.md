@@ -1,10 +1,20 @@
 # User Experience
 
+The authoritative UX specification is **`docs/experience-design.md`**. These rules are the principles; that document is the implementation guide. When they conflict, update one or the other — don't silently diverge.
+
+## The Expanding Canvas
+
+- The session grows as content arrives — new capabilities unlock from new artifacts, not wizard steps
+- Seven UX phases (Spark, Explore, Rank, Slice, Agree, Build, Ship) are scaffolding, not gates
+- The Phase Ribbon indicates progress; it never controls navigation
+- Human UI actions and agent MCP calls produce identical domain events
+
 ## Design for Delight
 
 - Every interaction should feel intentional and responsive
 - Transitions and animations serve comprehension, not decoration (300-500ms, ease-in-out)
 - Visual feedback on every user action: hover states, click confirmations, loading indicators
+- Celebration moments when milestones are reached (respects `prefers-reduced-motion`)
 
 ## Accessibility First
 
@@ -26,3 +36,11 @@
 - Show the simplest useful view first
 - Advanced features (filters, comparison, path tracing) discoverable but not overwhelming
 - Onboarding: guide new users through their first file load and exploration
+
+## Settings Philosophy
+
+- Sane defaults for every setting — the app works well without configuration
+- Contextual gear icons per section open `sl-drawer` with only relevant settings
+- Global settings dialog aggregates all settings with tabs
+- Every modified setting shows a blue dot indicator; default value always visible
+- Settings save immediately on change — no "Save" button
