@@ -1,4 +1,11 @@
 import { z } from "zod";
+import type {
+  PriorityTier,
+  WorkItem,
+  DelegationLevel,
+  SessionConfig,
+  CandidateEventsFile,
+} from "../../schema/types.js";
 
 // ---------------------------------------------------------------------------
 // Base schema — every domain event carries these fields
@@ -168,7 +175,153 @@ export const DriftDetectedSchema = baseEventSchema.extend({
 export type DriftDetected = z.infer<typeof DriftDetectedSchema>;
 
 // ---------------------------------------------------------------------------
-// Discriminated union — all 17 domain events
+// Priority Context events (Phase III — Rank)
+// ---------------------------------------------------------------------------
+
+export const PrioritySetSchema = baseEventSchema.extend({
+  type: z.literal("PrioritySet"),
+  eventName: z.string(),
+  tier: z.enum(["must_have", "should_have", "could_have"]) satisfies z.ZodType<PriorityTier>,
+  participantId: z.string(),
+});
+export type PrioritySet = z.infer<typeof PrioritySetSchema>;
+
+export const VoteCastSchema = baseEventSchema.extend({
+  type: z.literal("VoteCast"),
+  participantId: z.string(),
+  eventName: z.string(),
+  direction: z.enum(["up", "down"]),
+});
+export type VoteCast = z.infer<typeof VoteCastSchema>;
+
+// ---------------------------------------------------------------------------
+// Decomposition Context events (Phase IV — Slice)
+// ---------------------------------------------------------------------------
+
+const WorkItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  acceptanceCriteria: z.array(z.string()),
+  complexity: z.enum(["S", "M", "L", "XL"]),
+  linkedEvents: z.array(z.string()),
+  dependencies: z.array(z.string()),
+}) satisfies z.ZodType<WorkItem>;
+
+export const WorkItemCreatedSchema = baseEventSchema.extend({
+  type: z.literal("WorkItemCreated"),
+  aggregate: z.string(),
+  workItem: WorkItemSchema,
+});
+export type WorkItemCreated = z.infer<typeof WorkItemCreatedSchema>;
+
+export const DependencySetSchema = baseEventSchema.extend({
+  type: z.literal("DependencySet"),
+  fromItemId: z.string(),
+  toItemId: z.string(),
+});
+export type DependencySet = z.infer<typeof DependencySetSchema>;
+
+// ---------------------------------------------------------------------------
+// Draft Context events (Phase V — Agree / authoring)
+// ---------------------------------------------------------------------------
+
+const CandidateEventsFileSchema: z.ZodType<CandidateEventsFile> = z.object({
+  metadata: z.object({
+    role: z.string(),
+    scope: z.string(),
+    goal: z.string(),
+    generated_at: z.string(),
+    event_count: z.number(),
+    assumption_count: z.number(),
+  }),
+  domain_events: z.array(
+    z.object({
+      name: z.string(),
+      aggregate: z.string(),
+      trigger: z.string(),
+      payload: z.array(z.object({ field: z.string(), type: z.string() })),
+      state_change: z.string().optional(),
+      integration: z.object({
+        direction: z.enum(["inbound", "outbound", "internal"]),
+        channel: z.string().optional(),
+      }),
+      sources: z.array(z.string()).optional(),
+      confidence: z.enum(["CONFIRMED", "LIKELY", "POSSIBLE"]),
+      notes: z.string().optional(),
+    })
+  ),
+  boundary_assumptions: z.array(
+    z.object({
+      id: z.string(),
+      type: z.enum(["ownership", "contract", "ordering", "existence"]),
+      statement: z.string(),
+      affects_events: z.array(z.string()),
+      confidence: z.enum(["CONFIRMED", "LIKELY", "POSSIBLE"]),
+      verify_with: z.string(),
+    })
+  ),
+});
+
+export const DraftCreatedSchema = baseEventSchema.extend({
+  type: z.literal("DraftCreated"),
+  participantId: z.string(),
+  draftId: z.string(),
+  content: CandidateEventsFileSchema,
+});
+export type DraftCreated = z.infer<typeof DraftCreatedSchema>;
+
+export const DraftPublishedSchema = baseEventSchema.extend({
+  type: z.literal("DraftPublished"),
+  draftId: z.string(),
+});
+export type DraftPublished = z.infer<typeof DraftPublishedSchema>;
+
+// ---------------------------------------------------------------------------
+// Delegation Context events (Phase VI/VII — Build / Ship)
+// ---------------------------------------------------------------------------
+
+export const DelegationChangedSchema = baseEventSchema.extend({
+  type: z.literal("DelegationChanged"),
+  level: z.enum(["assisted", "semi_autonomous", "autonomous"]) satisfies z.ZodType<DelegationLevel>,
+  changedBy: z.string(),
+});
+export type DelegationChanged = z.infer<typeof DelegationChangedSchema>;
+
+// Partial<SessionConfig> is represented as a permissive record at runtime;
+// the TypeScript type is enforced at call sites via the exported TS type.
+export const SessionConfiguredSchema = baseEventSchema.extend({
+  type: z.literal("SessionConfigured"),
+  configDelta: z.record(z.string(), z.unknown()),
+  changedBy: z.string(),
+});
+export type SessionConfigured = Omit<z.infer<typeof SessionConfiguredSchema>, "configDelta"> & {
+  configDelta: Partial<SessionConfig>;
+};
+
+// ---------------------------------------------------------------------------
+// Approval Context events (agent delegation approval loop)
+// ---------------------------------------------------------------------------
+
+export const ApprovalRequestedSchema = baseEventSchema.extend({
+  type: z.literal("ApprovalRequested"),
+  agentId: z.string(),
+  action: z.string(),
+  reasoning: z.string().optional(),
+  expiresAt: z.string(),
+});
+export type ApprovalRequested = z.infer<typeof ApprovalRequestedSchema>;
+
+export const ApprovalDecidedSchema = baseEventSchema.extend({
+  type: z.literal("ApprovalDecided"),
+  approvalId: z.string(),
+  decision: z.enum(["approved", "rejected"]),
+  decidedBy: z.string(),
+});
+export type ApprovalDecided = z.infer<typeof ApprovalDecidedSchema>;
+
+// ---------------------------------------------------------------------------
+// Discriminated union — all 27 domain events
 // ---------------------------------------------------------------------------
 
 export const DomainEventSchema = z.discriminatedUnion("type", [
@@ -189,6 +342,16 @@ export const DomainEventSchema = z.discriminatedUnion("type", [
   ContractGeneratedSchema,
   ComplianceCheckCompletedSchema,
   DriftDetectedSchema,
+  PrioritySetSchema,
+  VoteCastSchema,
+  WorkItemCreatedSchema,
+  DependencySetSchema,
+  DraftCreatedSchema,
+  DraftPublishedSchema,
+  DelegationChangedSchema,
+  SessionConfiguredSchema,
+  ApprovalRequestedSchema,
+  ApprovalDecidedSchema,
 ]);
 
 export type DomainEvent = z.infer<typeof DomainEventSchema>;
@@ -217,4 +380,14 @@ export const DOMAIN_EVENT_TYPES: readonly DomainEventType[] = [
   "ContractGenerated",
   "ComplianceCheckCompleted",
   "DriftDetected",
+  "PrioritySet",
+  "VoteCast",
+  "WorkItemCreated",
+  "DependencySet",
+  "DraftCreated",
+  "DraftPublished",
+  "DelegationChanged",
+  "SessionConfigured",
+  "ApprovalRequested",
+  "ApprovalDecided",
 ] as const;

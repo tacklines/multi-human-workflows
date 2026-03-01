@@ -17,6 +17,16 @@ import {
   ContractGeneratedSchema,
   ComplianceCheckCompletedSchema,
   DriftDetectedSchema,
+  PrioritySetSchema,
+  VoteCastSchema,
+  WorkItemCreatedSchema,
+  DependencySetSchema,
+  DraftCreatedSchema,
+  DraftPublishedSchema,
+  DelegationChangedSchema,
+  SessionConfiguredSchema,
+  ApprovalRequestedSchema,
+  ApprovalDecidedSchema,
   DomainEventSchema,
   DOMAIN_EVENT_TYPES,
 } from "./domain-events.ts";
@@ -419,6 +429,334 @@ describe("DriftDetected", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Priority Context events (Phase III — Rank)
+// ---------------------------------------------------------------------------
+
+describe("PrioritySet", () => {
+  it("validates with a valid tier", () => {
+    const result = PrioritySetSchema.safeParse({
+      ...base,
+      type: "PrioritySet",
+      eventName: "OrderPlaced",
+      tier: "must_have",
+      participantId: "p-1",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("fails with an invalid tier value", () => {
+    const result = PrioritySetSchema.safeParse({
+      ...base,
+      type: "PrioritySet",
+      eventName: "OrderPlaced",
+      tier: "nice_to_have",
+      participantId: "p-1",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("fails when eventName is missing", () => {
+    const result = PrioritySetSchema.safeParse({
+      ...base,
+      type: "PrioritySet",
+      tier: "must_have",
+      participantId: "p-1",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("VoteCast", () => {
+  it("validates an upvote", () => {
+    const result = VoteCastSchema.safeParse({
+      ...base,
+      type: "VoteCast",
+      participantId: "p-1",
+      eventName: "OrderPlaced",
+      direction: "up",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("validates a downvote", () => {
+    const result = VoteCastSchema.safeParse({
+      ...base,
+      type: "VoteCast",
+      participantId: "p-1",
+      eventName: "OrderPlaced",
+      direction: "down",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("fails with an invalid direction", () => {
+    const result = VoteCastSchema.safeParse({
+      ...base,
+      type: "VoteCast",
+      participantId: "p-1",
+      eventName: "OrderPlaced",
+      direction: "sideways",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Decomposition Context events (Phase IV — Slice)
+// ---------------------------------------------------------------------------
+
+const sampleWorkItem = {
+  id: "wi-1",
+  title: "Build order placement API",
+  description: "REST endpoint for placing orders",
+  acceptanceCriteria: ["Returns 201 on success", "Validates required fields"],
+  complexity: "M" as const,
+  linkedEvents: ["OrderPlaced"],
+  dependencies: [],
+};
+
+describe("WorkItemCreated", () => {
+  it("validates with a complete work item", () => {
+    const result = WorkItemCreatedSchema.safeParse({
+      ...base,
+      type: "WorkItemCreated",
+      aggregate: "Order",
+      workItem: sampleWorkItem,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("fails when workItem is missing", () => {
+    const result = WorkItemCreatedSchema.safeParse({
+      ...base,
+      type: "WorkItemCreated",
+      aggregate: "Order",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("fails with an invalid complexity value", () => {
+    const result = WorkItemCreatedSchema.safeParse({
+      ...base,
+      type: "WorkItemCreated",
+      aggregate: "Order",
+      workItem: { ...sampleWorkItem, complexity: "XXL" },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("DependencySet", () => {
+  it("validates with correct data", () => {
+    const result = DependencySetSchema.safeParse({
+      ...base,
+      type: "DependencySet",
+      fromItemId: "wi-1",
+      toItemId: "wi-2",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("fails when toItemId is missing", () => {
+    const result = DependencySetSchema.safeParse({
+      ...base,
+      type: "DependencySet",
+      fromItemId: "wi-1",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Draft Context events (Phase V — Agree / authoring)
+// ---------------------------------------------------------------------------
+
+const sampleCandidateEventsFile = {
+  metadata: {
+    role: "backend",
+    scope: "Order",
+    goal: "Handle order lifecycle",
+    generated_at: "2026-02-28T00:00:00.000Z",
+    event_count: 1,
+    assumption_count: 0,
+  },
+  domain_events: [
+    {
+      name: "OrderPlaced",
+      aggregate: "Order",
+      trigger: "Customer submits order form",
+      payload: [{ field: "orderId", type: "string" }],
+      integration: { direction: "outbound" as const },
+      confidence: "CONFIRMED" as const,
+    },
+  ],
+  boundary_assumptions: [],
+};
+
+describe("DraftCreated", () => {
+  it("validates with correct data", () => {
+    const result = DraftCreatedSchema.safeParse({
+      ...base,
+      type: "DraftCreated",
+      participantId: "p-1",
+      draftId: "draft-1",
+      content: sampleCandidateEventsFile,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("fails when draftId is missing", () => {
+    const result = DraftCreatedSchema.safeParse({
+      ...base,
+      type: "DraftCreated",
+      participantId: "p-1",
+      content: sampleCandidateEventsFile,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("DraftPublished", () => {
+  it("validates with correct data", () => {
+    const result = DraftPublishedSchema.safeParse({
+      ...base,
+      type: "DraftPublished",
+      draftId: "draft-1",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("fails when draftId is missing", () => {
+    const result = DraftPublishedSchema.safeParse({
+      ...base,
+      type: "DraftPublished",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Delegation Context events (Phase VI/VII — Build / Ship)
+// ---------------------------------------------------------------------------
+
+describe("DelegationChanged", () => {
+  it("validates all valid levels", () => {
+    for (const level of ["assisted", "semi_autonomous", "autonomous"] as const) {
+      const result = DelegationChangedSchema.safeParse({
+        ...base,
+        type: "DelegationChanged",
+        level,
+        changedBy: "p-1",
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("fails with an invalid level", () => {
+    const result = DelegationChangedSchema.safeParse({
+      ...base,
+      type: "DelegationChanged",
+      level: "fully_automatic",
+      changedBy: "p-1",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("SessionConfigured", () => {
+  it("validates with a partial config delta", () => {
+    const result = SessionConfiguredSchema.safeParse({
+      ...base,
+      type: "SessionConfigured",
+      configDelta: { comparison: { sensitivity: "exact" } },
+      changedBy: "p-1",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("fails when changedBy is missing", () => {
+    const result = SessionConfiguredSchema.safeParse({
+      ...base,
+      type: "SessionConfigured",
+      configDelta: {},
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Approval Context events (agent delegation approval loop)
+// ---------------------------------------------------------------------------
+
+describe("ApprovalRequested", () => {
+  it("validates with required fields and optional reasoning", () => {
+    const withReasoning = ApprovalRequestedSchema.safeParse({
+      ...base,
+      type: "ApprovalRequested",
+      agentId: "agent-1",
+      action: "Publish draft artifact",
+      reasoning: "All conflicts have been resolved",
+      expiresAt: "2026-03-01T00:00:00.000Z",
+    });
+    expect(withReasoning.success).toBe(true);
+
+    const withoutReasoning = ApprovalRequestedSchema.safeParse({
+      ...base,
+      type: "ApprovalRequested",
+      agentId: "agent-1",
+      action: "Publish draft artifact",
+      expiresAt: "2026-03-01T00:00:00.000Z",
+    });
+    expect(withoutReasoning.success).toBe(true);
+  });
+
+  it("fails when expiresAt is missing", () => {
+    const result = ApprovalRequestedSchema.safeParse({
+      ...base,
+      type: "ApprovalRequested",
+      agentId: "agent-1",
+      action: "Publish draft artifact",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("ApprovalDecided", () => {
+  it("validates an approved decision", () => {
+    const result = ApprovalDecidedSchema.safeParse({
+      ...base,
+      type: "ApprovalDecided",
+      approvalId: "appr-1",
+      decision: "approved",
+      decidedBy: "p-1",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("validates a rejected decision", () => {
+    const result = ApprovalDecidedSchema.safeParse({
+      ...base,
+      type: "ApprovalDecided",
+      approvalId: "appr-1",
+      decision: "rejected",
+      decidedBy: "p-1",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("fails with an invalid decision value", () => {
+    const result = ApprovalDecidedSchema.safeParse({
+      ...base,
+      type: "ApprovalDecided",
+      approvalId: "appr-1",
+      decision: "maybe",
+      decidedBy: "p-1",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Discriminated union
 // ---------------------------------------------------------------------------
 
@@ -488,10 +826,20 @@ describe("DOMAIN_EVENT_TYPES", () => {
     "ContractGenerated",
     "ComplianceCheckCompleted",
     "DriftDetected",
+    "PrioritySet",
+    "VoteCast",
+    "WorkItemCreated",
+    "DependencySet",
+    "DraftCreated",
+    "DraftPublished",
+    "DelegationChanged",
+    "SessionConfigured",
+    "ApprovalRequested",
+    "ApprovalDecided",
   ];
 
-  it("contains all 17 event types", () => {
-    expect(DOMAIN_EVENT_TYPES).toHaveLength(17);
+  it("contains all 27 event types", () => {
+    expect(DOMAIN_EVENT_TYPES).toHaveLength(27);
   });
 
   it("contains every expected type", () => {

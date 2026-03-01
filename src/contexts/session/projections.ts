@@ -462,6 +462,20 @@ function derivePhase(
     case "ComplianceCheckCompleted":
     case "DriftDetected":
       return "contract";
+    case "PrioritySet":
+    case "VoteCast":
+      return "rank";
+    case "WorkItemCreated":
+    case "DependencySet":
+      return "slice";
+    case "DraftCreated":
+    case "DraftPublished":
+      return "agree";
+    case "DelegationChanged":
+    case "SessionConfigured":
+    case "ApprovalRequested":
+    case "ApprovalDecided":
+      return current;
     case "SessionPaused":
     case "SessionResumed":
     case "SessionClosed":
