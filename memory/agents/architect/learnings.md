@@ -49,5 +49,14 @@
 - When consolidating duplicate types, the alias pattern (`export type ClientType = CanonicalType`) preserves all downstream consumers without touching import sites (added: 2026-03-01, dispatch: xiu)
 - `src/schema/types.ts` is the correct home for types shared across server (src/lib/) and client (src/state/) layers (added: 2026-03-01, dispatch: xiu)
 
+### Zod + TypeScript Pragmatism
+- For deeply nested Partial<T> types, use `z.record(z.string(), z.unknown())` at Zod level + `Omit<...> & { field: ActualType }` for TS type — avoids rebuilding deep interface hierarchies in Zod (added: 2026-03-01, dispatch: 2ye)
+- `z.ZodType<T>` annotation on inline Zod schemas acts as structural alignment test — compiler errors if Zod shape doesn't match TS interface (added: 2026-03-01, dispatch: 2ye)
+
+### Session Config Integration
+- Deep-merging a strongly-typed config struct in a generic loop requires `as any` at assignment — sub-interfaces lack index signatures (added: 2026-03-01, dispatch: w6f)
+- Adding a required field to Session/SerializedSession cascades into every test file constructing Session objects — grep for the last field in the struct to find all mock helpers (added: 2026-03-01, dispatch: w6f)
+- When worktree agent adds event already in HEAD, merge conflict is expected — resolve by keeping HEAD version and fixing field name mismatches in new code (added: 2026-03-01, dispatch: w6f)
+
 ## Cross-Agent Notes
 - Participant type now unified in `src/schema/types.ts` — `SessionParticipant` is an alias. Both layers import from schema/ (added: 2026-03-01, dispatch: xiu)

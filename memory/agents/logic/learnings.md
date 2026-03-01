@@ -50,5 +50,9 @@
 - When multiple UX phases share a single engine phase (e.g., spark/explore/rank during prep), use artifact inventory counts inside the switch case — keeps logic co-located and readable (added: 2026-03-01, dispatch: 6vh)
 - Never-exhaustive check (`const _exhaustive: never = value`) in default switch cases provides compile-time safety for string unions without runtime cost (added: 2026-03-01, dispatch: 6vh)
 
+## Suggestion Formatting
+- `participantCount` (not `submissionCount`) distinguishes lobby sub-states — "no one joined" vs "everyone's here, now submit" (added: 2026-03-01, dispatch: 35l)
+- For integrate phase, use `integrationStatus` as the sub-state discriminator when the UX table doesn't specify explicit sub-states (added: 2026-03-01, dispatch: 35l)
+
 ## Cross-Agent Notes
 - Task descriptions may reference types not yet in codebase — check src/schema/types.ts before assuming prior agent's work landed in your worktree (added: 2026-03-01, dispatch: 6vh)
