@@ -34,6 +34,9 @@
 ## Accessibility
 - SVG keyboard navigation: add `tabindex="0"`, `role="application"`, `aria-label`, `aria-activedescendant` to the SVG element; use `role="img"` and `aria-label` on node `<g>` elements (added: 2026-02-28, dispatch: multi-human-workflows-jus)
 - Roving tabindex pattern for graph: build adjacency map from edges, use ArrowRight/Down (+1) and ArrowLeft/Up (-1) to traverse, Enter/Space to activate, Escape to clear focus (added: 2026-02-28, dispatch: multi-human-workflows-jus)
+- For panels that slide in/out: `aria-hidden` toggling + focus-on-open (createRef) + restore-on-close; `aria-modal="false"` when page still accessible behind panel (added: 2026-02-28, dispatch: a6r.30)
+- Shoelace `sl-details` already provides keyboard expand/collapse — no custom handler needed (added: 2026-02-28, dispatch: a6r.30)
+- For SVG-only visualizations, use visually-hidden `<table>` as screen reader fallback rather than making SVG nodes individually focusable (added: 2026-02-28, dispatch: a6r.30)
 
 ## State Lifting
 - When a Lit component manages connection lifecycle (EventSource, WebSocket), put the connection in `state/` with a module-level variable, not in the component — state persists across navigation, components focus on rendering (added: 2026-02-28, dispatch: a6r.34)
@@ -43,6 +46,18 @@
 - When a component needs event-type-driven side effects (not just derived values), use raw `store.subscribe` with a type filter — `StoreController` is wrong for event-driven side effects (added: 2026-02-28, dispatch: a6r.31)
 - `ReactiveController.setFoo()` called from `render()` is safe if guarded by equality checks — Lit batches synchronous `requestUpdate()` within a render (added: 2026-02-28, dispatch: a6r.31)
 - Store selector equality (`!==`) works correctly only when store returns new object references on mutation — `StoreController<T>` relies on this invariant (added: 2026-02-28, dispatch: a6r.31)
+
+## Lit Property Name Gotchas
+- Avoid `before`, `after`, `remove`, `append`, `prepend`, `replaceWith` as Lit @property names — they collide with Element DOM methods, causing TS2416 (added: 2026-02-28, dispatch: a6r.32)
+- For recursive Lit render methods, always add explicit `: TemplateResult` return type — TypeScript cannot infer through html`` template literal tags in recursive calls (added: 2026-02-28, dispatch: a6r.32)
+
+## Agreement Components
+- Components call HTTP REST API directly (not server-side service classes) — read http.ts handler routes for wire format, not context service files (added: 2026-02-28, dispatch: a6r.28)
+- Offline mode fallback: fire custom events with composed:true when no session code, let parent handle — supports both connected and standalone usage (added: 2026-02-28, dispatch: a6r.28)
+
+## Store Data Gaps
+- `SessionParticipant` type lacks `type` (human/agent/service) and `capabilities` fields — check store types before assuming data availability in component requirements (added: 2026-02-28, dispatch: a6r.33)
+- When task requirements mention data fields not in the store, that's a separate schema/server extension task (added: 2026-02-28, dispatch: a6r.33)
 
 ## Cross-Agent Notes
 - (from logic) ELK returns top-left (x,y) not center; use `_nodeCx`/`_nodeCy` helpers when computing edge endpoints or zoom targets (added: 2026-02-28)
