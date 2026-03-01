@@ -20,3 +20,10 @@
 - Pruned/archived: 0 (all entries <21 days old)
 - Tests: 683 → 692 (+9)
 - Key insight: Small schema task (pmf) completes fast, gives good warm-up before large cross-cutting task (i18n across 22 files)
+
+## Retro: 2026-03-01 (Sprint 7)
+- Tasks completed: 5 (jat, xiu, b79, exv, 6vh) — foundation layer of epic n57
+- New learnings: 10 across 3 members (architect: 3, component: 4, logic: 3)
+- Pruned/archived: 5 entries from component (to archive)
+- Tests: 692 → 728 (+36)
+- Key insight: Three sequential tasks modifying types.ts caused one merge conflict — batch same-file changes into a single task or dispatch strictly serially with immediate merge

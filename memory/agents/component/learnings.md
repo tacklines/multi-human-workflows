@@ -7,17 +7,9 @@
 - Components organized by domain feature: shared/, session/, artifact/, comparison/, visualization/ under src/components/ (added: 2026-02-28, dispatch: a6r.12)
 
 ## Gotchas
-- ELK TypeScript types: `elk.layout()` returns `ElkNode` — annotate children/edges with explicit `ElkNode` type to avoid implicit-any on `.x`/`.y` access (added: 2026-02-28, dispatch: multi-human-workflows-ort)
-- Shoelace `sl-change` event: `e.target` is `SlSelect` not `HTMLSelectElement`; cast via `(e.target as unknown as { value: string }).value` for type-safe access (added: 2026-02-28, dispatch: multi-human-workflows-ort)
-- `@types/d3-drag` not available; use native pointer events with `setPointerCapture`/`releasePointerCapture` instead (added: 2026-02-28, dispatch: multi-human-workflows-sfd)
-- Bidirectional d3-zoom sync (e.g., minimap <-> main canvas) requires a `_updatingFromMinimap` flag to prevent re-entrant zoom event loops (added: 2026-02-28, dispatch: multi-human-workflows-sfd)
-- Worktree branches based on old commits may have incompatible types when merged with main; extract standalone components and manually integrate the rest (added: 2026-02-28, dispatch: multi-human-workflows-imt)
-- SVG `@dblclick` on `<g>` propagates to parent click handlers — use `e.stopPropagation()` to prevent single-click from also firing (added: 2026-02-28, dispatch: multi-human-workflows-2kp)
-- When a node appears in `nodes[]` for edge routing but needs special rendering (e.g., collapsed aggregate), keep a separate list and filter it from the regular render loop (added: 2026-02-28, dispatch: multi-human-workflows-2kp)
-
-## Semantic Zoom
-- Semantic zoom: use a private getter reading from @state() viewTransform.k — re-evaluates automatically on each Lit render triggered by zoom events, no additional @state needed (added: 2026-02-28, dispatch: multi-human-workflows-891)
-- Aggregate event node IDs have form 'AggregateName::EventName'; external system node IDs are plain strings with no '::' — use this to distinguish intra- vs inter-aggregate edges (added: 2026-02-28, dispatch: multi-human-workflows-891)
+- Shoelace `sl-change` event: `e.target` is `SlSelect` not `HTMLSelectElement`; cast via `(e.target as unknown as { value: string }).value` (added: 2026-02-28)
+- SVG `@dblclick` on `<g>` propagates to parent click handlers — use `e.stopPropagation()` (added: 2026-02-28)
+- When a node appears in `nodes[]` for edge routing but needs special rendering, keep a separate list and filter from regular render loop (added: 2026-02-28)
 
 ## Session Patterns
 - app-shell.ts uses `_soloMode` boolean @state to switch between session-lobby and file-drop-zone hero landing (added: 2026-02-28, dispatch: multi-human-workflows-zgg)

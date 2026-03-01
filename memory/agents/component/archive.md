@@ -22,3 +22,10 @@ Entries moved here during retro 2026-02-28.
 - SVG `<textPath startOffset="50%" text-anchor="middle">` with `paint-order="stroke"` creates readable labels along curved paths (added: 2026-02-28, dispatch: multi-human-workflows-5ja)
 - SVG marker `markerUnits="strokeWidth"` scales arrowheads relative to stroke width for crisp zoom-invariant arrows (added: 2026-02-28, dispatch: multi-human-workflows-5ja)
 - ELK edge sections: `laid.edges[].sections[].{startPoint, endPoint, bendPoints}` — track edge ID to group key to retrieve sections after layout (added: 2026-02-28, dispatch: multi-human-workflows-5ja)
+
+## Pruned Sprint 7 Retro (2026-03-01)
+- ELK layout types: cast `ElkNode` children and edges through ELK API types for type safety (added: 2026-02-28)
+- d3-drag on SVG `<g>`: attach to group, read dx/dy from event, update transform — works with ELK-positioned nodes (added: 2026-02-28)
+- Bidirectional zoom sync: SVG viewBox ↔ minimap viewport requires debounce flag to prevent feedback loops (added: 2026-02-28)
+- Worktree compat: agents in isolated worktrees may not see prior agents' merged code — design tasks to be self-contained (added: 2026-02-28)
+- Semantic zoom: switch SVG detail level based on `k` (scale) from d3-zoom transform — threshold at k<0.5 for compact, k>1.5 for detail (added: 2026-02-28)
