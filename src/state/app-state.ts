@@ -3,10 +3,14 @@ import type { Confidence, Direction } from '../schema/types.js';
 
 export type ViewMode = 'cards' | 'flow' | 'comparison';
 
+export type ParticipantType = 'human' | 'agent' | 'service';
+
 export interface SessionParticipant {
   id: string;
   name: string;
   joinedAt: string;
+  type?: ParticipantType;
+  capabilities?: string[];
 }
 
 export interface SessionSubmission {
