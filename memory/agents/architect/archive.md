@@ -19,3 +19,10 @@ Entries moved here during retro 2026-02-28. Low-reuse or already-implemented pat
 - Export shared low-level utilities (like `generateId`) from their point of definition rather than duplicating (added: 2026-02-28, dispatch: a6r.15)
 - Storing credentials as plaintext `"value"` in realm JSON is safe for dev imports — Keycloak hashes them on first write (added: 2026-02-28, dispatch: a6r.25)
 - `z.string().optional()` with Zod produces `string | undefined` in handler — TypeScript handles correctly (added: 2026-02-28, dispatch: ppc.8+ppc.5)
+
+## Archived Sprint 8 Retro (2026-03-01)
+- `WebSocketServer` attaches via `{ server: httpServer }` — no explicit `upgrade` wiring needed (added: 2026-02-28)
+- `heartbeatTimer.unref()` prevents tests from hanging (added: 2026-02-28)
+- A2A spec v0.2.5 uses `message/send` as primary method, not `tasks/send` (added: 2026-02-28)
+- A2A synchronous in-memory ops: `submitted → working → completed` in one request cycle (added: 2026-02-28)
+- Keycloak `--import-realm` with volume mount to `/opt/keycloak/data/import/` for pre-configured realm (added: 2026-02-28)

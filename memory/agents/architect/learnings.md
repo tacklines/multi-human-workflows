@@ -26,7 +26,7 @@
 ## Task-Relevant — Current Sprint Context
 
 ### Domain Events & EventStore
-- Domain events in `src/contexts/session/domain-events.ts` — 17 events, 5 contexts, Zod discriminated union (added: 2026-02-28)
+- Domain events in `src/contexts/session/domain-events.ts` — 27 events, 7 contexts, Zod discriminated union (added: 2026-02-28, updated: 2026-03-01)
 - Use `baseEventSchema.extend({ type: z.literal("X"), ... })` to define events (added: 2026-02-28)
 - EventStore uses `DomainEventSchema.parse(event)` on append — ZodError is the signal for invalid data (added: 2026-02-28)
 
@@ -35,14 +35,7 @@
 - When spreading a `DomainEvent` union into object literal, TypeScript flags excess properties — spell out fresh literals in tests (added: 2026-02-28)
 - MCP stdio transport reserves stdout for JSON-RPC — all logging via `console.error()` (added: 2026-02-28)
 
-### WebSocket & A2A
-- `WebSocketServer` attaches via `{ server: httpServer }` — no explicit `upgrade` wiring needed (added: 2026-02-28)
-- `heartbeatTimer.unref()` prevents tests from hanging (added: 2026-02-28)
-- A2A spec v0.2.5 uses `message/send` as primary method, not `tasks/send` (added: 2026-02-28)
-- A2A synchronous in-memory ops: `submitted → working → completed` in one request cycle (added: 2026-02-28)
-
 ### Infrastructure
-- Keycloak `--import-realm` with volume mount to `/opt/keycloak/data/import/` for pre-configured realm (added: 2026-02-28)
 - For polling MCP tools, callers must track semantic values (e.g., currentPhase) not timestamp-based `changed` booleans (added: 2026-02-28)
 
 ### Type Unification

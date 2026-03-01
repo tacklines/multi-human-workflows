@@ -29,3 +29,8 @@ Entries moved here during retro 2026-02-28.
 - Bidirectional zoom sync: SVG viewBox ↔ minimap viewport requires debounce flag to prevent feedback loops (added: 2026-02-28)
 - Worktree compat: agents in isolated worktrees may not see prior agents' merged code — design tasks to be self-contained (added: 2026-02-28)
 - Semantic zoom: switch SVG detail level based on `k` (scale) from d3-zoom transform — threshold at k<0.5 for compact, k>1.5 for detail (added: 2026-02-28)
+
+## Archived Sprint 8 Retro (2026-03-01)
+- SVG `@dblclick` on `<g>` propagates to parent click handlers — use `e.stopPropagation()` (added: 2026-02-28)
+- When a node appears in `nodes[]` for edge routing but needs special rendering, keep a separate list and filter from regular render loop (added: 2026-02-28)
+- Check store types before assuming data from task requirements — missing fields need a schema extension task (added: 2026-02-28, dispatch: a6r.33)

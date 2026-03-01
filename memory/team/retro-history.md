@@ -27,3 +27,10 @@
 - Pruned/archived: 5 entries from component (to archive)
 - Tests: 692 → 728 (+36)
 - Key insight: Three sequential tasks modifying types.ts caused one merge conflict — batch same-file changes into a single task or dispatch strictly serially with immediate merge
+
+## Retro: 2026-03-01 (Sprint 8)
+- Tasks completed: 5 (2ye, 35l, 36k, qdu, w6f) — Layer 2 of epic n57, all 4 agents utilized
+- New learnings: 11 across 4 members (architect: 5, logic: 2, component: 2, tester: 2)
+- Pruned/archived: 8 entries (architect: 5, component: 3)
+- Tests: 728 → 798 (+70)
+- Key insight: Worktree agents that need events from a just-merged bead will re-create them, causing predictable merge conflicts — include exact field names in agent prompts to minimize post-merge fixes

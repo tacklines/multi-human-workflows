@@ -8,8 +8,6 @@
 
 ## Gotchas
 - Shoelace `sl-change` event: `e.target` is `SlSelect` not `HTMLSelectElement`; cast via `(e.target as unknown as { value: string }).value` (added: 2026-02-28)
-- SVG `@dblclick` on `<g>` propagates to parent click handlers — use `e.stopPropagation()` (added: 2026-02-28)
-- When a node appears in `nodes[]` for edge routing but needs special rendering, keep a separate list and filter from regular render loop (added: 2026-02-28)
 
 ## Session Patterns
 - app-shell.ts uses `_soloMode` boolean @state to switch between session-lobby and file-drop-zone hero landing (added: 2026-02-28, dispatch: multi-human-workflows-zgg)
@@ -38,9 +36,6 @@
 ## Agreement Components
 - Components call HTTP REST API directly (not server-side service classes) — read http.ts handler routes for wire format, not context service files (added: 2026-02-28, dispatch: a6r.28)
 - Offline mode fallback: fire custom events with composed:true when no session code, let parent handle — supports both connected and standalone usage (added: 2026-02-28, dispatch: a6r.28)
-
-## Store Data Gaps
-- Check store types before assuming data from task requirements — missing fields need a schema extension task (added: 2026-02-28, dispatch: a6r.33)
 
 ## i18n
 - i18n module at `src/lib/i18n.ts` — `t(key, params?)` with `{{param}}` interpolation; keys organized by component name (added: 2026-03-01, dispatch: a6r.29)
