@@ -45,4 +45,4 @@
 - For polling MCP tools, callers must track semantic values (e.g., currentPhase) not timestamp-based `changed` booleans (added: 2026-02-28)
 
 ## Cross-Agent Notes
-- (none yet)
+- Two parallel participant types: `SessionParticipant` (client, `src/state/app-state.ts`) and `Participant` (server, `src/lib/session-store.ts`) — both need updating if a field should be available on both sides (added: 2026-03-01, dispatch: pmf)

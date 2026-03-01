@@ -48,7 +48,11 @@
 - Offline mode fallback: fire custom events with composed:true when no session code, let parent handle — supports both connected and standalone usage (added: 2026-02-28, dispatch: a6r.28)
 
 ## Store Data Gaps
-- Check store types before assuming data from task requirements — `SessionParticipant` lacks `type`/`capabilities`; missing fields need a schema extension task (added: 2026-02-28, dispatch: a6r.33)
+- Check store types before assuming data from task requirements — missing fields need a schema extension task (added: 2026-02-28, dispatch: a6r.33)
+
+## i18n
+- i18n module at `src/lib/i18n.ts` — `t(key, params?)` with `{{param}}` interpolation; keys organized by component name (added: 2026-03-01, dispatch: a6r.29)
+- When loop variable shadows imported `t`, rename the loop variable (e.g., `changeType` not `t`) — Lit templates call `t()` frequently (added: 2026-03-01, dispatch: a6r.29)
 
 ## Cross-Agent Notes
 - (from logic) ELK returns top-left (x,y) not center; use `_nodeCx`/`_nodeCy` helpers when computing edge endpoints or zoom targets (added: 2026-02-28)
