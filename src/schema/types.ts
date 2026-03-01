@@ -306,3 +306,99 @@ export const DEFAULT_SESSION_CONFIG: SessionConfig = {
     silentEvents: [],
   },
 } as const satisfies SessionConfig;
+
+/** Priority tier for ranking domain events — MoSCoW-style classification */
+export type PriorityTier = 'must_have' | 'should_have' | 'could_have';
+
+/**
+ * Composite priority record for a single domain event.
+ * The compositeScore is computed from confidence, integration complexity,
+ * and cross-references across participants.
+ */
+export interface EventPriority {
+  /** Name of the domain event being prioritized */
+  eventName: string;
+  /** MoSCoW classification tier */
+  tier: PriorityTier;
+  /**
+   * Computed score from three weighted signals:
+   * - Confidence level (CONFIRMED=3, LIKELY=2, POSSIBLE=1)
+   * - Integration complexity (inbound/outbound=2, internal=1)
+   * - Cross-references (count of participants whose artifacts mention the event or aggregate)
+   */
+  compositeScore: number;
+  /** Votes cast on this event by participants */
+  votes: Vote[];
+}
+
+/** A single upvote or downvote cast by a participant on a domain event */
+export interface Vote {
+  /** Participant who cast the vote */
+  participantId: string;
+  /** Event this vote applies to */
+  eventName: string;
+  /** Direction of the vote */
+  direction: 'up' | 'down';
+}
+
+/** Complexity estimate using T-shirt sizing */
+export type WorkItemComplexity = 'S' | 'M' | 'L' | 'XL';
+
+/**
+ * A vertically-sliced unit of work derived from decomposing an aggregate.
+ * Work items are independently deliverable and testable.
+ */
+export interface WorkItem {
+  /** Unique identifier for the work item */
+  id: string;
+  /** Short, imperative title describing what gets built */
+  title: string;
+  /** Longer description providing context and rationale */
+  description: string;
+  /** List of testable acceptance criteria statements */
+  acceptanceCriteria: string[];
+  /** T-shirt size estimate of implementation effort */
+  complexity: WorkItemComplexity;
+  /** Names of domain events from the parent aggregate that this work item addresses */
+  linkedEvents: string[];
+  /** IDs of work items that must complete before this one can start */
+  dependencies: string[];
+}
+
+/**
+ * A draft artifact visible only to the author — a staging area before formal submission.
+ * Created via `create_draft`, promoted via `submit_artifact`.
+ */
+export interface Draft {
+  /** Unique identifier for the draft */
+  id: string;
+  /** Participant who authored this draft */
+  participantId: string;
+  /** The candidate events content being drafted */
+  content: CandidateEventsFile;
+  /** ISO 8601 timestamp when the draft was created */
+  createdAt: string;
+}
+
+/**
+ * Agent autonomy level for the current session.
+ * Controls how much agents can do without explicit human approval.
+ */
+export type DelegationLevel = 'assisted' | 'semi_autonomous' | 'autonomous';
+
+/**
+ * An agent-proposed action awaiting human approval.
+ * Used when delegation level is `assisted` or `semi_autonomous`.
+ */
+export interface PendingApproval {
+  /** Unique identifier for this pending approval request */
+  id: string;
+  /** ID of the agent that proposed the action */
+  agentId: string;
+  /** Human-readable description of what the agent wants to do */
+  action: string;
+  /** Optional explanation from the agent for why it wants to take this action */
+  reasoning?: string;
+  /** ISO 8601 timestamp when this approval request expires (default: 24 hours after creation) */
+  expiresAt: string;
+}
