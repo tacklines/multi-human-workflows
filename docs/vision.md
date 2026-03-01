@@ -1,134 +1,168 @@
-# Vision: Multi-Human Workflows Collaborator
+# Vision: Open Collaborative Sessions
 
-A companion app for teams using the tackline multi-human workflow. Not just a visualizer — a workspace that supports every phase of the collaboration lifecycle, from independent exploration through integration.
-
----
-
-## The Opportunity
-
-The tackline multi-human workflow has five phases: Prep, Jam, Formalize, Execute, Integrate. Today the app handles one: viewing storm-prep YAML output. The other four phases — where the actual collaboration happens — have no tooling support at all. Teams are left to coordinate via Slack messages, shared docs, and hoping everyone remembers what was agreed.
-
-This vision describes what it looks like when the app supports the full lifecycle.
+A protocol-native platform where any combination of humans and AI agents join a shared session, contribute structured artifacts, negotiate agreements, and build things together — using whatever creative process works for them.
 
 ---
 
-## Guiding Principles
+## The Insight
 
-**The workflow is the product.** Every feature should map to a phase in the workflow or to a transition between phases. If it doesn't help someone prep, jam, formalize, execute, or integrate — it doesn't belong.
+The best collaborative work happens when people (and their agents) can bring their own process. Some teams do Event Storming. Some sketch APIs on a whiteboard. Some pair-program across boundaries. Some have an AI agent draft proposals that humans refine. The common thread isn't the methodology — it's the pattern: independent work, shared negotiation, formalized agreements, parallel execution, integration.
 
-**Humans coordinate, agents validate.** The app doesn't replace human judgment about what to build or how boundaries should work. It makes the human conversations more productive and ensures the agreements from those conversations are actually enforced.
-
-**Show the seams.** The most valuable thing the app can do is make cross-boundary contracts visible. Where do my events cross into your territory? What assumptions am I making about your piece? Where have we drifted from what we agreed? These seams are where projects fail — make them impossible to ignore.
-
-**Progressive engagement.** A team should be able to drag in one YAML file and get value in 30 seconds. Deeper features reveal themselves as the team moves through the workflow. Don't front-load complexity.
+The platform shouldn't prescribe how you collaborate. It should make collaboration *work* — by giving every participant (human or AI) a standard way to join, contribute, negotiate, and verify.
 
 ---
 
-## Feature Areas
+## Design Principles
 
-### 1. Prep Workspace
+**Participants, not roles.** A session has participants. Some are humans typing in a browser. Some are AI agents connected via MCP or A2A. Some are automated services that validate, transform, or integrate. The platform treats them all as first-class participants with capabilities, not as "users" vs. "tools."
 
-*Support the independent exploration phase before the Jam.*
+**Sessions, not workflows.** The core primitive is a session — a shared space with a join code, participants, and artifacts. What happens inside a session is up to the participants. The platform provides the substrate: structured artifact submission, comparison, conflict detection, agreement capture, and integration checking. How you use those primitives is your business.
 
-Today people run `/storm-prep` and get a YAML file. The app can make this phase richer:
+**Protocols, not plugins.** Integration happens through open protocols. MCP for tool access and context sharing. A2A for agent-to-agent collaboration across organizational and framework boundaries. The platform is both an MCP server (exposing session tools to any connected agent) and an A2A participant (discoverable by and collaborative with agents from any framework). No SDKs to install, no vendor lock-in.
 
-- **Live preview as you prep.** Load your storm-prep output and see your events, aggregates, and assumptions laid out visually — before you've shared anything with anyone else.
-- **Assumption spotlight.** Surface your boundary assumptions prominently. These are the questions you need to bring to the Jam. "I'm assuming checkout sends me an orderId — is that right?" The app should make these impossible to forget.
-- **Confidence heatmap.** Events tagged POSSIBLE or LIKELY should feel visually different from CONFIRMED ones. You should be able to glance at your prep and immediately see where you're guessing vs. where you're sure.
-- **Prep completeness check.** Before heading into a Jam, a quick diagnostic: "You have 6 events, 3 assumptions, and 2 unresolved questions. Ready to jam?"
+**Artifacts, not chat.** Collaboration produces structured artifacts — schemas, YAML files, design documents, contracts, test fixtures. The platform is built around artifacts with identity, versioning, and provenance. Chat and discussion happen elsewhere (Slack, calls, A2A message threads). This is where agreements become concrete.
 
-### 2. Jam Session Support
+**Show the seams.** The most valuable thing the platform can do is make cross-boundary contracts visible. Where do your outputs cross into someone else's territory? What assumptions are you making about their piece? Where have things drifted from what was agreed? These seams are where projects fail — make them impossible to ignore.
 
-*Make the synchronous human conversation more productive.*
+---
 
-The Jam is the only phase where everyone needs to be in the same room (or call). The app should be the shared screen during that conversation:
+## What the Platform Provides
 
-- **Side-by-side prep comparison.** Load everyone's prep files simultaneously and see where they overlap, where they conflict, and where assumptions don't match. This is the conversation starter — "Your file says you emit CheckoutCompleted with orderRef, but my file assumes I'll receive orderId. Let's resolve that."
-- **Live conflict resolution.** When you spot a mismatch in the Jam, resolve it right there. Click on a conflicting assumption, agree on a resolution, and the app records it. No more "write it in a Google Doc and hope someone transfers it."
-- **Ownership assignment.** Drag events to owners. "Alice owns PaymentSucceeded. Bob owns CheckoutCompleted." Visual, unambiguous, and recorded.
-- **Agreement capture.** As you resolve conflicts and assign ownership, the app builds the shared event catalog — the artifact that feeds the Formalize phase. Instead of writing a markdown file by hand after the meeting, you walk out of the Jam with a structured, machine-readable artifact already built.
-- **Unresolved tracker.** Things you couldn't resolve in the Jam get explicitly marked "unresolved." They carry forward through the workflow, nagging you until they're settled. No silent unknowns.
+### 1. Session Lifecycle
 
-### 3. Contract Dashboard
+A session is the container for a collaboration. Anyone can create one and get a join code.
 
-*Visualize and manage the formalized agreements.*
+- **Create / Join / Leave.** Humans join through a web UI. AI agents join through MCP tools or A2A discovery. A session persists until explicitly closed.
+- **Participant registry.** Every participant has a name, a type (human / agent / service), declared capabilities, and a connection status. The registry is always visible — you can see who's in the session and what they can do.
+- **Artifact submission.** Participants submit structured artifacts to the session. The platform validates them against declared schemas, timestamps them, and makes them visible to all other participants.
+- **Session state.** The platform tracks what artifacts exist, what's been compared, what conflicts are unresolved, and what agreements have been captured. Any participant can query session state at any time.
 
-After `/formalize` produces schemas, mocks, and validation config, the app becomes the place where you see and manage contracts:
+### 2. Comparison and Conflict Detection
 
-- **Contract browser.** Browse all formalized event schemas. See the fields, types, constraints, and confidence tags. "PaymentSucceeded: 5 fields, all CONFIRMED." vs. "RefundRequested: 3 fields, 1 POSSIBLE."
-- **Cross-boundary map.** A visual map showing which events flow between which contexts. Alice's backend produces PaymentSucceeded, Bob's frontend consumes it. Draw that line. Make it obvious who depends on whom.
-- **Contract diff.** When someone updates a schema, show exactly what changed. "amountCents changed from optional to required." This is the early warning system for contract drift.
-- **Mock inspector.** View the mock payloads generated for each consumed event. "Here's what your tests will see when Bob's CheckoutCompleted arrives." Developers should be able to eyeball the mock and say "yeah, that looks right" before sprinting.
-- **Field-level provenance.** For each field in a schema, trace it back: "This field was proposed in Alice's storm-prep, confirmed in the Feb 27 Jam, formalized in v1 of the schema." The full lineage of every decision.
+When multiple participants submit artifacts that cover overlapping territory, the platform detects it.
 
-### 4. Sprint Companion
+- **Cross-artifact comparison.** Automated diffing of submitted artifacts to surface overlaps, conflicts, and gaps. "Alice's schema says `amountCents: integer`. Bob's says `total: float`. These overlap."
+- **Assumption surfacing.** Artifacts can declare assumptions about other participants' work. The platform highlights unmatched assumptions — questions that need answers before building.
+- **Gap analysis.** Given a set of artifacts, identify what's missing. "Nobody has defined the error response format." Gaps are first-class, not afterthoughts.
 
-*Keep contracts visible while people build.*
+### 3. Agreement Capture
 
-During the Execute phase, each person is head-down in their own code. The app serves as a persistent reference and early warning system:
+The platform records decisions. Not in chat history — in structured, queryable, versionable form.
 
-- **Contract reference panel.** "What did we agree PaymentSucceeded looks like?" One click to see the schema while you're building. No hunting through Git for a YAML file.
-- **Drift alerts.** If someone re-runs formalize or updates a schema mid-sprint, the app flags it: "PaymentSucceeded schema updated 2 hours ago — amountCents is now required." You learn about contract changes immediately, not at merge time.
-- **Sprint progress by context.** Each team member can report their progress ("Payment aggregate done, Refund aggregate in progress"). The team gets a shared view of where everyone is without a standup.
-- **Assumption resolution tracker.** Those "unresolved" items from the Jam? They show up here as a persistent nudge. "You still haven't resolved whether RefundRequested carries the Stripe webhook payload or a processed version."
+- **Conflict resolution records.** When participants resolve a conflict, the platform captures what was decided, who agreed, and what approach was chosen.
+- **Ownership assignment.** Explicit, visual assignment of who owns what. No ambiguity about responsibility.
+- **Unresolved tracking.** Things that couldn't be resolved get flagged and carry forward. They nag until they're settled.
 
-### 5. Integration Hub
+### 4. Contract Formalization
 
-*Visualize the integration check results and guide resolution.*
+Agreements become machine-readable contracts that participants can validate against while they work.
 
-When `/integrate` runs and produces its report, the app is where you understand the findings and act on them:
+- **Schema generation.** From agreed artifacts, generate typed schemas, mock payloads, and validation rules.
+- **Contract diffing.** When contracts change, show exactly what changed and who it affects.
+- **Provenance.** For every field in a contract, trace it back to the artifact, session, and participants that produced it.
 
-- **Integration report viewer.** FATAL, SERIOUS, ADVISORY findings displayed clearly. Not a wall of text — a navigable, filterable report.
-- **Side-by-side resolution.** For each conflict: "Alice's code sends amountCents as number, Bob's code expects integer." See both sides, the proposed fix, and who needs to act.
-- **Integration timeline.** Track integration runs over time. "First run: 3 FATAL, 2 SERIOUS. Second run: 0 FATAL, 1 SERIOUS." See the trajectory toward clean integration.
-- **Go/no-go checklist.** A single view that says "you're clear to merge" or "these 2 things need resolution first." The final gate before code hits main.
+### 5. Integration Verification
 
-### 6. Workflow Navigator
+Before merging, verify that independently-produced work actually fits together.
 
-*Guide teams through the full lifecycle.*
+- **Contract compliance.** Does each participant's output match the agreed contracts?
+- **Cross-boundary compatibility.** Do the pieces fit? Does what one participant sends match what another expects?
+- **Drift detection.** Has anything changed since the contracts were agreed?
+- **Go/no-go assessment.** A single view: ready to merge, or here's what needs resolution first.
 
-The five phases are sequential with clear handoff points. The app should make the workflow itself navigable:
+---
 
-- **Phase indicator.** Where are we? Prep → Jam → Formalize → Execute → Integrate. A simple progress bar that reflects the current state based on what artifacts exist.
-- **Phase transition guidance.** "You've loaded 2 prep files. Ready to start a Jam session?" or "Formalize output detected. You can start sprinting." The app coaches teams through the workflow without being prescriptive.
-- **Artifact inventory.** At any point, see what exists: 2 prep files, 1 jam artifact, 3 schemas, 0 integration reports. Gaps are obvious.
-- **Re-entry support.** Not everything is linear. Sometimes you need to go back — re-jam because contracts changed, re-formalize because the Jam surfaced something new. The app should make re-entry natural, not penalizing.
+## Protocol Architecture
 
-### 7. Multi-Session History
+The platform operates at the intersection of two complementary protocol layers:
 
-*Build institutional memory across collaboration cycles.*
+### MCP: The Tool Layer
 
-Teams don't collaborate once. They build together over weeks and months:
+The platform exposes its full capability set as MCP tools. Any AI agent with an MCP client can:
 
-- **Session timeline.** See past Jam sessions, what was decided, and how agreements evolved. "In the Jan session we agreed on amountCents. In the Feb session we added currency."
-- **Decision log.** A searchable record of every decision made in Jam sessions. "Why is this field called amountCents and not totalAmount?" The answer is in the decision log from three weeks ago.
-- **Pattern recognition.** Over time, the app notices patterns: "You and Bob always have conflicts about naming conventions. Consider establishing a naming guide." Light-touch insights, not prescriptive rules.
+- Create and join sessions
+- Submit artifacts
+- Query session state, comparisons, and conflicts
+- Record resolutions and assignments
+- Trigger integration checks
 
-### 8. Team Awareness
+This means a human using Claude Code, a GPT-based agent, a custom LangChain pipeline, or any MCP-compatible system can participate in a session with equal capability. The agent's framework doesn't matter. The protocol is the interface.
 
-*Know who's involved and what they own.*
+### A2A: The Collaboration Layer
 
-- **Team roster.** Who's participating in this workflow? What contexts do they own? When were they last active?
-- **Ownership map.** A clear, visual answer to "who owns this event?" at any point in the workflow. No ambiguity.
-- **Notification preferences.** Let people choose how they want to learn about contract changes, integration results, and unresolved items. Not everyone wants the same level of detail.
+The platform is discoverable as an A2A agent, advertising its capabilities via an Agent Card. Remote agents can:
+
+- Discover the platform and its session capabilities
+- Initiate or join collaborative tasks
+- Exchange artifacts asynchronously with other agents in a session
+- Receive notifications about session state changes (new artifacts, conflicts, resolutions)
+
+A2A enables scenarios MCP alone can't: an agent at Company A collaborating with an agent at Company B on a shared contract, each connected to different MCP servers but communicating through A2A's task-oriented protocol.
+
+### The Combined Picture
+
+```
+Human (browser) ──────┐
+                       │
+Claude (MCP client) ───┤
+                       │
+GPT agent (MCP) ───────┼──→ [ Session Platform ] ←──→ [ Remote Agent (A2A) ]
+                       │          │
+Custom agent (MCP) ────┤          ├── Sessions
+                       │          ├── Artifacts
+Service (A2A) ─────────┘          ├── Comparisons
+                                  ├── Agreements
+                                  └── Integration checks
+```
+
+Every arrow is a standard protocol. No proprietary connectors.
+
+---
+
+## What This Enables
+
+### Creative Processes We Don't Prescribe
+
+The platform supports any structured collaboration pattern:
+
+- **Event Storming** — participants submit domain event YAML, compare across bounded contexts, agree on ownership and schemas
+- **API Design** — participants submit endpoint specs (OpenAPI, protobuf), compare request/response shapes, agree on contracts
+- **Schema Negotiation** — database teams submit migration proposals, compare column definitions, agree on shared tables
+- **Component Contracts** — frontend teams submit component interfaces (props, events), compare integration points, agree on boundaries
+- **Data Pipeline Design** — teams submit stage definitions, compare input/output schemas, agree on transformation contracts
+- **Anything with handoffs** — wherever two or more participants' work has to agree on a shape, the platform applies
+
+### Human-AI Collaboration Patterns
+
+The protocol-native design enables fluid mixing of human and AI work:
+
+- **AI drafts, human refines.** An agent submits a first-pass artifact. A human reviews, edits, and resubmits. The platform tracks both versions.
+- **Human decides, AI validates.** Humans agree on contracts in a call. Their agents formalize and continuously validate during implementation.
+- **AI-to-AI negotiation.** Two agents submit conflicting proposals. A third agent (or human) mediates. The platform captures the resolution.
+- **Progressive delegation.** Start with full human involvement. As patterns stabilize, delegate more to agents. The platform doesn't care who's driving — just that artifacts are valid and agreements are captured.
+
+### Cross-Organization Collaboration
+
+A2A makes it possible for agents from different organizations to participate in the same session. Company A's design agent and Company B's implementation agent negotiate an API contract through the platform, with humans from both sides reviewing and approving decisions.
 
 ---
 
 ## What This Is Not
 
-- **Not an IDE.** People write code in their editors. This app is for the coordination layer above code.
-- **Not a project manager.** No Gantt charts, no story points, no velocity tracking. The workflow is the process.
-- **Not a real-time collaboration editor.** The Jam happens synchronously, but the app isn't Google Docs. It's a structured workspace for the specific artifacts this workflow produces.
-- **Not a Git client.** People push and pull with their tools. The app reads artifacts from the filesystem (or eventually from a shared location), not from Git directly.
+- **Not a chat app.** Discussion happens in Slack, on calls, in A2A message threads. This is where agreements become artifacts.
+- **Not a project manager.** No Gantt charts, no story points. The session lifecycle is the process.
+- **Not a code editor.** People write code in their tools. This is the coordination layer above code.
+- **Not a workflow engine.** The platform provides primitives, not prescribed phases. Use them in whatever order makes sense for your team.
 
 ---
 
 ## Success Criteria
 
-The app is successful when:
+The platform is successful when:
 
-1. A team of 2-3 people can go from "we need to build X together" to "we've merged and shipped" without discovering integration mismatches at merge time.
-2. Every boundary assumption surfaces before code is written, not after.
-3. The Jam session produces a usable artifact directly — no post-meeting transcription needed.
-4. Contract changes propagate visibly to everyone affected, immediately.
-5. The workflow feels lightweight, not ceremonial. Adding structure shouldn't feel like adding bureaucracy.
+1. Any combination of humans and AI agents can join a session and collaborate productively, regardless of the AI frameworks involved.
+2. Boundary assumptions surface before implementation begins, not at merge time.
+3. Agreements produce machine-readable contracts directly — no post-meeting transcription.
+4. Contract changes propagate visibly to every affected participant, immediately.
+5. The platform feels like infrastructure, not ceremony. Adding structure shouldn't feel like adding bureaucracy.
+6. A team's first session takes under 5 minutes to set up and produces value in under 30 minutes.
