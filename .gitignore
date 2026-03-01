@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 dist-server/
+storybook-static/
 
 # Claude Code local settings
 .claude/settings.local.json
