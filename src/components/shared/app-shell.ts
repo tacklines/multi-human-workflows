@@ -21,7 +21,7 @@ import type { DriftEvent } from '../artifact/drift-notification.js';
 import type { ContractEntry } from '../artifact/contract-sidebar.js';
 import type { RankedEvent } from '../visualization/priority-view.js';
 import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visualization/integration-dashboard.js';
-import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem } from '../../schema/types.js';
+import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval } from '../../schema/types.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
 
@@ -43,6 +43,7 @@ import '../artifact/contract-sidebar.js';
 import '../artifact/file-drop-zone.js';
 import '../session/session-lobby.js';
 import '../session/spark-canvas.js';
+import '../session/participant-registry.js';
 import './phase-ribbon.js';
 import '../artifact/card-view.js';
 import '../visualization/flow-diagram.js';
@@ -54,6 +55,8 @@ import './filter-panel.js';
 import '../visualization/detail-panel.js';
 import './shortcut-reference.js';
 import './settings-dialog.js';
+import './approval-queue.js';
+import type { ApprovalDecidedDetail } from './approval-queue.js';
 import '../visualization/priority-view.js';
 import '../visualization/breakdown-editor.js';
 import '../visualization/coverage-matrix.js';
@@ -254,6 +257,7 @@ export class AppShell extends LitElement {
   @state() private _flaggedItems: UnresolvedItem[] = [];
   @state() private _tierOverrides = new Map<string, 'must_have' | 'should_have' | 'could_have'>();
   @state() private _votes: Record<string, { up: string[]; down: string[] }> = {};
+  @state() private _pendingApprovals: PendingApproval[] = [];
   private _prevMilestoneState: MilestoneState = {
     artifactCount: 0,
     participantCount: 0,
@@ -556,6 +560,10 @@ export class AppShell extends LitElement {
               <sl-icon slot="prefix" name="plus-lg"></sl-icon>
               ${t('shell.addFiles')}
             </sl-button>
+            <approval-queue
+              .pendingItems=${this._pendingApprovals}
+              @approval-decided=${this._onApprovalDecided}
+            ></approval-queue>
             <sl-icon-button
               name="gear"
               label=${t('shell.openSettings')}
@@ -616,6 +624,8 @@ export class AppShell extends LitElement {
                   ></contract-sidebar>
                 `
               : nothing}
+            <sl-divider></sl-divider>
+            <participant-registry></participant-registry>
           </div>
         </div>
 
@@ -1198,6 +1208,12 @@ export class AppShell extends LitElement {
 
   private _onContractSelected(_e: CustomEvent<{ eventName: string; owner: string }>) {
     store.setView('contracts');
+  }
+
+  private _onApprovalDecided(e: CustomEvent<ApprovalDecidedDetail>) {
+    const { id } = e.detail;
+    this._pendingApprovals = this._pendingApprovals.filter((item) => item.id !== id);
+    // In a session context, this would also POST to the server
   }
 
   /**
