@@ -218,6 +218,16 @@ export const messages: Record<string, string> = {
   'lobby.error.joinCodeRequired': 'Please enter a join code.',
   'lobby.error.noFileData': 'No file data available yet. Please wait for participants to submit.',
   'lobby.youHaveSubmitted': 'You have submitted',
+  'lobby.codeCopied': 'Copied!',
+  'lobby.codeCopiedAriaLabel': 'Session code copied to clipboard',
+  'lobby.urlJoinAutoTitle': 'Joining session…',
+  'lobby.urlJoinAutoSubtitle': 'Detected session invite link. Joining automatically.',
+
+  // ---------------------------------------------------------------------------
+  // app-shell clipboard paste
+  // ---------------------------------------------------------------------------
+  'shell.pasteSuccess': 'Pasted YAML loaded — {{count}} events from {{role}}',
+  'shell.pasteSuccessAriaLabel': 'YAML pasted from clipboard and loaded successfully',
 
   // ---------------------------------------------------------------------------
   // participant-registry
