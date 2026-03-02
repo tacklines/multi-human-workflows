@@ -618,6 +618,64 @@ export const messages: Record<string, string> = {
   'contractSidebar.row.ariaLabel': '{{event}}: {{status}}, {{consumers}} consumer(s). Click to select.',
   'contractSidebar.ownerGroupAriaLabel': 'Contracts owned by {{owner}}: {{count}} total',
   'contractSidebar.contractListAriaLabel': 'Contracts owned by {{owner}}',
+
+  // ---------------------------------------------------------------------------
+  // go-no-go-verdict
+  // ---------------------------------------------------------------------------
+  'goNoGoVerdict.label.go': 'GO',
+  'goNoGoVerdict.label.noGo': 'NO-GO',
+  'goNoGoVerdict.label.caution': 'CAUTION',
+  'goNoGoVerdict.celebration': 'All systems go. Your team aligned on {{contractCount}} contracts across {{aggregateCount}} aggregates.',
+
+  // ---------------------------------------------------------------------------
+  // boundary-map
+  // ---------------------------------------------------------------------------
+  'boundaryMap.title': 'Boundary Map',
+  'boundaryMap.empty': 'No bounded contexts to display.',
+  'boundaryMap.status.pass': 'Compliant',
+  'boundaryMap.status.warn': 'Advisory',
+  'boundaryMap.status.fail': 'Non-compliant',
+  'boundaryMap.edge.ariaLabel': '{{from}} to {{to}}: {{status}}',
+  'boundaryMap.legend.label': 'Legend:',
+  'boundaryMap.legend.ariaLabel': 'Boundary map legend',
+  'boundaryMap.table.ariaLabel': 'Boundary connections',
+  'boundaryMap.table.caption': 'All bounded context connections and their compliance status',
+  'boundaryMap.table.col.from': 'From',
+  'boundaryMap.table.col.to': 'To',
+  'boundaryMap.table.col.status': 'Status',
+
+  // ---------------------------------------------------------------------------
+  // integration-dashboard
+  // ---------------------------------------------------------------------------
+  'integrationDashboard.title': 'Integration Dashboard',
+  'integrationDashboard.gridAriaLabel': 'Integration dashboard — checks, boundary map, and verdict',
+  'integrationDashboard.runChecks.label': 'Run Checks',
+  'integrationDashboard.runChecks.ariaLabel': 'Re-run all integration checks',
+
+  'integrationDashboard.checks.heading': 'Checks',
+  'integrationDashboard.checks.listAriaLabel': 'Integration checks',
+  'integrationDashboard.checks.summaryAriaLabel': 'Check results summary',
+  'integrationDashboard.checks.total': '{{count}} checks',
+  'integrationDashboard.checks.passing': '{{count}} passing',
+  'integrationDashboard.checks.warning': '{{count}} advisory',
+  'integrationDashboard.checks.failing': '{{count}} failing',
+  'integrationDashboard.checks.empty': 'No integration checks available.',
+
+  'integrationDashboard.check.status.pass': 'Pass',
+  'integrationDashboard.check.status.warn': 'Advisory',
+  'integrationDashboard.check.status.fail': 'Fail',
+  'integrationDashboard.check.itemAriaLabel': '{{label}}: {{status}}',
+  'integrationDashboard.check.detailsSummary': 'Details',
+  'integrationDashboard.check.owner': 'Owner: {{owner}}',
+  'integrationDashboard.check.createWorkItem': 'Create work item',
+  'integrationDashboard.check.createWorkItemAriaLabel': 'Create a work item to fix: {{label}}',
+
+  'integrationDashboard.boundary.heading': 'Boundary Map',
+
+  'integrationDashboard.verdict.heading': 'Verdict',
+  'integrationDashboard.verdict.go.summary': 'All checks pass. Ready to ship.',
+  'integrationDashboard.verdict.noGo.summary': '{{count}} issue(s) require resolution.',
+  'integrationDashboard.verdict.caution.summary': 'All critical checks pass, but {{count}} advisory item(s) found.',
 };
 
 /**
