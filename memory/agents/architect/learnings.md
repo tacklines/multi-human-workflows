@@ -56,9 +56,11 @@
 - Deep-merging strongly-typed config requires `as any` — sub-interfaces lack index signatures (added: 2026-03-01, dispatch: w6f)
 - Worktree agent re-creating events already in HEAD causes expected merge conflicts — keep HEAD version, fix field name mismatches (added: 2026-03-01, dispatch: w6f)
 
-### MCP Tool Patterns (Phase I-II)
+### MCP Tool Patterns (Phase I-IV)
 - MCP tools that wrap bounded context services: instantiate service inline with `getSession` accessor from SessionStore, call service method, return result — no persistent service instance needed (added: 2026-03-02, dispatch: 3r3.13)
-- Template-based domain event suggestion (`suggest_events`): use heuristic pattern matching on aggregate/command names rather than LLM calls — deterministic, testable, fast (added: 2026-03-02, dispatch: 3r3.13)
+- Template-based suggestions (suggest_events, suggest_priorities, suggest_decomposition): heuristic pattern matching, not LLM — deterministic, testable, fast (added: 2026-03-02, dispatch: 3r3.13, updated: 3r3.12)
+- DecompositionService.getDecomposition() returns WorkItem[] only — get_decomposition MCP tool combines it with session.workItemDependencies + getCoverageMatrix() (added: 2026-03-02, dispatch: 3r3.12)
+- Decomposition heuristics in `src/lib/decomposition-heuristics.ts` — trigger-pattern classification, complexity by event count (S=1-2, M=3-4, L=5-6, XL=7+) (added: 2026-03-02, dispatch: 3r3.12)
 
 ### Delegation Service Pattern
 - When an event schema uses `eventId` as the record identifier, use the same generated ID for both the event's `eventId` and the stored entity's `id` — makes tracing between events and state trivial (added: 2026-03-01, dispatch: 3r3.8)

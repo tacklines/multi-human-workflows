@@ -51,6 +51,10 @@
 - git stash pop in a worktree with concurrent branch activity can surface merge conflicts in package.json/tsconfig — use `git checkout --ours` to restore worktree state (added: 2026-03-01, dispatch: qdu)
 - @storybook/web-components types not installed — story files produce TS2307; treat tsc errors in src/stories/ as pre-existing unless from new component code (added: 2026-03-01, dispatch: qdu)
 
+## Drag & Drop Patterns
+- Board-mode D&D: store dragging item name in @state, set dragover/dragleave/drop handlers on column containers, dragstart/dragend on cards. Keyboard equivalent: @state for picked-up card + ArrowLeft/ArrowRight (added: 2026-03-02, dispatch: 3r3.17)
+- For listbox-style kanban: cards get `role="option"` with `aria-grabbed`, columns get `role="listbox"` — matches WAI-ARIA Practices (added: 2026-03-02, dispatch: 3r3.17)
+
 ## Animation Patterns
 - When detecting changes in a computed value derived from multiple properties, store the previous computed value in a private field and compare in `updated()` — cleaner than duplicating the derived value as @state (added: 2026-03-01, dispatch: np8)
 - CSS animation re-triggering: toggle an `animating` class on then off with `setTimeout` matching animation duration — simpler than Web Animations API for one-shot transitions (added: 2026-03-01, dispatch: np8)
