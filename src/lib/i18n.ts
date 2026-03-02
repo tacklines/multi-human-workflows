@@ -866,6 +866,18 @@ export const messages: Record<string, string> = {
   'delegationToggle.confirmAction.autonomous': 'act as full participants',
   'delegationToggle.confirm': 'Confirm',
   'delegationToggle.cancel': 'Cancel',
+
+  // Activity pulse
+  'activityPulse.artifact': '{{name}} submitted an artifact',
+  'activityPulse.resolution': '{{name}} resolved a conflict',
+  'activityPulse.assignment': '{{name}} assigned ownership',
+
+  // Milestone celebrations
+  'milestone.firstArtifact': 'First perspective submitted! Waiting for others...',
+  'milestone.allSubmitted': "Everyone's in! Ready to explore overlaps.",
+  'milestone.allResolved': 'All conflicts resolved! Ready for contracts.',
+  'milestone.integrationGo': 'All systems go. Ship it!',
+  'milestone.dismiss': 'Dismiss',
 };
 
 /**
