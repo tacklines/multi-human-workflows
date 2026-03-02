@@ -46,6 +46,15 @@
 - For deeply nested Partial<T> types, use `z.record(z.string(), z.unknown())` at Zod level + `Omit<...> & { field: ActualType }` for TS type — avoids rebuilding deep interface hierarchies in Zod (added: 2026-03-01, dispatch: 2ye)
 - `z.ZodType<T>` annotation on inline Zod schemas acts as structural alignment test — compiler errors if Zod shape doesn't match TS interface (added: 2026-03-01, dispatch: 2ye)
 
+### Bounded Context Services
+- When a domain type serves dual purposes (stored record vs computed aggregate), split it: one type for the per-participant stored form (with timestamps), one for the computed view (e.g., CompositeScore) (added: 2026-03-02, dispatch: 3r3.6)
+- Adding fields to Session cascades to 6+ places: Session, SerializedSession, createSession, serializeSession, deserializeSession, session-persistence (toJson/fromJson), plus all test fixtures — now 3+ test files (added: 2026-03-02, dispatch: 3r3.6, updated: 3r3.7)
+- Always verify event field names in `domain-events.ts` against task description — task descriptions may use shorthand that differs from actual Zod schema (added: 2026-03-02, dispatch: 3r3.7)
+- Event payload structure is not uniform: some events use flat fields (PrioritySet), others embed full objects (WorkItemCreated embeds WorkItem) — check the schema, don't assume (added: 2026-03-02, dispatch: 3r3.7)
+
+- When wrapping existing pure functions in event-sourced services, store results in a service-level Map rather than adding Session fields — avoids the 6+ place cascade (added: 2026-03-02, dispatch: 3r3.9)
+- MCP tool handlers are stdio-only and cannot be directly unit-tested — mirror handler logic in test helpers that call SessionStore directly (added: 2026-03-02, dispatch: 3r3.15)
+
 ### Session Config Integration
 - Deep-merging a strongly-typed config struct in a generic loop requires `as any` at assignment — sub-interfaces lack index signatures (added: 2026-03-01, dispatch: w6f)
 - Adding a required field to Session/SerializedSession cascades into every test file constructing Session objects — grep for the last field in the struct to find all mock helpers (added: 2026-03-01, dispatch: w6f)
