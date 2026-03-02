@@ -77,6 +77,7 @@ function makeSession(overrides: Partial<Omit<Session, 'participants'>> & { parti
     votes: [],
     workItems: [],
     workItemDependencies: [],
+    drafts: [],
     ...overrides,
   };
 }

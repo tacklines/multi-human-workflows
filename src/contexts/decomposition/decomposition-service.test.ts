@@ -23,6 +23,7 @@ function makeSession(code: string = 'TEST01'): Session {
     votes: [],
     workItems: [],
     workItemDependencies: [],
+    drafts: [],
   };
 }
 

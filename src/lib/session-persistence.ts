@@ -32,6 +32,7 @@ function sessionToJson(session: Session): SerializedSession {
     votes: session.votes,
     workItems: session.workItems,
     workItemDependencies: session.workItemDependencies,
+    drafts: session.drafts,
   };
 }
 
@@ -54,6 +55,7 @@ function sessionFromJson(json: SerializedSession): Session {
     votes: json.votes ?? [],
     workItems: json.workItems ?? [],
     workItemDependencies: json.workItemDependencies ?? [],
+    drafts: json.drafts ?? [],
   };
 }
 

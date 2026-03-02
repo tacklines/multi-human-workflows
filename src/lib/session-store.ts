@@ -16,6 +16,7 @@ import {
   Vote,
   WorkItem,
   WorkItemDependency,
+  Draft,
 } from '../schema/types.js';
 import { EventStore } from '../contexts/session/event-store.js';
 import type {
@@ -66,6 +67,7 @@ export interface Session {
   votes: Vote[];
   workItems: WorkItem[];
   workItemDependencies: WorkItemDependency[];
+  drafts: Draft[];
 }
 
 export interface SerializedSession {
@@ -83,6 +85,7 @@ export interface SerializedSession {
   votes: Vote[];
   workItems: WorkItem[];
   workItemDependencies: WorkItemDependency[];
+  drafts: Draft[];
 }
 
 function generateCode(): string {
@@ -114,6 +117,7 @@ export function serializeSession(session: Session): SerializedSession {
     votes: session.votes,
     workItems: session.workItems,
     workItemDependencies: session.workItemDependencies,
+    drafts: session.drafts,
   };
 }
 
@@ -133,6 +137,7 @@ export function deserializeSession(serialized: SerializedSession): Session {
     votes: serialized.votes ?? [],
     workItems: serialized.workItems ?? [],
     workItemDependencies: serialized.workItemDependencies ?? [],
+    drafts: serialized.drafts ?? [],
   };
 }
 
@@ -175,6 +180,7 @@ export class SessionStore {
       votes: [],
       workItems: [],
       workItemDependencies: [],
+      drafts: [],
     };
 
     this.sessions.set(code, session);

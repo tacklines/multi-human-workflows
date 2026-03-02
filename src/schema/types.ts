@@ -411,7 +411,7 @@ export interface CoverageEntry {
 
 /**
  * A draft artifact visible only to the author — a staging area before formal submission.
- * Created via `create_draft`, promoted via `submit_artifact`.
+ * Created via `create_draft`, promoted via `publish_draft` / `submit_artifact`.
  */
 export interface Draft {
   /** Unique identifier for the draft */
@@ -422,6 +422,10 @@ export interface Draft {
   content: CandidateEventsFile;
   /** ISO 8601 timestamp when the draft was created */
   createdAt: string;
+  /** ISO 8601 timestamp when the draft was last updated */
+  updatedAt: string;
+  /** ISO 8601 timestamp when the draft was published, or null if still a draft */
+  publishedAt: string | null;
 }
 
 /**
