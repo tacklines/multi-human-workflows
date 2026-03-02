@@ -21,7 +21,7 @@ import type { DriftEvent } from '../artifact/drift-notification.js';
 import type { ContractEntry } from '../artifact/contract-sidebar.js';
 import type { RankedEvent } from '../visualization/priority-view.js';
 import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visualization/integration-dashboard.js';
-import type { WorkItem, ContractBundle, EventContract, BoundaryContract } from '../../schema/types.js';
+import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem } from '../../schema/types.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
 
@@ -60,8 +60,11 @@ import '../visualization/coverage-matrix.js';
 import '../visualization/dependency-graph.js';
 import '../agreement/resolution-recorder.js';
 import '../agreement/ownership-grid.js';
+import '../agreement/flag-manager.js';
 import '../contract/contract-diff.js';
 import '../contract/schema-display.js';
+import '../contract/provenance-explorer.js';
+import type { ProvenanceStep } from '../contract/provenance-explorer.js';
 import '../visualization/integration-dashboard.js';
 import './suggestion-bar.js';
 import './onboarding-overlay.js';
@@ -248,6 +251,7 @@ export class AppShell extends LitElement {
   @state() private _shortcutReferenceOpen = false;
   @state() private _settingsOpen = false;
   @state() private _workItems: WorkItem[] = [];
+  @state() private _flaggedItems: UnresolvedItem[] = [];
   private _prevMilestoneState: MilestoneState = {
     artifactCount: 0,
     participantCount: 0,
@@ -592,7 +596,10 @@ export class AppShell extends LitElement {
               `;
             })()}
             <sl-divider></sl-divider>
-            <filter-panel></filter-panel>
+            <filter-panel
+              .confidenceFilter=${this.appState.filters.confidence}
+              .directionFilter=${this.appState.filters.direction}
+            ></filter-panel>
             ${files.length >= 2
               ? html`
                   <sl-divider></sl-divider>
@@ -746,6 +753,15 @@ export class AppShell extends LitElement {
                     sessionCode=${sessionCode}
                     participantName=${participantName}
                   ></ownership-grid>
+                  <flag-manager
+                    .items=${this._flaggedItems}
+                    sessionCode=${sessionCode}
+                    participantName=${participantName}
+                    .overlapLabels=${data.overlaps.map((o) => o.label)}
+                    @item-flagged=${(e: CustomEvent<{ item: UnresolvedItem }>) => {
+                      this._flaggedItems = [...this._flaggedItems, e.detail.item];
+                    }}
+                  ></flag-manager>
                 `;
               })()}
             </sl-tab-panel>
@@ -761,6 +777,10 @@ export class AppShell extends LitElement {
                     .schema=${data.schemas}
                     label=${t('shell.contracts.schemaLabel')}
                   ></schema-display>
+                  <provenance-explorer
+                    .chain=${this._provenanceChain(files)}
+                    subject=${t('shell.contracts.provenanceSubject')}
+                  ></provenance-explorer>
                 `;
               })()}
             </sl-tab-panel>
@@ -1253,6 +1273,44 @@ export class AppShell extends LitElement {
     }
 
     return { bundle, schemas };
+  }
+
+  /**
+   * Derive a provenance chain for the contracts tab, tracing the lineage of
+   * contract data back through participants, conflicts, and shared events.
+   */
+  private _provenanceChain(files: AppState['files']): ProvenanceStep[] {
+    if (files.length < 2) return [];
+    const chain: ProvenanceStep[] = [];
+
+    // Add participant steps (base of the chain)
+    for (const file of files) {
+      chain.push({
+        kind: 'participant',
+        label: file.role,
+        detail: `Submitted ${file.data.domain_events.length} events`,
+      });
+    }
+
+    // Add conflict steps for overlaps
+    for (const conflict of this._comparisonCtrl.conflicts) {
+      chain.push({
+        kind: 'conflict',
+        label: conflict.label,
+        detail: conflict.details || `Conflict between ${conflict.roles.join(', ')}`,
+      });
+    }
+
+    // Add resolution steps for shared events (agreements)
+    for (const shared of this._comparisonCtrl.sharedEvents) {
+      chain.push({
+        kind: 'resolution',
+        label: shared.label,
+        detail: `Agreed by ${shared.roles.join(', ')}`,
+      });
+    }
+
+    return chain;
   }
 
   /**
