@@ -451,6 +451,59 @@ export const messages: Record<string, string> = {
   'draft-editor.updated-at': 'Last updated {{time}}',
 
   // ---------------------------------------------------------------------------
+  // priority-view
+  // ---------------------------------------------------------------------------
+  'priorityView.boardMode': 'Board',
+  'priorityView.tableMode': 'Table',
+  'priorityView.modeToggleAriaLabel': 'Toggle view mode',
+  'priorityView.column.mustHave': 'Must Have',
+  'priorityView.column.shouldHave': 'Should Have',
+  'priorityView.column.couldHave': 'Could Have',
+  'priorityView.empty': 'No events to rank yet.',
+  'priorityView.emptyHint': 'Load storm-prep YAML files to populate events.',
+  'priorityView.emptyColumn': 'No events in this tier',
+  'priorityView.sortBy': 'Sort by',
+  'priorityView.sortBy.score': 'Composite Score',
+  'priorityView.sortBy.aggregate': 'Aggregate',
+  'priorityView.sortBy.confidence': 'Confidence',
+  'priorityView.sortBy.crossRefs': 'Cross-references',
+  'priorityView.col.name': 'Name',
+  'priorityView.col.aggregate': 'Aggregate',
+  'priorityView.col.confidence': 'Confidence',
+  'priorityView.col.direction': 'Direction',
+  'priorityView.col.crossRefs': 'Cross-refs',
+  'priorityView.col.score': 'Score',
+  'priorityView.col.tier': 'Priority',
+  'priorityView.ariaLabel.board': 'Priority board — drag cards to change tier',
+  'priorityView.ariaLabel.table': 'Priority table — sortable by column',
+  'priorityView.ariaLabel.column': '{{tier}} column, {{count}} events',
+  'priorityView.ariaLabel.card': '{{name}} — {{tier}} — score {{score}}',
+  'priorityView.announce.moved': 'Moved {{name}} to {{tier}}',
+  'priorityView.dragHint': 'Drag to move between tiers',
+  'priorityView.keyboardHint': 'Press Space or Enter to pick up, then Arrow keys to move',
+
+  // ---------------------------------------------------------------------------
+  // vote-widget
+  // ---------------------------------------------------------------------------
+  'voteWidget.upvote': 'Upvote {{name}}',
+  'voteWidget.downvote': 'Downvote {{name}}',
+  'voteWidget.netVotes': '{{count}} votes',
+  'voteWidget.noVotes': 'No votes yet',
+  'voteWidget.upVoters': 'Upvoted by: {{names}}',
+  'voteWidget.downVoters': 'Downvoted by: {{names}}',
+  'voteWidget.alreadyVotedUp': 'You upvoted — click to undo',
+  'voteWidget.alreadyVotedDown': 'You downvoted — click to undo',
+
+  // ---------------------------------------------------------------------------
+  // suggestion-banner
+  // ---------------------------------------------------------------------------
+  'suggestionBanner.agentLabel': 'Agent suggestion',
+  'suggestionBanner.accept': 'Accept',
+  'suggestionBanner.dismiss': 'Dismiss',
+  'suggestionBanner.acceptAriaLabel': 'Accept agent suggestion',
+  'suggestionBanner.dismissAriaLabel': 'Dismiss agent suggestion',
+
+  // ---------------------------------------------------------------------------
   // schema-display
   // ---------------------------------------------------------------------------
   'schemaDisplay.empty': 'No schema fields defined',
