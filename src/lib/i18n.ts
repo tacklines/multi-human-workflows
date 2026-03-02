@@ -44,6 +44,13 @@ export const messages: Record<string, string> = {
   'dropZone.heroTitle': 'Storm-Prep Visualizer',
   'dropZone.heroSubtitle': 'Visualize and compare domain event candidates across roles',
   'dropZone.hint': 'Supports multiple files for cross-role comparison',
+  'dropZone.downloadTemplate': 'Download template',
+  'dropZone.formatHelpSummary': 'What format do I need?',
+  'dropZone.formatHelpStructure': 'Each file needs a metadata section (your role and scope) and a list of domain events (things that happen in your system).',
+  'dropZone.formatHelpFields': 'Each event needs: name (PascalCase, like "OrderPlaced"), aggregate (the thing it belongs to), and trigger (what causes it).',
+  'dropZone.formatHelpOptional': 'Optional: payload fields, confidence level (CONFIRMED/LIKELY/POSSIBLE), and boundary assumptions about other systems.',
+  'dropZone.sparkCanvasAlt': 'Prefer not to write YAML? Use the Spark Canvas to brainstorm events visually.',
+  'dropZone.sparkCanvasLink': 'Open Spark Canvas',
 
   // ---------------------------------------------------------------------------
   // card-view (artifact)
