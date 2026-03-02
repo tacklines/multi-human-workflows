@@ -18,6 +18,7 @@ import type { ExplorationGap, ExplorationPrompt, ExplorationPattern } from '../a
 import type { ComplianceDetail } from '../artifact/compliance-badge.js';
 import type { DriftEvent } from '../artifact/drift-notification.js';
 import type { ContractEntry } from '../artifact/contract-sidebar.js';
+import type { WorkItem } from '../../schema/types.js';
 
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
@@ -50,6 +51,8 @@ import './shortcut-reference.js';
 import './settings-dialog.js';
 import '../visualization/priority-view.js';
 import '../visualization/breakdown-editor.js';
+import '../visualization/coverage-matrix.js';
+import '../visualization/dependency-graph.js';
 import '../agreement/resolution-recorder.js';
 import '../agreement/ownership-grid.js';
 import '../contract/contract-diff.js';
@@ -202,6 +205,24 @@ export class AppShell extends LitElement {
       vertical-align: middle;
       margin-left: 0.25rem;
     }
+
+    /* ── Breakdown layout ── */
+    .breakdown-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+    .breakdown-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    @media (max-width: 900px) {
+      .breakdown-layout {
+        grid-template-columns: 1fr;
+      }
+    }
   `;
 
   private _storeCtrl = new StoreController(this, (s) => s);
@@ -220,6 +241,7 @@ export class AppShell extends LitElement {
   @state() private _pasteToast: { count: number; role: string } | null = null;
   @state() private _shortcutReferenceOpen = false;
   @state() private _settingsOpen = false;
+  @state() private _workItems: WorkItem[] = [];
 
   private _pasteToastTimer: ReturnType<typeof setTimeout> | null = null;
   private _boundPasteHandler: ((e: ClipboardEvent) => void) | null = null;
@@ -622,7 +644,29 @@ export class AppShell extends LitElement {
               <priority-view></priority-view>
             </sl-tab-panel>
             <sl-tab-panel name="breakdown">
-              <breakdown-editor></breakdown-editor>
+              ${(() => {
+                const data = this._breakdownData(files);
+                return html`
+                  <div class="breakdown-layout">
+                    <breakdown-editor
+                      .events=${data.eventNames}
+                      @work-item-created=${this._onWorkItemCreated}
+                      @work-item-updated=${this._onWorkItemUpdated}
+                    ></breakdown-editor>
+                    <div class="breakdown-sidebar">
+                      <coverage-matrix
+                        .events=${data.eventNames}
+                        .workItems=${this._workItems}
+                      ></coverage-matrix>
+                      <dependency-graph
+                        .workItems=${this._workItems}
+                        @dependency-added=${this._onDependencyChanged}
+                        @dependency-removed=${this._onDependencyChanged}
+                      ></dependency-graph>
+                    </div>
+                  </div>
+                `;
+              })()}
             </sl-tab-panel>
             <sl-tab-panel name="agreements">
               <resolution-recorder></resolution-recorder>
@@ -1058,5 +1102,37 @@ export class AppShell extends LitElement {
         composed: true,
       })
     );
+  }
+
+  private _onWorkItemCreated(e: CustomEvent<{ item: WorkItem }>) {
+    this._workItems = [...this._workItems, e.detail.item];
+  }
+
+  private _onWorkItemUpdated(e: CustomEvent<{ item: WorkItem }>) {
+    this._workItems = this._workItems.map((wi) =>
+      wi.id === e.detail.item.id ? e.detail.item : wi
+    );
+  }
+
+  private _onDependencyChanged() {
+    // No-op for now: dependency-graph fires events but state update deferred
+  }
+
+  /**
+   * Derive event names and work items for the breakdown tab from loaded files.
+   * eventNames: all unique domain event names across all files (for linked-events dropdowns).
+   * workItems: empty array by default — populated by user via breakdown-editor.
+   */
+  private _breakdownData(files: AppState['files']): { workItems: WorkItem[]; eventNames: string[] } {
+    const eventNameSet = new Set<string>();
+    for (const file of files) {
+      for (const ev of file.data.domain_events) {
+        eventNameSet.add(ev.name);
+      }
+    }
+    return {
+      workItems: [],
+      eventNames: Array.from(eventNameSet),
+    };
   }
 }
