@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { LoadedFile, ConflictResolution, EventPriority } from '../../schema/types.js';
+import type { LoadedFile, ConflictResolution, EventPriority, WorkItem } from '../../schema/types.js';
 import { ComparisonController } from '../controllers/comparison-controller.js';
 import { t } from '../../lib/i18n.js';
 import { matchAssumptions } from '../../lib/assumption-matching.js';
@@ -323,6 +323,7 @@ export class ComparisonView extends LitElement {
   @property({ attribute: false }) files: LoadedFile[] = [];
   @property({ attribute: false }) resolutions: ConflictResolution[] = [];
   @property({ attribute: false }) priorities: EventPriority[] = [];
+  @property({ attribute: false }) workItems: WorkItem[] = [];
 
   private _comparisonCtrl = new ComparisonController(this);
 
@@ -468,7 +469,7 @@ export class ComparisonView extends LitElement {
         ${sortedConflicts.length > 0
           ? html`<div class="card-list">
               ${sortedConflicts.map(
-                (o) => html`<conflict-card .overlap=${o} .files=${this.files}></conflict-card>`
+                (o) => html`<conflict-card .overlap=${o} .files=${this.files} .workItems=${this.workItems}></conflict-card>`
               )}
             </div>`
           : html`<div class="none-found">${t('comparisonView.noneFound')}</div>`}
@@ -482,7 +483,7 @@ export class ComparisonView extends LitElement {
         ${sharedEvents.length > 0
           ? html`<div class="card-list">
               ${sharedEvents.map(
-                (o) => html`<conflict-card .overlap=${o} .files=${this.files}></conflict-card>`
+                (o) => html`<conflict-card .overlap=${o} .files=${this.files} .workItems=${this.workItems}></conflict-card>`
               )}
             </div>`
           : html`<div class="none-found">${t('comparisonView.noneFound')}</div>`}
@@ -496,7 +497,7 @@ export class ComparisonView extends LitElement {
         ${sharedAggregates.length > 0
           ? html`<div class="card-list">
               ${sharedAggregates.map(
-                (o) => html`<conflict-card .overlap=${o} .files=${this.files}></conflict-card>`
+                (o) => html`<conflict-card .overlap=${o} .files=${this.files} .workItems=${this.workItems}></conflict-card>`
               )}
             </div>`
           : html`<div class="none-found">${t('comparisonView.noneFound')}</div>`}

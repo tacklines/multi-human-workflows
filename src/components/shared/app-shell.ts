@@ -800,6 +800,7 @@ export class AppShell extends LitElement {
                   .files=${files}
                   .resolutions=${this._resolutions}
                   .priorities=${this._comparisonPriorities(files)}
+                  .workItems=${this._workItems}
                   @formalize-requested=${this._onFormalizeRequested}
                 ></comparison-view>
                 <comparison-diff .files=${files}></comparison-diff>

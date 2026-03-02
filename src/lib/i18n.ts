@@ -143,6 +143,7 @@ export const messages: Record<string, string> = {
   'conflictCard.none': 'none',
   'conflictCard.affects': 'Affects:',
   'conflictCard.verifyWith': 'Verify with:',
+  'conflictCard.affectedWorkItems': 'Affected Work Items',
 
   // ---------------------------------------------------------------------------
   // detail-panel

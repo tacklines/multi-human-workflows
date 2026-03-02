@@ -1,6 +1,6 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { LoadedFile, DomainEvent, BoundaryAssumption } from '../../schema/types.js';
+import type { LoadedFile, DomainEvent, BoundaryAssumption, WorkItem } from '../../schema/types.js';
 import type { Overlap } from '../../lib/comparison.js';
 import { t } from '../../lib/i18n.js';
 
@@ -191,10 +191,33 @@ export class ConflictCard extends LitElement {
       font-style: italic;
       margin-top: 0.125rem;
     }
+
+    .work-items {
+      margin-top: 0.75rem;
+      padding-top: 0.5rem;
+      border-top: 1px dashed #e5e7eb;
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+    .work-items-label {
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .work-item-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.125rem 0.375rem;
+      border-radius: 4px;
+      background: #f3f4f6;
+      font-size: 0.6875rem;
+      margin: 0.125rem 0.125rem 0 0;
+    }
   `;
 
   @property({ attribute: false }) overlap!: Overlap;
   @property({ attribute: false }) files: LoadedFile[] = [];
+  @property({ attribute: false }) workItems: WorkItem[] = [];
 
   render() {
     const o = this.overlap;
@@ -206,6 +229,7 @@ export class ConflictCard extends LitElement {
           <div class="badges">${this._renderBadge()}</div>
         </div>
         ${this._renderBody()}
+        ${this._renderWorkItems()}
       </article>
     `;
   }
@@ -383,6 +407,17 @@ export class ConflictCard extends LitElement {
           <div class="role-header"><span class="role-dot right" aria-hidden="true"></span>${roles[1]}</div>
           ${this._renderAssumptionDetail(rightAssumption)}
         </div>
+      </div>
+    `;
+  }
+
+  private _renderWorkItems() {
+    const matching = this.workItems.filter((wi) => wi.linkedEvents.includes(this.overlap.label));
+    if (matching.length === 0) return nothing;
+    return html`
+      <div class="work-items">
+        <div class="work-items-label">${t('conflictCard.affectedWorkItems')}</div>
+        ${matching.map((wi) => html`<span class="work-item-tag">${wi.title}</span>`)}
       </div>
     `;
   }
