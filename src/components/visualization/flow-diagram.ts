@@ -8,6 +8,8 @@ import { runElkLayout, NODE_W, NODE_H, elkSectionToPath, straightEdgePath } from
 import type { LayoutNode, LayoutCompound, LayoutEdgeGroup, CollapsedAggregate } from '../../lib/elk-layout.js';
 import { runForceLayout } from '../../lib/force-layout.js';
 import { isEdgeGroupVisible } from '../../lib/edge-filters.js';
+import { generateEventGapHints } from '../../lib/event-gap-hints.js';
+import type { EventGapHint } from '../../lib/event-gap-hints.js';
 import { zoom as d3Zoom, zoomIdentity, zoomTransform, type ZoomBehavior, type D3ZoomEvent } from 'd3-zoom';
 import { select } from 'd3-selection';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
@@ -175,6 +177,24 @@ export class FlowDiagram extends LitElement {
       padding: 2rem;
       color: var(--sl-color-neutral-500);
     }
+    .hint-node {
+      opacity: 0.75;
+      transition: opacity 0.2s ease;
+      animation: hint-fade-in 0.3s ease-out;
+    }
+    .hint-node:hover {
+      opacity: 1;
+    }
+    @keyframes hint-fade-in {
+      from { opacity: 0; }
+      to { opacity: 0.75; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .hint-node {
+        animation: none;
+        transition: none;
+      }
+    }
     .legend {
       display: flex;
       gap: 1rem;
@@ -205,6 +225,7 @@ export class FlowDiagram extends LitElement {
 
   @property({ attribute: false }) files: LoadedFile[] = [];
   @property() searchQuery = '';
+  @property({ type: Boolean }) showHints = false;
 
   @state() private _layoutNodes: LayoutNode[] = [];
   @state() private _layoutCompounds: LayoutCompound[] = [];
@@ -1365,6 +1386,82 @@ export class FlowDiagram extends LitElement {
     `;
   }
 
+  /**
+   * Render dashed-outline "ghost" hint nodes suggesting missing events.
+   * Positioned near their nearEventId node (offset right + below).
+   * Only shown when showHints is true.
+   */
+  private _renderHintNodes(hints: EventGapHint[], nodeMap: Map<string, LayoutNode>): unknown {
+    if (!this.showHints || hints.length === 0) return nothing;
+
+    return hints.map((hint) => {
+      // Position near the referenced event node, offset right and below
+      let hintX = 40;
+      let hintY = 40;
+      if (hint.nearEventId) {
+        const nearNode = nodeMap.get(hint.nearEventId);
+        if (nearNode) {
+          hintX = nearNode.x + NODE_W + 16;
+          hintY = nearNode.y + 16;
+        }
+      }
+
+      const hintTooltip = hint.reason;
+      const { lines, fontSize } = this._fitLabel(hint.name);
+      const lineHeight = fontSize + 3;
+      const textBlockHeight = lines.length * lineHeight;
+      const startY = NODE_H / 2 - textBlockHeight / 2 + fontSize * 0.8;
+
+      return svg`
+        <g
+          class="hint-node"
+          style="cursor: pointer;"
+          role="button"
+          aria-label="Suggested event: ${hint.name}. ${hint.reason}"
+          @click=${(e: MouseEvent) => {
+            e.stopPropagation();
+            this.dispatchEvent(
+              new CustomEvent('hint-accepted', {
+                detail: hint,
+                bubbles: true,
+                composed: true,
+              }),
+            );
+          }}
+          @mouseenter=${(e: MouseEvent) => this._showTooltip(e, hintTooltip)}
+          @mousemove=${(e: MouseEvent) => this._showTooltip(e, hintTooltip)}
+          @mouseleave=${() => this._hideTooltip()}
+        >
+          <rect
+            x=${hintX}
+            y=${hintY}
+            width=${NODE_W}
+            height=${NODE_H}
+            rx="6"
+            fill="#f8f8f8"
+            stroke="#999"
+            stroke-width="1.5"
+            stroke-dasharray="5 3"
+          />
+          ${lines.map(
+            (line, i) => svg`
+              <text
+                x=${hintX + NODE_W / 2}
+                y=${hintY + startY + i * lineHeight}
+                text-anchor="middle"
+                font-weight="400"
+                font-size=${fontSize}
+                font-style="italic"
+                font-family="'JetBrains Mono', monospace"
+                fill="#999"
+              >${line}</text>
+            `,
+          )}
+        </g>
+      `;
+    });
+  }
+
   render() {
     if (this.files.length === 0) {
       return html`<div class="empty">Load a storm-prep YAML file to view the event flow diagram</div>`;
@@ -1377,6 +1474,11 @@ export class FlowDiagram extends LitElement {
     const matchedNodeIds = new Set(
       this._matchedNodeIndices.map((i) => this._layoutNodes[i]?.id).filter(Boolean) as string[],
     );
+
+    // Compute gap hints when showHints is enabled
+    const gapHints: EventGapHint[] = this.showHints
+      ? generateEventGapHints(this.files.flatMap((f) => f.data.domain_events))
+      : [];
 
     return html`
       <div class="diagram-wrapper">
@@ -1432,6 +1534,9 @@ export class FlowDiagram extends LitElement {
               .map((n, i) => ({ n, i }))
               .filter(({ n }) => !this._collapsedAggregates.has(n.id))
               .map(({ n, i }) => this._renderNode(n, i, eventDataMap))}
+
+            <!-- Gap hint nodes: dashed ghost outlines for suggested missing events -->
+            ${this._renderHintNodes(gapHints, nodeMap)}
           </g>
         </svg>
 

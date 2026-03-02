@@ -878,6 +878,25 @@ export const messages: Record<string, string> = {
   'milestone.allResolved': 'All conflicts resolved! Ready for contracts.',
   'milestone.integrationGo': 'All systems go. Ship it!',
   'milestone.dismiss': 'Dismiss',
+
+  // Exploration Guide
+  'explorationGuide.title': 'Exploration Guide',
+  'explorationGuide.completeness': 'Completeness',
+  'explorationGuide.completenessScore': '{{score}}% complete',
+  'explorationGuide.gaps': '{{count}} gaps found',
+  'explorationGuide.noGaps': 'Looking good! No gaps detected.',
+  'explorationGuide.prompts': 'Heuristic Prompts',
+  'explorationGuide.promptDismiss': 'Next prompt',
+  'explorationGuide.addEvent': 'Add event',
+  'explorationGuide.addAssumption': 'Add assumption',
+  'explorationGuide.patterns': 'Related Patterns',
+  'explorationGuide.patternAdd': 'Add',
+  'explorationGuide.patternDismiss': 'Skip',
+  'explorationGuide.noPatterns': 'No pattern suggestions for current events.',
+
+  // Flow diagram hints
+  'flowHints.suggested': 'Suggested: {{name}}',
+  'flowHints.accept': 'Add this event',
 };
 
 /**
