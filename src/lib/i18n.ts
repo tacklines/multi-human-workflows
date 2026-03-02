@@ -27,6 +27,7 @@ export const messages: Record<string, string> = {
   'shell.tab.agreements': 'Agreements',
   'shell.tab.contracts': 'Contracts',
   'shell.tab.integration': 'Integration',
+  'shell.contracts.schemaLabel': 'Event Schemas',
 
   // ---------------------------------------------------------------------------
   // file-drop-zone

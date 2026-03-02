@@ -21,7 +21,7 @@ import type { DriftEvent } from '../artifact/drift-notification.js';
 import type { ContractEntry } from '../artifact/contract-sidebar.js';
 import type { RankedEvent } from '../visualization/priority-view.js';
 import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visualization/integration-dashboard.js';
-import type { WorkItem } from '../../schema/types.js';
+import type { WorkItem, ContractBundle, EventContract, BoundaryContract } from '../../schema/types.js';
 
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
@@ -705,8 +705,19 @@ export class AppShell extends LitElement {
               })()}
             </sl-tab-panel>
             <sl-tab-panel name="contracts">
-              <contract-diff></contract-diff>
-              <schema-display></schema-display>
+              ${(() => {
+                const data = this._contractsData(files);
+                return html`
+                  <contract-diff
+                    .bundleBefore=${null}
+                    .bundleAfter=${data.bundle}
+                  ></contract-diff>
+                  <schema-display
+                    .schema=${data.schemas}
+                    label=${t('shell.contracts.schemaLabel')}
+                  ></schema-display>
+                `;
+              })()}
             </sl-tab-panel>
             <sl-tab-panel name="integration">
               ${(() => {
@@ -1102,6 +1113,89 @@ export class AppShell extends LitElement {
 
   private _onContractSelected(_e: CustomEvent<{ eventName: string; owner: string }>) {
     store.setView('contracts');
+  }
+
+  /**
+   * Derive a synthetic ContractBundle from loaded files for the contracts tab.
+   * Shared events become EventContracts (version "0.0.1-draft"); aggregates become
+   * BoundaryContracts. Also builds a combined schemas map for schema-display.
+   */
+  private _contractsData(files: AppState['files']): {
+    bundle: ContractBundle;
+    schemas: Record<string, unknown>;
+  } {
+    const empty: ContractBundle = {
+      generatedAt: new Date().toISOString(),
+      eventContracts: [],
+      boundaryContracts: [],
+    };
+    if (files.length < 2) return { bundle: empty, schemas: {} };
+
+    const sharedOverlaps = this._comparisonCtrl.sharedEvents;
+    if (sharedOverlaps.length === 0) return { bundle: empty, schemas: {} };
+
+    // Build eventName -> aggregate from all files (first occurrence wins)
+    const eventAggregateMap = new Map<string, string>();
+    for (const file of files) {
+      for (const ev of file.data.domain_events) {
+        if (!eventAggregateMap.has(ev.name)) {
+          eventAggregateMap.set(ev.name, ev.aggregate);
+        }
+      }
+    }
+
+    const eventContracts: EventContract[] = sharedOverlaps.map((overlap) => {
+      const eventName = overlap.label;
+      const aggregate = eventAggregateMap.get(eventName) ?? '';
+      const roles = overlap.roles;
+      return {
+        eventName,
+        aggregate,
+        version: '0.0.1-draft',
+        schema: {},
+        owner: roles[0] ?? '',
+        consumers: roles.slice(1),
+        producedBy: roles[0] ?? '',
+      };
+    });
+
+    // Group shared events by aggregate for BoundaryContracts
+    const aggregateEventsMap = new Map<string, string[]>();
+    for (const ec of eventContracts) {
+      const evs = aggregateEventsMap.get(ec.aggregate) ?? [];
+      evs.push(ec.eventName);
+      aggregateEventsMap.set(ec.aggregate, evs);
+    }
+    const aggregateOwnerMap = new Map<string, string>();
+    for (const ec of eventContracts) {
+      if (!aggregateOwnerMap.has(ec.aggregate)) {
+        aggregateOwnerMap.set(ec.aggregate, ec.owner);
+      }
+    }
+
+    const boundaryContracts: BoundaryContract[] = [...aggregateEventsMap.entries()].map(
+      ([aggregate, events]): BoundaryContract => ({
+        boundaryName: aggregate,
+        aggregates: [aggregate],
+        events,
+        owner: aggregateOwnerMap.get(aggregate) ?? '',
+        externalDependencies: [],
+      })
+    );
+
+    const bundle: ContractBundle = {
+      generatedAt: new Date().toISOString(),
+      eventContracts,
+      boundaryContracts,
+    };
+
+    // Build combined schema map: eventName -> {} for schema-display
+    const schemas: Record<string, unknown> = {};
+    for (const ec of eventContracts) {
+      schemas[ec.eventName] = { type: 'object', description: `${ec.aggregate} (draft)` };
+    }
+
+    return { bundle, schemas };
   }
 
   /**
