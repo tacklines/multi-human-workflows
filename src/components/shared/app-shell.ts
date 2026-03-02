@@ -21,8 +21,11 @@ import type { ExplorationGap, ExplorationPrompt, ExplorationPattern } from '../a
 import type { ComplianceDetail } from '../artifact/compliance-badge.js';
 import type { DriftEvent } from '../artifact/drift-notification.js';
 import type { ContractEntry } from '../artifact/contract-sidebar.js';
-import type { RankedEvent } from '../visualization/priority-view.js';
+import type { RankedEvent, PrioritySuggestion } from '../visualization/priority-view.js';
 import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visualization/integration-dashboard.js';
+import type { WorkItemSuggestion } from '../visualization/breakdown-editor.js';
+import { suggestDecomposition } from '../../lib/decomposition-heuristics.js';
+import { suggestPriorities } from '../../lib/priority-heuristics.js';
 import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval, JamArtifacts, IntegrationReport, Draft, BoundaryAssumption, DelegationLevel, ConflictResolution, EventPriority } from '../../schema/types.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
@@ -277,6 +280,12 @@ export class AppShell extends LitElement {
   @state() private _delegationLevel: DelegationLevel = 'assisted';
   @state() private _suggestions: Map<string, ResolutionSuggestion> = new Map();
   @state() private _suggestionLoadingLabels: Set<string> = new Set();
+  @state() private _decompositionSuggestions: WorkItemSuggestion[] = [];
+  @state() private _prioritySuggestions: PrioritySuggestion[] = [];
+  /** IDs of decomposition suggestions that have been accepted or dismissed this session. */
+  private _dismissedDecompositionIds = new Set<string>();
+  /** IDs of priority suggestions that have been accepted or dismissed this session. */
+  private _dismissedPriorityIds = new Set<string>();
   private _prevMilestoneState: MilestoneState = {
     artifactCount: 0,
     participantCount: 0,
@@ -772,8 +781,11 @@ export class AppShell extends LitElement {
                   .events=${this._rankedEvents(files)}
                   .votes=${this._votes}
                   currentParticipant=${participantName}
+                  .suggestions=${this._computePrioritySuggestions(files).filter(s => !this._dismissedPriorityIds.has(s.id))}
                   @priority-changed=${this._onPriorityChanged}
                   @vote-cast=${this._onVoteCast}
+                  @suggestion-accepted=${this._onPrioritySuggestionAccepted}
+                  @suggestion-dismissed=${this._onPrioritySuggestionDismissed}
                 ></priority-view>
               </help-tip>
             </sl-tab-panel>
@@ -781,13 +793,18 @@ export class AppShell extends LitElement {
               <help-tip tip-key="breakdown-editor" message=${t('helpTip.breakdownEditor')} ?active=${files.length >= 2}>
                 ${(() => {
                   const eventNames = this._breakdownEventNames(files);
+                  const decompositionSuggestions = this._computeDecompositionSuggestions(files)
+                    .filter(s => !this._dismissedDecompositionIds.has(s.id));
                   return html`
                     <div class="breakdown-layout">
                       <breakdown-editor
                         .events=${eventNames}
                         .workItems=${this._workItems}
+                        .suggestions=${decompositionSuggestions}
                         @work-item-created=${this._onWorkItemCreated}
                         @work-item-updated=${this._onWorkItemUpdated}
+                        @suggestion-accepted=${this._onDecompositionSuggestionAccepted}
+                        @suggestion-dismissed=${this._onDecompositionSuggestionDismissed}
                       ></breakdown-editor>
                       <div class="breakdown-sidebar">
                         <coverage-matrix
@@ -1908,6 +1925,30 @@ export class AppShell extends LitElement {
     }
   }
 
+  private _onDecompositionSuggestionAccepted(e: CustomEvent<{ id: string; item: WorkItem }>) {
+    const { id, item } = e.detail;
+    this._dismissedDecompositionIds.add(id);
+    // Add the accepted work item to the work items list
+    this._workItems = [...this._workItems, item];
+    // Trigger re-render so the ghost card disappears
+    this.requestUpdate();
+  }
+
+  private _onDecompositionSuggestionDismissed(e: CustomEvent<{ id: string }>) {
+    this._dismissedDecompositionIds.add(e.detail.id);
+    this.requestUpdate();
+  }
+
+  private _onPrioritySuggestionAccepted(e: CustomEvent<{ id: string; text: string }>) {
+    this._dismissedPriorityIds.add(e.detail.id);
+    this.requestUpdate();
+  }
+
+  private _onPrioritySuggestionDismissed(e: CustomEvent<{ id: string }>) {
+    this._dismissedPriorityIds.add(e.detail.id);
+    this.requestUpdate();
+  }
+
   private _onWorkItemCreated(e: CustomEvent<{ item: WorkItem }>) {
     this._workItems = [...this._workItems, e.detail.item];
   }
@@ -1946,6 +1987,60 @@ export class AppShell extends LitElement {
   private _onRunChecks() {
     // Force re-render by requesting update — integration data is derived fresh each render
     this.requestUpdate();
+  }
+
+  /**
+   * Compute decomposition suggestions from loaded files and return them as
+   * WorkItemSuggestion[] ready to pass to breakdown-editor.
+   *
+   * Called lazily in the breakdown tab render path.
+   * Regenerates whenever files change; uses a simple array assignment to trigger
+   * a re-render via the @state decorator.
+   */
+  private _computeDecompositionSuggestions(files: AppState['files']): WorkItemSuggestion[] {
+    if (files.length === 0) return [];
+    const allEvents = files.flatMap((f) => f.data.domain_events);
+    const aggregateSuggestions = suggestDecomposition(allEvents);
+    const result: WorkItemSuggestion[] = [];
+    let idx = 0;
+    for (const agg of aggregateSuggestions) {
+      for (const item of agg.suggestedItems) {
+        result.push({
+          id: `sug-${idx++}`,
+          title: item.title,
+          description: item.description,
+          complexity: item.complexity,
+          linkedEvents: item.linkedEvents,
+        });
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Compute priority suggestions from loaded files and return them as
+   * PrioritySuggestion[] ready to pass to priority-view.
+   *
+   * Skips events that already have manual tier overrides.
+   * Called lazily in the priority tab render path.
+   */
+  private _computePrioritySuggestions(files: AppState['files']): PrioritySuggestion[] {
+    if (files.length === 0) return [];
+    const allEvents = files.flatMap((f) => f.data.domain_events);
+
+    // Build existing priorities from manual overrides
+    const existingPriorities = Array.from(this._tierOverrides.entries()).map(([eventName, tier]) => ({
+      eventName,
+      participantId: 'local',
+      tier,
+      setAt: new Date().toISOString(),
+    }));
+
+    const results = suggestPriorities(allEvents, existingPriorities);
+    return results.map((r) => ({
+      id: r.eventName,
+      text: r.reason,
+    }));
   }
 
   /**
