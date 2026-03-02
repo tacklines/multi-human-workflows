@@ -6,6 +6,7 @@ import { getAggregateColorIndex } from '../../lib/aggregate-colors.js';
 import { StoreController } from '../controllers/store-controller.js';
 import { ComparisonController } from '../controllers/comparison-controller.js';
 import { t } from '../../lib/i18n.js';
+import { parseAndValidate } from '../../lib/yaml-loader.js';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from '../visualization/flow-minimap.js';
 import type { FlowDiagram } from '../visualization/flow-diagram.js';
 import type { DetailNodeData } from '../visualization/detail-panel.js';
@@ -183,9 +184,57 @@ export class AppShell extends LitElement {
   @state() private _searchCurrentMatch = -1;
   @state() private _detailNodeData: DetailNodeData | null = null;
   @state() private _soloMode = false;
+  @state() private _pasteToast: { count: number; role: string } | null = null;
+
+  private _pasteToastTimer: ReturnType<typeof setTimeout> | null = null;
+  private _boundPasteHandler: ((e: ClipboardEvent) => void) | null = null;
 
   private get appState(): AppState {
     return this._storeCtrl.value;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._boundPasteHandler = (e: ClipboardEvent) => this._onGlobalPaste(e);
+    document.addEventListener('paste', this._boundPasteHandler);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._boundPasteHandler) {
+      document.removeEventListener('paste', this._boundPasteHandler);
+      this._boundPasteHandler = null;
+    }
+    if (this._pasteToastTimer !== null) {
+      clearTimeout(this._pasteToastTimer);
+      this._pasteToastTimer = null;
+    }
+  }
+
+  private _onGlobalPaste(e: ClipboardEvent) {
+    const text = e.clipboardData?.getData('text') ?? '';
+    // Only intercept if it looks like storm-prep YAML
+    if (!text.includes('role:') && !text.includes('candidateEvents:') && !text.includes('domain_events:')) {
+      return;
+    }
+    const result = parseAndValidate('pasted.yaml', text);
+    if (!result.ok) {
+      // Invalid YAML — silently ignore, don't interrupt normal paste
+      return;
+    }
+    // Prevent default only after successful parse so normal paste (e.g. into inputs) still works
+    // when the content doesn't look like YAML
+    store.addFile(result.file);
+    const count = result.file.data.domain_events.length;
+    const role = result.file.role;
+    this._pasteToast = { count, role };
+    if (this._pasteToastTimer !== null) {
+      clearTimeout(this._pasteToastTimer);
+    }
+    this._pasteToastTimer = setTimeout(() => {
+      this._pasteToast = null;
+      this._pasteToastTimer = null;
+    }, 4000);
   }
 
   render() {
@@ -193,17 +242,40 @@ export class AppShell extends LitElement {
 
     if (files.length === 0) {
       if (this._soloMode) {
-        return html`<file-drop-zone mode="hero"></file-drop-zone>`;
+        return html`
+          <file-drop-zone mode="hero"></file-drop-zone>
+          ${this._renderPasteToast()}
+        `;
       }
       return html`
         <session-lobby
           @session-files-ready=${this._onSessionFilesReady}
           @solo-mode=${this._onSoloMode}
         ></session-lobby>
+        ${this._renderPasteToast()}
       `;
     }
 
-    return this.renderAppLayout();
+    return html`${this.renderAppLayout()}${this._renderPasteToast()}`;
+  }
+
+  private _renderPasteToast() {
+    if (!this._pasteToast) return nothing;
+    const { count, role } = this._pasteToast;
+    return html`
+      <sl-alert
+        variant="success"
+        open
+        duration="4000"
+        closable
+        style="position:fixed;bottom:1rem;right:1rem;z-index:9999;max-width:22rem;"
+        aria-label="${t('shell.pasteSuccessAriaLabel')}"
+        @sl-after-hide=${() => { this._pasteToast = null; }}
+      >
+        <sl-icon slot="icon" name="clipboard-check"></sl-icon>
+        ${t('shell.pasteSuccess', { count: String(count), role })}
+      </sl-alert>
+    `;
   }
 
   private renderAppLayout() {

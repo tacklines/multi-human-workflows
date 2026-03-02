@@ -329,8 +329,10 @@ export class SessionLobby extends LitElement {
   @state() private _error = '';
   @state() private _submitting = false;
   @state() private _sessionState: SessionState | null = store.get().sessionState;
+  @state() private _codeCopied = false;
 
   private _unsubscribe: (() => void) | null = null;
+  private _codeCopiedTimer: ReturnType<typeof setTimeout> | null = null;
 
   connectedCallback() {
     super.connectedCallback();
@@ -352,6 +354,8 @@ export class SessionLobby extends LitElement {
     if (this._sessionState) {
       this._lobbyState = 'in-session';
     }
+    // URL-based session join: parse ?session=CODE&name=NAME
+    this._checkUrlParams();
   }
 
   disconnectedCallback() {
@@ -359,6 +363,41 @@ export class SessionLobby extends LitElement {
     if (this._unsubscribe) {
       this._unsubscribe();
       this._unsubscribe = null;
+    }
+    if (this._codeCopiedTimer !== null) {
+      clearTimeout(this._codeCopiedTimer);
+      this._codeCopiedTimer = null;
+    }
+  }
+
+  private _checkUrlParams() {
+    const params = new URLSearchParams(window.location.search);
+    const sessionCode = params.get('session');
+    const name = params.get('name');
+    if (sessionCode && name) {
+      this._joinCode = sessionCode.toUpperCase();
+      this._name = name;
+      // Clean the URL so refreshes don't re-trigger
+      const cleanUrl = window.location.pathname;
+      history.replaceState(null, '', cleanUrl);
+      // Auto-trigger join
+      void this._joinSession();
+    }
+  }
+
+  private async _copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      this._codeCopied = true;
+      if (this._codeCopiedTimer !== null) {
+        clearTimeout(this._codeCopiedTimer);
+      }
+      this._codeCopiedTimer = setTimeout(() => {
+        this._codeCopied = false;
+        this._codeCopiedTimer = null;
+      }, 1000);
+    } catch {
+      // Clipboard write failed silently — clipboard access may be blocked
     }
   }
 
@@ -685,10 +724,27 @@ export class SessionLobby extends LitElement {
               tabindex="0"
               title="${t('lobby.copyCodeTooltip')}"
               aria-label="${t('lobby.codeChipAriaLabel', { code: session.code })}"
-              @click=${() => void navigator.clipboard.writeText(session.code)}
-              @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void navigator.clipboard.writeText(session.code); } }}
+              @click=${() => void this._copyCode(session.code)}
+              @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void this._copyCode(session.code); } }}
             >${session.code}</span>
           </div>
+
+          <!-- Copy confirmation toast -->
+          ${this._codeCopied
+            ? html`
+                <sl-alert
+                  variant="success"
+                  open
+                  duration="1000"
+                  closable
+                  style="margin-bottom:0.75rem;"
+                  aria-label="${t('lobby.codeCopiedAriaLabel')}"
+                >
+                  <sl-icon slot="icon" name="clipboard-check"></sl-icon>
+                  ${t('lobby.codeCopied')}
+                </sl-alert>
+              `
+            : nothing}
 
           <!-- Join code prominent display after creation -->
           ${this._joinCode
@@ -696,7 +752,7 @@ export class SessionLobby extends LitElement {
                 <div class="join-code-box">
                   <div class="join-code-label">${t('lobby.shareCode')}</div>
                   <div class="join-code-value">${session.code}</div>
-                  <sl-button size="small" variant="neutral" @click=${() => void navigator.clipboard.writeText(session.code)}>
+                  <sl-button size="small" variant="neutral" @click=${() => void this._copyCode(session.code)}>
                     <sl-icon slot="prefix" name="clipboard"></sl-icon>
                     ${t('lobby.copyCode')}
                   </sl-button>
@@ -712,7 +768,7 @@ export class SessionLobby extends LitElement {
               size="small"
               variant="text"
               style="margin-left:0.5rem;"
-              @click=${() => void navigator.clipboard.writeText(session.code)}
+              @click=${() => void this._copyCode(session.code)}
             >${t('lobby.copy')}</sl-button>
           </sl-alert>
 
