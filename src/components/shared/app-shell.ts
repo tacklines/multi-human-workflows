@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement, query, state } from 'lit/decorators.js';
 import { store, type AppState } from '../../state/app-state.js';
 import { getAllAggregates } from '../../lib/grouping.js';
 import { getAggregateColorIndex } from '../../lib/aggregate-colors.js';
@@ -22,6 +22,8 @@ import type { ContractEntry } from '../artifact/contract-sidebar.js';
 import type { RankedEvent } from '../visualization/priority-view.js';
 import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visualization/integration-dashboard.js';
 import type { WorkItem, ContractBundle, EventContract, BoundaryContract } from '../../schema/types.js';
+import { detectMilestones } from '../../lib/milestone-detector.js';
+import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
 
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
@@ -62,6 +64,8 @@ import '../contract/contract-diff.js';
 import '../contract/schema-display.js';
 import '../visualization/integration-dashboard.js';
 import './suggestion-bar.js';
+import './onboarding-overlay.js';
+import './milestone-celebration.js';
 
 @customElement('app-shell')
 export class AppShell extends LitElement {
@@ -244,6 +248,15 @@ export class AppShell extends LitElement {
   @state() private _shortcutReferenceOpen = false;
   @state() private _settingsOpen = false;
   @state() private _workItems: WorkItem[] = [];
+  private _prevMilestoneState: MilestoneState = {
+    artifactCount: 0,
+    participantCount: 0,
+    submittedCount: 0,
+    unresolvedConflicts: 0,
+    integrationStatus: 'pending',
+  };
+
+  @query('milestone-celebration') private _celebrationEl!: HTMLElement & { milestone: MilestoneKey; message: string; show(): void };
 
   private _pasteToastTimer: ReturnType<typeof setTimeout> | null = null;
   private _boundPasteHandler: ((e: ClipboardEvent) => void) | null = null;
@@ -294,6 +307,38 @@ export class AppShell extends LitElement {
   private _onRegistryReset = () => {
     this._registerShortcuts();
   };
+
+  override updated(_changedProperties: Map<string, unknown>) {
+    const current: MilestoneState = {
+      artifactCount: this.appState.files.length,
+      participantCount: this.appState.sessionState?.session.participants.length ?? this.appState.files.length,
+      submittedCount: this.appState.files.length,
+      unresolvedConflicts: this._comparisonCtrl.conflictCount,
+      integrationStatus: this.appState.files.length >= 2
+        ? (this._comparisonCtrl.conflictCount === 0 ? 'go' : 'no-go')
+        : 'pending',
+    };
+
+    const prev = this._prevMilestoneState;
+    const stateChanged =
+      current.artifactCount !== prev.artifactCount ||
+      current.participantCount !== prev.participantCount ||
+      current.submittedCount !== prev.submittedCount ||
+      current.unresolvedConflicts !== prev.unresolvedConflicts ||
+      current.integrationStatus !== prev.integrationStatus;
+
+    if (stateChanged) {
+      this._prevMilestoneState = current;
+      const triggered = detectMilestones(prev, current);
+      for (const milestone of triggered) {
+        if (this._celebrationEl) {
+          this._celebrationEl.milestone = milestone;
+          this._celebrationEl.message = t(`milestone.${milestone}`);
+          this._celebrationEl.show();
+        }
+      }
+    }
+  }
 
   private _registerShortcuts() {
     const PHASES = ['spark', 'explore', 'rank', 'slice', 'agree', 'build', 'ship'] as const;
@@ -752,6 +797,10 @@ export class AppShell extends LitElement {
       <file-drop-zone mode="compact" style="display:none" id="hidden-drop"></file-drop-zone>
       <!-- Drift notification toast stack (fixed-position, bottom-right) -->
       <drift-notification .drifts=${[] as DriftEvent[]}></drift-notification>
+      <!-- First-visit onboarding overlay (self-managing via localStorage) -->
+      <onboarding-overlay></onboarding-overlay>
+      <!-- Milestone celebration toast (shown via .show() on state transitions) -->
+      <milestone-celebration></milestone-celebration>
     `;
   }
 
