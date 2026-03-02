@@ -7,6 +7,9 @@ import { computePrepStatus, computeSessionStatus } from '../lib/prep-completenes
 import { computeWorkflowStatus } from '../lib/workflow-engine.js';
 import { serializeSession } from '../lib/session-store.js';
 import { compareFiles } from '../lib/comparison.js';
+import { DraftService } from '../contexts/draft/draft-service.js';
+import { ArtifactService } from '../contexts/artifact/artifact-service.js';
+import type { DomainEvent } from '../schema/types.js';
 
 // ---------------------------------------------------------------------------
 // CLI arg parsing for scoped mode: --session=CODE --user=NAME
@@ -29,6 +32,161 @@ interface ScopedContext {
   sessionCode: string;
   participantId: string;
   participantName: string;
+}
+
+// ---------------------------------------------------------------------------
+// Module-level service instances
+// ---------------------------------------------------------------------------
+
+const draftService = new DraftService((code) => sessionStore.getSession(code));
+const artifactService = new ArtifactService();
+
+// ---------------------------------------------------------------------------
+// suggest_events heuristic — maps domain keywords to standard event patterns
+// ---------------------------------------------------------------------------
+
+interface DomainPattern {
+  keywords: string[];
+  events: Array<Omit<DomainEvent, 'name'> & { name: string }>;
+}
+
+const DOMAIN_PATTERNS: DomainPattern[] = [
+  {
+    keywords: ['order', 'orders', 'ordering', 'purchase'],
+    events: [
+      { name: 'OrderCreated', aggregate: 'Order', trigger: 'Customer places order', payload: [{ field: 'orderId', type: 'string' }, { field: 'customerId', type: 'string' }], integration: { direction: 'internal' }, confidence: 'LIKELY' },
+      { name: 'OrderUpdated', aggregate: 'Order', trigger: 'Customer modifies order', payload: [{ field: 'orderId', type: 'string' }], integration: { direction: 'internal' }, confidence: 'LIKELY' },
+      { name: 'OrderCancelled', aggregate: 'Order', trigger: 'Customer or system cancels order', payload: [{ field: 'orderId', type: 'string' }, { field: 'reason', type: 'string' }], integration: { direction: 'internal' }, confidence: 'LIKELY' },
+      { name: 'OrderCompleted', aggregate: 'Order', trigger: 'Order fulfillment complete', payload: [{ field: 'orderId', type: 'string' }], integration: { direction: 'outbound' }, confidence: 'LIKELY' },
+      { name: 'OrderFailed', aggregate: 'Order', trigger: 'Order processing fails', payload: [{ field: 'orderId', type: 'string' }, { field: 'error', type: 'string' }], integration: { direction: 'internal' }, confidence: 'POSSIBLE' },
+    ],
+  },
+  {
+    keywords: ['payment', 'payments', 'billing', 'invoice', 'charge'],
+    events: [
+      { name: 'PaymentInitiated', aggregate: 'Payment', trigger: 'Payment process starts', payload: [{ field: 'paymentId', type: 'string' }, { field: 'amount', type: 'number' }], integration: { direction: 'outbound' }, confidence: 'LIKELY' },
+      { name: 'PaymentCompleted', aggregate: 'Payment', trigger: 'Payment successfully processed', payload: [{ field: 'paymentId', type: 'string' }, { field: 'transactionId', type: 'string' }], integration: { direction: 'outbound' }, confidence: 'LIKELY' },
+      { name: 'PaymentFailed', aggregate: 'Payment', trigger: 'Payment processing fails', payload: [{ field: 'paymentId', type: 'string' }, { field: 'reason', type: 'string' }], integration: { direction: 'outbound' }, confidence: 'LIKELY' },
+      { name: 'PaymentRefunded', aggregate: 'Payment', trigger: 'Refund issued to customer', payload: [{ field: 'paymentId', type: 'string' }, { field: 'amount', type: 'number' }], integration: { direction: 'outbound' }, confidence: 'POSSIBLE' },
+    ],
+  },
+  {
+    keywords: ['ship', 'shipping', 'delivery', 'fulfillment', 'dispatch'],
+    events: [
+      { name: 'ShipmentCreated', aggregate: 'Shipment', trigger: 'Shipment record created', payload: [{ field: 'shipmentId', type: 'string' }, { field: 'orderId', type: 'string' }], integration: { direction: 'internal' }, confidence: 'LIKELY' },
+      { name: 'ShipmentDispatched', aggregate: 'Shipment', trigger: 'Package handed to carrier', payload: [{ field: 'shipmentId', type: 'string' }, { field: 'trackingNumber', type: 'string' }], integration: { direction: 'outbound' }, confidence: 'LIKELY' },
+      { name: 'ShipmentDelivered', aggregate: 'Shipment', trigger: 'Package delivered to recipient', payload: [{ field: 'shipmentId', type: 'string' }, { field: 'deliveredAt', type: 'string' }], integration: { direction: 'outbound' }, confidence: 'LIKELY' },
+      { name: 'ShipmentFailed', aggregate: 'Shipment', trigger: 'Delivery attempt fails', payload: [{ field: 'shipmentId', type: 'string' }, { field: 'reason', type: 'string' }], integration: { direction: 'outbound' }, confidence: 'POSSIBLE' },
+    ],
+  },
+  {
+    keywords: ['user', 'users', 'account', 'registration', 'signup', 'profile'],
+    events: [
+      { name: 'UserRegistered', aggregate: 'User', trigger: 'New user creates account', payload: [{ field: 'userId', type: 'string' }, { field: 'email', type: 'string' }], integration: { direction: 'internal' }, confidence: 'LIKELY' },
+      { name: 'UserUpdated', aggregate: 'User', trigger: 'User updates profile', payload: [{ field: 'userId', type: 'string' }], integration: { direction: 'internal' }, confidence: 'LIKELY' },
+      { name: 'UserDeactivated', aggregate: 'User', trigger: 'Account deactivated', payload: [{ field: 'userId', type: 'string' }, { field: 'reason', type: 'string' }], integration: { direction: 'internal' }, confidence: 'POSSIBLE' },
+      { name: 'UserDeleted', aggregate: 'User', trigger: 'Account permanently deleted', payload: [{ field: 'userId', type: 'string' }], integration: { direction: 'internal' }, confidence: 'POSSIBLE' },
+    ],
+  },
+  {
+    keywords: ['auth', 'authentication', 'login', 'logout', 'session', 'token'],
+    events: [
+      { name: 'UserLoggedIn', aggregate: 'AuthSession', trigger: 'User authenticates successfully', payload: [{ field: 'userId', type: 'string' }, { field: 'sessionToken', type: 'string' }], integration: { direction: 'internal' }, confidence: 'LIKELY' },
+      { name: 'UserLoggedOut', aggregate: 'AuthSession', trigger: 'User ends session', payload: [{ field: 'userId', type: 'string' }], integration: { direction: 'internal' }, confidence: 'LIKELY' },
+      { name: 'LoginFailed', aggregate: 'AuthSession', trigger: 'Authentication attempt fails', payload: [{ field: 'email', type: 'string' }, { field: 'reason', type: 'string' }], integration: { direction: 'internal' }, confidence: 'LIKELY' },
+      { name: 'TokenRefreshed', aggregate: 'AuthSession', trigger: 'Access token refreshed', payload: [{ field: 'userId', type: 'string' }], integration: { direction: 'internal' }, confidence: 'POSSIBLE' },
+    ],
+  },
+];
+
+/**
+ * Generate candidate domain events from a natural-language description.
+ * Matches known domain keywords and filters out events already in existingEvents.
+ */
+function suggestEventsHeuristic(description: string, existingEvents: string[]): DomainEvent[] {
+  const lower = description.toLowerCase();
+  const existingSet = new Set(existingEvents.map((e) => e.toLowerCase()));
+  const seen = new Set<string>();
+  const results: DomainEvent[] = [];
+
+  for (const pattern of DOMAIN_PATTERNS) {
+    const matched = pattern.keywords.some((kw) => lower.includes(kw));
+    if (!matched) continue;
+    for (const event of pattern.events) {
+      if (seen.has(event.name)) continue;
+      if (existingSet.has(event.name.toLowerCase())) continue;
+      seen.add(event.name);
+      results.push(event);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Analyze an artifact and generate improvement suggestions.
+ */
+interface ImprovementSuggestion {
+  type: 'missing_event' | 'missing_assumption' | 'confidence_upgrade' | 'pattern_match';
+  description: string;
+  suggestedContent?: Partial<DomainEvent>;
+}
+
+function suggestImprovementsForFile(file: import('../schema/types.js').CandidateEventsFile): ImprovementSuggestion[] {
+  const suggestions: ImprovementSuggestion[] = [];
+  const status = computePrepStatus(file);
+
+  // Missing failure events: if command-like events exist but no failure counterpart
+  const eventNames = file.domain_events.map((e) => e.name);
+  const commandEvents = eventNames.filter((n) =>
+    /Created|Updated|Submitted|Initiated|Approved|Placed/i.test(n)
+  );
+  for (const cmd of commandEvents) {
+    const base = cmd.replace(/Created|Updated|Submitted|Initiated|Approved|Placed/i, '');
+    const hasFailed = eventNames.some((n) => n.toLowerCase().includes(base.toLowerCase() + 'fail') || n.toLowerCase().includes('failed'));
+    if (!hasFailed) {
+      suggestions.push({
+        type: 'missing_event',
+        description: `Consider adding a failure event for "${cmd}" — e.g., "${base}Failed"`,
+        suggestedContent: {
+          name: `${base}Failed`,
+          aggregate: file.domain_events.find((e) => e.name === cmd)?.aggregate ?? base,
+          trigger: `${cmd} processing fails`,
+          payload: [{ field: 'reason', type: 'string' }],
+          integration: { direction: 'internal' },
+          confidence: 'POSSIBLE',
+        },
+      });
+    }
+  }
+
+  // Missing assumptions
+  if (status.assumptionCount === 0) {
+    suggestions.push({
+      type: 'missing_assumption',
+      description: 'No boundary assumptions declared — add at least one to clarify service ownership or external dependencies',
+    });
+  }
+
+  // Confidence upgrades: POSSIBLE events that could be LIKELY
+  const possibleEvents = file.domain_events.filter((e) => e.confidence === 'POSSIBLE');
+  for (const event of possibleEvents) {
+    suggestions.push({
+      type: 'confidence_upgrade',
+      description: `"${event.name}" is POSSIBLE — if there is stakeholder evidence, upgrade to LIKELY`,
+      suggestedContent: { name: event.name, confidence: 'LIKELY' },
+    });
+  }
+
+  // Pattern match: if no outbound events, suggest integration
+  if (status.directionBreakdown['outbound'] === 0 && status.eventCount > 0) {
+    suggestions.push({
+      type: 'pattern_match',
+      description: 'No outbound events found — consider which events are emitted to other bounded contexts',
+    });
+  }
+
+  return suggestions;
 }
 
 async function main(): Promise<void> {
@@ -924,6 +1082,147 @@ async function main(): Promise<void> {
     }
   );
 
+  // Tool: create_draft
+  server.registerTool(
+    'create_draft',
+    {
+      description: 'Create a draft artifact visible only to the author — a staging area before formal submission',
+      inputSchema: {
+        sessionCode: z.string().describe('Session join code'),
+        participantId: z.string().describe('Participant ID of the draft author'),
+        content: z.object({
+          metadata: z.object({
+            role: z.string(),
+            scope: z.string(),
+            goal: z.string(),
+            generated_at: z.string(),
+            event_count: z.number(),
+            assumption_count: z.number(),
+          }),
+          domain_events: z.array(z.any()),
+          boundary_assumptions: z.array(z.any()),
+        }).describe('CandidateEventsFile content for the draft'),
+      },
+    },
+    ({ sessionCode, participantId, content }) => {
+      const draft = draftService.createDraft(sessionCode, {
+        participantId,
+        content: content as import('../schema/types.js').CandidateEventsFile,
+      });
+      if (!draft) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ draftId: draft.id }) }],
+      };
+    }
+  );
+
+  // Tool: suggest_events
+  server.registerTool(
+    'suggest_events',
+    {
+      description: 'Given a natural-language domain description, return structured candidate domain events',
+      inputSchema: {
+        description: z.string().describe('Natural-language description of the domain'),
+        existingEvents: z.array(z.string()).optional().describe('Event names already defined, to avoid duplicates'),
+      },
+    },
+    ({ description, existingEvents }) => {
+      const events = suggestEventsHeuristic(description, existingEvents ?? []);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ events }) }],
+      };
+    }
+  );
+
+  // Tool: suggest_improvements
+  server.registerTool(
+    'suggest_improvements',
+    {
+      description: 'Analyze a submitted artifact and return specific suggestions for improvements',
+      inputSchema: {
+        sessionCode: z.string().describe('Session join code'),
+        fileName: z.string().describe('File name of the artifact to analyze'),
+      },
+    },
+    ({ sessionCode, fileName }) => {
+      const session = sessionStore.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const submission = session.submissions.find((s) => s.fileName === fileName);
+      if (!submission) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: `Artifact "${fileName}" not found in session` }) }],
+          isError: true,
+        };
+      }
+      const suggestions = suggestImprovementsForFile(submission.data);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ suggestions }) }],
+      };
+    }
+  );
+
+  // Tool: update_artifact
+  server.registerTool(
+    'update_artifact',
+    {
+      description: 'Replace a submitted artifact with a revised version, preserving the original in version history',
+      inputSchema: {
+        sessionCode: z.string().describe('Session join code'),
+        participantId: z.string().describe('Participant ID of the submitter'),
+        fileName: z.string().describe('File name of the artifact to update'),
+        content: z.object({
+          metadata: z.object({
+            role: z.string(),
+            scope: z.string(),
+            goal: z.string(),
+            generated_at: z.string(),
+            event_count: z.number(),
+            assumption_count: z.number(),
+          }),
+          domain_events: z.array(z.any()),
+          boundary_assumptions: z.array(z.any()),
+        }).describe('Updated CandidateEventsFile content'),
+        changeNote: z.string().optional().describe('Description of what changed in this update'),
+      },
+    },
+    ({ sessionCode, participantId, fileName, content, changeNote }) => {
+      const session = sessionStore.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      if (!session.participants.has(participantId)) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Participant not in session' }) }],
+          isError: true,
+        };
+      }
+      const versioned = artifactService.submit(
+        sessionCode,
+        participantId,
+        fileName,
+        content as import('../schema/types.js').CandidateEventsFile,
+        'mcp',
+        changeNote
+      );
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ version: versioned.version }) }],
+      };
+    }
+  );
+
   // -------------------------------------------------------------------------
   // Scoped tools — only registered when --session/--user are provided
   // -------------------------------------------------------------------------
@@ -1009,6 +1308,80 @@ async function main(): Promise<void> {
               completeness: prepStatus,
             }),
           }],
+        };
+      }
+    );
+
+    // Tool: my_create_draft — create a draft without needing code or participantId
+    server.registerTool(
+      'my_create_draft',
+      {
+        description: 'Create a draft artifact visible only to you — a staging area before formal submission',
+        inputSchema: {
+          content: z.object({
+            metadata: z.object({
+              role: z.string(),
+              scope: z.string(),
+              goal: z.string(),
+              generated_at: z.string(),
+              event_count: z.number(),
+              assumption_count: z.number(),
+            }),
+            domain_events: z.array(z.any()),
+            boundary_assumptions: z.array(z.any()),
+          }).describe('CandidateEventsFile content for the draft'),
+        },
+      },
+      ({ content }) => {
+        const draft = draftService.createDraft(ctx.sessionCode, {
+          participantId: ctx.participantId,
+          content: content as import('../schema/types.js').CandidateEventsFile,
+        });
+        if (!draft) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ draftId: draft.id }) }],
+        };
+      }
+    );
+
+    // Tool: my_update_artifact — update an artifact without needing code or participantId
+    server.registerTool(
+      'my_update_artifact',
+      {
+        description: 'Replace one of your submitted artifacts with a revised version, preserving the original in version history',
+        inputSchema: {
+          fileName: z.string().describe('File name of the artifact to update'),
+          content: z.object({
+            metadata: z.object({
+              role: z.string(),
+              scope: z.string(),
+              goal: z.string(),
+              generated_at: z.string(),
+              event_count: z.number(),
+              assumption_count: z.number(),
+            }),
+            domain_events: z.array(z.any()),
+            boundary_assumptions: z.array(z.any()),
+          }).describe('Updated CandidateEventsFile content'),
+          changeNote: z.string().optional().describe('Description of what changed in this update'),
+        },
+      },
+      ({ fileName, content, changeNote }) => {
+        const versioned = artifactService.submit(
+          ctx.sessionCode,
+          ctx.participantId,
+          fileName,
+          content as import('../schema/types.js').CandidateEventsFile,
+          'mcp',
+          changeNote
+        );
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ version: versioned.version }) }],
         };
       }
     );
