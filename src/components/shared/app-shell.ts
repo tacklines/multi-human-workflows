@@ -28,6 +28,7 @@ import { suggestDecomposition } from '../../lib/decomposition-heuristics.js';
 import { suggestPriorities } from '../../lib/priority-heuristics.js';
 import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval, JamArtifacts, IntegrationReport, Draft, BoundaryAssumption, DelegationLevel, ConflictResolution, EventPriority, SessionConfig } from '../../schema/types.js';
 import { DEFAULT_SESSION_CONFIG } from '../../schema/types.js';
+import { loadSessionConfig, saveSessionConfig } from '../../lib/session-config-persistence.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
 
@@ -310,6 +311,9 @@ export class AppShell extends LitElement {
     super.connectedCallback();
     this._boundPasteHandler = (e: ClipboardEvent) => this._onGlobalPaste(e);
     document.addEventListener('paste', this._boundPasteHandler);
+
+    // Hydrate session config from localStorage (survives page refresh)
+    this._sessionConfig = loadSessionConfig(this.appState.sessionState?.code);
 
     // Load any stored shortcut customizations before registering
     registry.loadFromStorage();
@@ -1836,6 +1840,7 @@ export class AppShell extends LitElement {
       }
       target[parts[parts.length - 1]] = value;
       this._sessionConfig = config as unknown as SessionConfig;
+      saveSessionConfig(this._sessionConfig, this.appState.sessionState?.code);
     }
     // Forward setting-changed events from the dialog to the app level.
     // Parent components or the store can listen for these to apply changes.
