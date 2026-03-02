@@ -15,6 +15,9 @@ import { select } from 'd3-selection';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from './flow-minimap.js';
 import { store } from '../../state/app-state.js';
 import { StoreController } from '../controllers/store-controller.js';
+import { t } from '../../lib/i18n.js';
+
+import '../shared/empty-state.js';
 
 // Hardcoded palette matching --agg-color-N and --agg-bg-N CSS vars
 // (SVG attributes can't resolve CSS custom properties)
@@ -1464,7 +1467,11 @@ export class FlowDiagram extends LitElement {
 
   render() {
     if (this.files.length === 0) {
-      return html`<div class="empty">Load a storm-prep YAML file to view the event flow diagram</div>`;
+      return html`<empty-state
+        icon="diagram-3"
+        heading="${t('emptyState.flowDiagram.heading')}"
+        description="${t('emptyState.flowDiagram.description')}"
+      ></empty-state>`;
     }
 
     const allAggregates = getAllAggregates(this.files);

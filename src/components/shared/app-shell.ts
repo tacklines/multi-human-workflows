@@ -88,6 +88,7 @@ import './milestone-celebration.js';
 import './assumption-list.js';
 import './delegation-toggle.js';
 import './error-boundary.js';
+import './empty-state.js';
 
 @customElement('app-shell')
 export class AppShell extends LitElement {
@@ -946,7 +947,11 @@ export class AppShell extends LitElement {
                           @suggestion-requested=${this._onSuggestionRequested}
                         ></resolution-recorder>
                       `)
-                    : html`<resolution-recorder></resolution-recorder>`
+                    : html`<empty-state
+                    icon="people"
+                    heading="${t('emptyState.agreements.heading')}"
+                    description="${t('emptyState.agreements.description')}"
+                  ></empty-state>`
                   }
                   <ownership-grid
                     .aggregates=${data.aggregates}

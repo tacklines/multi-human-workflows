@@ -12,6 +12,7 @@ import '@shoelace-style/shoelace/dist/components/details/details.js';
 import '../shared/event-card.js';
 import '../shared/assumption-list.js';
 import '../shared/domain-tooltip.js';
+import '../shared/empty-state.js';
 
 @customElement('card-view')
 export class CardView extends LitElement {
@@ -180,7 +181,11 @@ export class CardView extends LitElement {
 
   render() {
     if (this.files.length === 0) {
-      return html`<div class="empty">${t('cardView.empty')}</div>`;
+      return html`<empty-state
+        icon="layers"
+        heading="${t('emptyState.cardView.heading')}"
+        description="${t('emptyState.cardView.description')}"
+      ></empty-state>`;
     }
 
     this._eventFilterCtrl.setFiles(this.files);
