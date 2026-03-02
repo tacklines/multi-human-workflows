@@ -15,6 +15,8 @@ import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from '../vi
 import type { FlowDiagram } from '../visualization/flow-diagram.js';
 import type { DetailNodeData } from '../visualization/detail-panel.js';
 import type { ExplorationGap, ExplorationPrompt, ExplorationPattern } from '../artifact/exploration-guide.js';
+import type { ComplianceDetail } from '../artifact/compliance-badge.js';
+import type { DriftEvent } from '../artifact/drift-notification.js';
 
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
@@ -28,6 +30,8 @@ import '@shoelace-style/shoelace/dist/components/tag/tag.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 
 import '../artifact/exploration-guide.js';
+import '../artifact/compliance-badge.js';
+import '../artifact/drift-notification.js';
 import '../artifact/file-drop-zone.js';
 import '../session/session-lobby.js';
 import '../session/spark-canvas.js';
@@ -460,6 +464,12 @@ export class AppShell extends LitElement {
                 `
               )}
             </div>
+            ${files.length >= 2
+              ? (() => {
+                  const compliance = this._complianceStatus(files);
+                  return html`<compliance-badge .status=${compliance.status} .details=${compliance.details}></compliance-badge>`;
+                })()
+              : nothing}
             <sl-button size="small" variant="default" outline @click=${this.onAddFilesClick}>
               <sl-icon slot="prefix" name="plus-lg"></sl-icon>
               ${t('shell.addFiles')}
@@ -628,6 +638,8 @@ export class AppShell extends LitElement {
 
       <!-- Hidden file drop zone triggered by "Add files" button -->
       <file-drop-zone mode="compact" style="display:none" id="hidden-drop"></file-drop-zone>
+      <!-- Drift notification toast stack (fixed-position, bottom-right) -->
+      <drift-notification .drifts=${[] as DriftEvent[]}></drift-notification>
     `;
   }
 
@@ -762,6 +774,25 @@ export class AppShell extends LitElement {
       contracts: null,
       integrationReport: null,
     });
+  }
+
+  private _complianceStatus(files: AppState['files']): { status: 'pass' | 'warn' | 'fail'; details: ComplianceDetail[] } {
+    if (files.length < 2) {
+      return { status: 'pass', details: [] };
+    }
+    const conflictCount = this._comparisonCtrl.conflictCount;
+    if (conflictCount === 0) {
+      return { status: 'pass', details: [] };
+    }
+    const conflicts = this._comparisonCtrl.conflicts;
+    const details: ComplianceDetail[] = conflicts.map((conflict) => ({
+      eventName: conflict.label,
+      owner: conflict.roles.join(', '),
+      issue: conflict.details,
+      severity: 'warning' as const,
+    }));
+    const status = conflictCount > 3 ? 'fail' : 'warn';
+    return { status, details };
   }
 
   private _onPhaseNavigate(e: CustomEvent<{ phase: string }>) {
