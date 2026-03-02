@@ -18,6 +18,7 @@ import type { ExplorationGap, ExplorationPrompt, ExplorationPattern } from '../a
 import type { ComplianceDetail } from '../artifact/compliance-badge.js';
 import type { DriftEvent } from '../artifact/drift-notification.js';
 import type { ContractEntry } from '../artifact/contract-sidebar.js';
+import type { RankedEvent } from '../visualization/priority-view.js';
 
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
@@ -619,7 +620,11 @@ export class AppShell extends LitElement {
               <comparison-view .files=${files}></comparison-view>
             </sl-tab-panel>
             <sl-tab-panel name="priority">
-              <priority-view></priority-view>
+              <priority-view
+                .events=${this._rankedEvents(files)}
+                @priority-changed=${this._onPriorityChanged}
+                @vote-cast=${this._onVoteCast}
+              ></priority-view>
             </sl-tab-panel>
             <sl-tab-panel name="breakdown">
               <breakdown-editor></breakdown-editor>
@@ -864,6 +869,77 @@ export class AppShell extends LitElement {
 
   private _onContractSelected(_e: CustomEvent<{ eventName: string; owner: string }>) {
     store.setView('contracts');
+  }
+
+  /**
+   * Derive RankedEvent[] from loaded files for the priority-view component.
+   * Deduplicates by event name (first occurrence wins), computes crossRefs,
+   * compositeScore, and tier.
+   * Pure derivation — no side effects.
+   */
+  private _rankedEvents(files: AppState['files']): RankedEvent[] {
+    if (files.length === 0) return [];
+
+    // Build: eventName -> first occurrence data + crossRef count
+    const eventMap = new Map<string, { event: AppState['files'][number]['data']['domain_events'][number]; crossRefs: number }>();
+
+    for (const file of files) {
+      for (const ev of file.data.domain_events) {
+        const existing = eventMap.get(ev.name);
+        if (existing) {
+          existing.crossRefs += 1;
+        } else {
+          eventMap.set(ev.name, { event: ev, crossRefs: 1 });
+        }
+      }
+    }
+
+    const confidenceWeight: Record<string, number> = { CONFIRMED: 3, LIKELY: 2, POSSIBLE: 1 };
+    const directionWeight: Record<string, number> = { outbound: 2, inbound: 1.5, internal: 1 };
+
+    // Max possible raw score: confidenceWeight=3, directionWeight=2, crossRefs=files.length
+    // rawMax = 3 * 2 * (1 + files.length * 0.5)
+    const maxCrossRefs = files.length;
+    const rawMax = 3 * 2 * (1 + maxCrossRefs * 0.5);
+
+    const ranked: RankedEvent[] = [];
+
+    for (const [name, { event, crossRefs }] of eventMap) {
+      const cw = confidenceWeight[event.confidence] ?? 1;
+      const dw = directionWeight[event.integration?.direction ?? 'internal'] ?? 1;
+      const cappedCrossRefs = Math.min(crossRefs, maxCrossRefs);
+      const raw = cw * dw * (1 + cappedCrossRefs * 0.5);
+      const compositeScore = Math.round((raw / rawMax) * 100 * 10) / 10;
+
+      let tier: RankedEvent['tier'];
+      if (compositeScore >= 60) {
+        tier = 'must_have';
+      } else if (compositeScore >= 30) {
+        tier = 'should_have';
+      } else {
+        tier = 'could_have';
+      }
+
+      ranked.push({
+        name,
+        aggregate: event.aggregate,
+        confidence: event.confidence,
+        direction: event.integration?.direction ?? 'internal',
+        crossRefs,
+        compositeScore,
+        tier,
+      });
+    }
+
+    return ranked.sort((a, b) => b.compositeScore - a.compositeScore);
+  }
+
+  private _onPriorityChanged(_e: CustomEvent<{ eventName: string; tier: string }>) {
+    // No-op for now — priority changes are UI-local until a store action is wired
+  }
+
+  private _onVoteCast(_e: CustomEvent<{ eventName: string; direction: 'up' | 'down' }>) {
+    // No-op for now — vote events are UI-local until a store action is wired
   }
 
   private _onPhaseNavigate(e: CustomEvent<{ phase: string }>) {
