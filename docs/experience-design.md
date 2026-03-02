@@ -696,7 +696,7 @@ suggest_priorities(input: {
 
 ```typescript
 create_work_items(input: {
-  sessionCode: string;
+  code: string;
   aggregate: string;
   items: Array<{
     title: string;
@@ -704,8 +704,9 @@ create_work_items(input: {
     acceptanceCriteria: string[];
     complexity: 'S' | 'M' | 'L' | 'XL';
     linkedEvents: string[];
+    dependencies?: string[];
   }>;
-}) → { itemIds: string[] }
+}) → { aggregate: string; created: WorkItem[]; itemIds: string[] }
 
 get_decomposition(input: {
   sessionCode: string;

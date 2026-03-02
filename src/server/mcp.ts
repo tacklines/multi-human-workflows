@@ -1392,6 +1392,7 @@ async function main(): Promise<void> {
       description: 'Batch-create work items from an aggregate decomposition. Returns all created work items with their assigned IDs.',
       inputSchema: {
         code: z.string().describe('Session join code'),
+        aggregate: z.string().describe('Aggregate these work items belong to'),
         items: z.array(
           z.object({
             title: z.string().describe('Work item title'),
@@ -1399,12 +1400,12 @@ async function main(): Promise<void> {
             acceptanceCriteria: z.array(z.string()).describe('Acceptance criteria list'),
             complexity: z.enum(['S', 'M', 'L', 'XL']).describe('Complexity estimate'),
             linkedEvents: z.array(z.string()).describe('Domain event names this work item covers'),
-            dependencies: z.array(z.string()).describe('Work item IDs this depends on'),
+            dependencies: z.array(z.string()).optional().describe('Work item IDs this depends on'),
           })
         ).describe('Work items to create'),
       },
     },
-    ({ code, items }) => {
+    ({ code, aggregate, items }) => {
       const svc = new DecompositionService(
         (c: string) => sessionStore.getSession(c) ?? null,
         eventStore
@@ -1416,9 +1417,11 @@ async function main(): Promise<void> {
           isError: true,
         };
       }
-      const created = items.map((item) => svc.createWorkItem(code, item)).filter(Boolean);
+      const created = items
+        .map((item) => svc.createWorkItem(code, { ...item, dependencies: item.dependencies ?? [] }))
+        .filter((w): w is NonNullable<typeof w> => w !== null);
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ created }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ aggregate, created, itemIds: created.map(w => w.id) }) }],
       };
     }
   );
