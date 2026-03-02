@@ -246,6 +246,7 @@ export const messages: Record<string, string> = {
   'lobby.codeCopiedAriaLabel': 'Session code copied to clipboard',
   'lobby.urlJoinAutoTitle': 'Joining session…',
   'lobby.urlJoinAutoSubtitle': 'Detected session invite link. Joining automatically.',
+  'lobby.submission.success': 'Files uploaded! Loading your session...',
 
   // ---------------------------------------------------------------------------
   // error-boundary

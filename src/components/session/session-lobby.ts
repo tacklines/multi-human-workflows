@@ -328,11 +328,13 @@ export class SessionLobby extends LitElement {
   @state() private _loading = false;
   @state() private _error = '';
   @state() private _submitting = false;
+  @state() private _submissionSuccess = false;
   @state() private _sessionState: SessionState | null = store.get().sessionState;
   @state() private _codeCopied = false;
 
   private _unsubscribe: (() => void) | null = null;
   private _codeCopiedTimer: ReturnType<typeof setTimeout> | null = null;
+  private _autoAdvanceTimer: ReturnType<typeof setTimeout> | null = null;
 
   connectedCallback() {
     super.connectedCallback();
@@ -367,6 +369,10 @@ export class SessionLobby extends LitElement {
     if (this._codeCopiedTimer !== null) {
       clearTimeout(this._codeCopiedTimer);
       this._codeCopiedTimer = null;
+    }
+    if (this._autoAdvanceTimer !== null) {
+      clearTimeout(this._autoAdvanceTimer);
+      this._autoAdvanceTimer = null;
     }
   }
 
@@ -471,12 +477,15 @@ export class SessionLobby extends LitElement {
   private async _submitFiles(files: FileList) {
     if (!this._sessionState) return;
     this._submitting = true;
+    this._submissionSuccess = false;
     this._error = '';
+    let hadError = false;
     try {
       for (const file of Array.from(files)) {
         const result = await loadFile(file);
         if (!result.ok) {
           this._error = `${file.name}: ${result.errors.join(', ')}`;
+          hadError = true;
           continue;
         }
         const res = await fetch(`${API_BASE}/api/sessions/${this._sessionState.code}/submit`, {
@@ -491,12 +500,22 @@ export class SessionLobby extends LitElement {
         if (!res.ok) {
           const body = await res.text();
           this._error = body || `HTTP ${res.status}`;
+          hadError = true;
         }
       }
     } catch (err) {
       this._error = (err as Error).message;
+      hadError = true;
     } finally {
       this._submitting = false;
+    }
+
+    if (!hadError) {
+      this._submissionSuccess = true;
+      this._autoAdvanceTimer = setTimeout(() => {
+        this._autoAdvanceTimer = null;
+        void this._viewCombined();
+      }, 1000);
     }
   }
 
@@ -804,7 +823,14 @@ export class SessionLobby extends LitElement {
               ? html`<sl-alert variant="danger" open class="error-msg">${this._error}</sl-alert>`
               : nothing}
 
-            ${mySubmission
+            ${this._submissionSuccess
+              ? html`
+                  <sl-alert variant="success" open aria-live="polite">
+                    <sl-icon slot="icon" name="check-circle-fill"></sl-icon>
+                    ${t('lobby.submission.success')}
+                  </sl-alert>
+                `
+              : mySubmission
               ? html`
                   <sl-alert variant="success" open>
                     <sl-icon slot="icon" name="check-circle"></sl-icon>
