@@ -47,18 +47,22 @@
 - `z.ZodType<T>` annotation on inline Zod schemas acts as structural alignment test — compiler errors if Zod shape doesn't match TS interface (added: 2026-03-01, dispatch: 2ye)
 
 ### Bounded Context Services
-- When a domain type serves dual purposes (stored record vs computed aggregate), split it: one type for the per-participant stored form (with timestamps), one for the computed view (e.g., CompositeScore) (added: 2026-03-02, dispatch: 3r3.6)
-- Adding fields to Session cascades to 6+ places: Session, SerializedSession, createSession, serializeSession, deserializeSession, session-persistence (toJson/fromJson), plus all test fixtures — now 3+ test files (added: 2026-03-02, dispatch: 3r3.6, updated: 3r3.7)
-- Always verify event field names in `domain-events.ts` against task description — task descriptions may use shorthand that differs from actual Zod schema (added: 2026-03-02, dispatch: 3r3.7)
-- Event payload structure is not uniform: some events use flat fields (PrioritySet), others embed full objects (WorkItemCreated embeds WorkItem) — check the schema, don't assume (added: 2026-03-02, dispatch: 3r3.7)
-
-- When wrapping existing pure functions in event-sourced services, store results in a service-level Map rather than adding Session fields — avoids the 6+ place cascade (added: 2026-03-02, dispatch: 3r3.9)
-- MCP tool handlers are stdio-only and cannot be directly unit-tested — mirror handler logic in test helpers that call SessionStore directly (added: 2026-03-02, dispatch: 3r3.15)
+- When a domain type serves dual purposes (stored record vs computed aggregate), split into per-participant stored form + computed view type (added: 2026-03-02, dispatch: 3r3.6)
+- Adding Session fields cascades to 6+ places (Session, SerializedSession, createSession, serialize/deserialize, persistence, 4+ test fixtures) — prefer service-level Map storage when wrapping existing pure functions (added: 2026-03-02, dispatch: 3r3.6-3r3.9)
+- Always verify event field names in `domain-events.ts` — task descriptions use shorthand; event payloads are not uniform (flat fields vs embedded objects) (added: 2026-03-02, dispatch: 3r3.7)
+- MCP tool handlers are stdio-only — test by mirroring handler logic in helpers that call SessionStore directly (added: 2026-03-02, dispatch: 3r3.15)
 
 ### Session Config Integration
-- Deep-merging a strongly-typed config struct in a generic loop requires `as any` at assignment — sub-interfaces lack index signatures (added: 2026-03-01, dispatch: w6f)
-- Adding a required field to Session/SerializedSession cascades into every test file constructing Session objects — grep for the last field in the struct to find all mock helpers (added: 2026-03-01, dispatch: w6f)
-- When worktree agent adds event already in HEAD, merge conflict is expected — resolve by keeping HEAD version and fixing field name mismatches in new code (added: 2026-03-01, dispatch: w6f)
+- Deep-merging strongly-typed config requires `as any` — sub-interfaces lack index signatures (added: 2026-03-01, dispatch: w6f)
+- Worktree agent re-creating events already in HEAD causes expected merge conflicts — keep HEAD version, fix field name mismatches (added: 2026-03-01, dispatch: w6f)
+
+### MCP Tool Patterns (Phase I-II)
+- MCP tools that wrap bounded context services: instantiate service inline with `getSession` accessor from SessionStore, call service method, return result — no persistent service instance needed (added: 2026-03-02, dispatch: 3r3.13)
+- Template-based domain event suggestion (`suggest_events`): use heuristic pattern matching on aggregate/command names rather than LLM calls — deterministic, testable, fast (added: 2026-03-02, dispatch: 3r3.13)
+
+### Delegation Service Pattern
+- When an event schema uses `eventId` as the record identifier, use the same generated ID for both the event's `eventId` and the stored entity's `id` — makes tracing between events and state trivial (added: 2026-03-01, dispatch: 3r3.8)
+- Service-level Map storage (`Map<sessionCode, Map<entityId, Entity>>`) is the right pattern for approval queues where entries come and go with business decisions (added: 2026-03-01, dispatch: 3r3.8)
 
 ## Cross-Agent Notes
 - Participant type now unified in `src/schema/types.ts` — `SessionParticipant` is an alias. Both layers import from schema/ (added: 2026-03-01, dispatch: xiu)

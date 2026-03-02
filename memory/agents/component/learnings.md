@@ -51,6 +51,14 @@
 - git stash pop in a worktree with concurrent branch activity can surface merge conflicts in package.json/tsconfig — use `git checkout --ours` to restore worktree state (added: 2026-03-01, dispatch: qdu)
 - @storybook/web-components types not installed — story files produce TS2307; treat tsc errors in src/stories/ as pre-existing unless from new component code (added: 2026-03-01, dispatch: qdu)
 
+## Animation Patterns
+- When detecting changes in a computed value derived from multiple properties, store the previous computed value in a private field and compare in `updated()` — cleaner than duplicating the derived value as @state (added: 2026-03-01, dispatch: np8)
+- CSS animation re-triggering: toggle an `animating` class on then off with `setTimeout` matching animation duration — simpler than Web Animations API for one-shot transitions (added: 2026-03-01, dispatch: np8)
+
+## Settings Drawer Patterns
+- When casting a typed sub-config to `Record<string, unknown>` for generic default comparison, use `as unknown as Record<string, unknown>` — direct cast fails TS overlap check when source lacks index signature (added: 2026-03-02, dispatch: z8j)
+- `sl-switch` fires `sl-change` and exposes `.checked` on the target (not `.value`) — cast as `{ checked: boolean }` (added: 2026-03-02, dispatch: z8j)
+
 ## Cross-Agent Notes
 - (from logic) ELK returns top-left (x,y) not center; use `_nodeCx`/`_nodeCy` helpers when computing edge endpoints or zoom targets (added: 2026-02-28)
 - SVG `pointer-events` must be applied via `style=` attribute in Lit svg templates, not as a bare attribute (added: 2026-02-28, dispatch: multi-human-workflows-5ku)
