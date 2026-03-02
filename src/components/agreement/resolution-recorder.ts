@@ -12,6 +12,8 @@ import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
 
+import '../shared/empty-state.js';
+
 /**
  * Quick-resolve approach options with labels and icons.
  * These are the common patterns teams reach for in jam sessions.
@@ -169,6 +171,15 @@ export class ResolutionRecorder extends LitElement {
   @state() private _error = '';
 
   render() {
+    if (!this.overlap) {
+      return html`
+        <empty-state
+          icon="people"
+          heading="${t('emptyState.agreements.heading')}"
+          description="${t('emptyState.agreements.description')}"
+        ></empty-state>
+      `;
+    }
     if (this.existingResolution) {
       return this._renderResolved();
     }

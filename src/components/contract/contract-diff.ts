@@ -10,6 +10,8 @@ import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
 import '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js';
 
+import '../shared/empty-state.js';
+
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const CHANGE_TYPE_CONFIG = {
@@ -237,7 +239,13 @@ export class ContractDiff extends LitElement {
 
   override render() {
     if (!this.bundleBefore || !this.bundleAfter) {
-      return html`<div class="empty">${t('contractDiff.empty')}</div>`;
+      return html`
+        <empty-state
+          icon="file-earmark-check"
+          heading="${t('emptyState.contracts.heading')}"
+          description="${t('emptyState.contracts.description')}"
+        ></empty-state>
+      `;
     }
 
     const diff = this._computeDiff();

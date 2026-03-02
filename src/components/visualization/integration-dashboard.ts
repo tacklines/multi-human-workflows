@@ -9,6 +9,7 @@ import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 
 import './go-no-go-verdict.js';
 import './boundary-map.js';
+import '../shared/empty-state.js';
 
 export interface IntegrationCheck {
   id: string;
@@ -423,6 +424,30 @@ export class IntegrationDashboard extends LitElement {
   // ---- Main render ----
 
   override render() {
+    const hasData = this.checks.length > 0 || this.nodes.length > 0 || this.connections.length > 0;
+
+    if (!hasData) {
+      return html`
+        <div>
+          <div class="top-bar">
+            <h1 class="dashboard-title">${t('integrationDashboard.title')}</h1>
+            <sl-button
+              variant="primary"
+              @click=${this._handleRunChecks}
+              aria-label="${t('integrationDashboard.runChecks.ariaLabel')}"
+            >
+              ${t('integrationDashboard.runChecks.label')}
+            </sl-button>
+          </div>
+          <empty-state
+            icon="rocket-takeoff"
+            heading="${t('emptyState.integration.heading')}"
+            description="${t('emptyState.integration.description')}"
+          ></empty-state>
+        </div>
+      `;
+    }
+
     return html`
       <div>
         <div class="top-bar">

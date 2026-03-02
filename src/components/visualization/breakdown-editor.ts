@@ -13,6 +13,8 @@ import '@shoelace-style/shoelace/dist/components/select/select.js';
 import '@shoelace-style/shoelace/dist/components/option/option.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 
+import '../shared/empty-state.js';
+
 /** A ghost (suggested) work item shown with dashed border before acceptance. */
 export interface WorkItemSuggestion {
   id: string;
@@ -667,10 +669,11 @@ export class BreakdownEditor extends LitElement {
         <!-- Content -->
         ${!hasItems
           ? html`
-            <div class="empty" role="region" aria-label="${t('breakdownEditor.empty')}">
-              <p class="empty-title">${t('breakdownEditor.empty')}</p>
-              <p class="empty-hint">${t('breakdownEditor.emptyHint')}</p>
-            </div>
+            <empty-state
+              icon="diagram-3"
+              heading="${t('emptyState.breakdown.heading')}"
+              description="${t('emptyState.breakdown.description')}"
+            ></empty-state>
           `
           : html`
             <div class="items-list" role="list" aria-label="${t('breakdownEditor.title')}">

@@ -8,6 +8,7 @@ import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import './conflict-card.js';
 import '../shared/event-card.js';
 import '../shared/assumption-list.js';
+import '../shared/empty-state.js';
 
 @customElement('comparison-view')
 export class ComparisonView extends LitElement {
@@ -129,7 +130,13 @@ export class ComparisonView extends LitElement {
 
   render() {
     if (this.files.length < 2) {
-      return html`<div class="empty">${t('comparisonView.empty')}</div>`;
+      return html`
+        <empty-state
+          icon="files"
+          heading="${t('emptyState.comparison.heading')}"
+          description="${t('emptyState.comparison.description')}"
+        ></empty-state>
+      `;
     }
 
     this._comparisonCtrl.setFiles(this.files);

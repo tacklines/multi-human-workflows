@@ -809,6 +809,20 @@ export const messages: Record<string, string> = {
   'emptyState.defaultTitle': 'Nothing here yet',
   'emptyState.defaultDescription': 'There is no content to display.',
 
+  // Phase-specific empty state messages
+  'emptyState.priority.heading': 'No priorities yet',
+  'emptyState.priority.description': 'Load multiple files to start ranking events by importance',
+  'emptyState.breakdown.heading': 'No work items yet',
+  'emptyState.breakdown.description': 'Break ranked events into concrete work items with dependencies',
+  'emptyState.agreements.heading': 'No conflicts to resolve',
+  'emptyState.agreements.description': 'When multiple participants describe the same events differently, resolve them here',
+  'emptyState.contracts.heading': 'No contracts yet',
+  'emptyState.contracts.description': 'Formalize agreements into versioned event contracts',
+  'emptyState.integration.heading': 'Ready to ship?',
+  'emptyState.integration.description': 'Run integration checks to verify all contracts are satisfied',
+  'emptyState.comparison.heading': 'Load two or more files to compare',
+  'emptyState.comparison.description': 'Load storm-prep YAML files from multiple roles to see conflicts, shared events, and overlaps',
+
   // ---------------------------------------------------------------------------
   // phase-ribbon
   // ---------------------------------------------------------------------------

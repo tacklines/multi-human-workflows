@@ -11,6 +11,7 @@ import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 
 import './vote-widget.js';
 import './suggestion-banner.js';
+import '../shared/empty-state.js';
 
 /** Shape of a single ranked domain event. */
 export interface RankedEvent {
@@ -837,10 +838,11 @@ export class PriorityView extends LitElement {
       <!-- Content -->
       ${this.events.length === 0
         ? html`
-            <div class="empty" role="region" aria-label="${t('priorityView.empty')}">
-              <p class="empty-title">${t('priorityView.empty')}</p>
-              <p class="empty-hint">${t('priorityView.emptyHint')}</p>
-            </div>
+            <empty-state
+              icon="sort-up"
+              heading="${t('emptyState.priority.heading')}"
+              description="${t('emptyState.priority.description')}"
+            ></empty-state>
           `
         : isTableMode
         ? this._renderTable()
