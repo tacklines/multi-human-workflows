@@ -253,6 +253,76 @@ export class AppShell extends LitElement {
       }
     }
 
+    /* ── Mobile: auto-collapse sidebar, compact header ── */
+    @media (max-width: 768px) {
+      .app-layout {
+        --sidebar-width: 0;
+        grid-template-columns: 1fr;
+        grid-template-rows: var(--header-height) auto 1fr;
+        grid-template-areas:
+          "header"
+          "ribbon"
+          "main";
+      }
+
+      .sidebar {
+        position: fixed;
+        top: var(--header-height);
+        left: 0;
+        bottom: 0;
+        width: 280px;
+        z-index: 20;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+      }
+
+      /* When sidebar is NOT collapsed on mobile, slide it in as overlay */
+      .app-layout:not(.sidebar-collapsed) .sidebar {
+        transform: translateX(0);
+        box-shadow: 4px 0 12px rgba(0, 0, 0, 0.15);
+      }
+
+      .sidebar-toggle {
+        position: fixed;
+        top: calc(var(--header-height) + 4px);
+        left: 4px;
+        z-index: 25;
+      }
+
+      .header-title {
+        font-size: var(--sl-font-size-medium);
+      }
+
+      /* Hide file pills on very narrow screens */
+      .file-pills {
+        display: none;
+      }
+
+      .header-right {
+        gap: 0.25rem;
+      }
+
+      /* Ensure touch targets are at least 44px */
+      sl-icon-button {
+        min-width: 44px;
+        min-height: 44px;
+      }
+    }
+
+    /* ── Very narrow: further compact ── */
+    @media (max-width: 480px) {
+      .header {
+        padding: 0 0.5rem;
+      }
+
+      .header-title {
+        font-size: var(--sl-font-size-small);
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+
     /* ── Integration ready CTA ── */
     .integration-cta {
       margin-top: 1.5rem;
