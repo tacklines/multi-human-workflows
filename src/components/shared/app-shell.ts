@@ -10,7 +10,7 @@ import { t } from '../../lib/i18n.js';
 import { parseAndValidate } from '../../lib/yaml-loader.js';
 import { registry } from '../../lib/shortcut-registry.js';
 import { deriveExplorationData } from '../../lib/exploration-data.js';
-import { deriveIntegrationData, deriveComplianceStatus, buildIntegrationReport } from '../../lib/integration-data.js';
+import { deriveIntegrationData, deriveComplianceStatus } from '../../lib/integration-data.js';
 import { deriveContractEntries, deriveContractsData, deriveProvenanceChain } from '../../lib/contract-data.js';
 import { deriveRankedEvents, deriveComparisonPriorities } from '../../lib/ranked-events.js';
 import { deriveAgreementsData } from '../../lib/agreements-data.js';
@@ -22,15 +22,13 @@ import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from '../vi
 import type { FlowDiagram } from '../visualization/flow-diagram.js';
 import type { DetailNodeData } from '../visualization/detail-panel.js';
 import type { ExplorationGap, ExplorationPrompt, ExplorationPattern } from '../artifact/exploration-guide.js';
-import type { ComplianceDetail } from '../artifact/compliance-badge.js';
 import type { DriftEvent } from '../artifact/drift-notification.js';
 import type { ContractEntry } from '../artifact/contract-sidebar.js';
 import type { RankedEvent, PrioritySuggestion } from '../visualization/priority-view.js';
-import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visualization/integration-dashboard.js';
 import type { WorkItemSuggestion } from '../visualization/breakdown-editor.js';
 import { suggestDecomposition } from '../../lib/decomposition-heuristics.js';
 import { suggestPriorities } from '../../lib/priority-heuristics.js';
-import type { WorkItem, ContractBundle, UnresolvedItem, PendingApproval, IntegrationReport, Draft, BoundaryAssumption, DelegationLevel, ConflictResolution, EventPriority, SessionConfig } from '../../schema/types.js';
+import type { WorkItem, ContractBundle, UnresolvedItem, PendingApproval, Draft, BoundaryAssumption, DelegationLevel, ConflictResolution, EventPriority, SessionConfig } from '../../schema/types.js';
 import { DEFAULT_SESSION_CONFIG } from '../../schema/types.js';
 import { loadSessionConfig, saveSessionConfig } from '../../lib/session-config-persistence.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
@@ -54,7 +52,6 @@ import '../artifact/contract-sidebar.js';
 import '../artifact/file-drop-zone.js';
 import '../session/session-lobby.js';
 import '../session/spark-canvas.js';
-import '../session/draft-editor.js';
 import '../session/participant-registry.js';
 import './phase-ribbon.js';
 import '../artifact/card-view.js';
@@ -72,20 +69,14 @@ import './settings-gear.js';
 import './settings-drawer.js';
 import type { SettingItem } from './settings-drawer.js';
 import './help-tip.js';
+import './breakdown-tab.js';
+import './agreements-tab.js';
+import './contracts-tab.js';
+import './integration-tab.js';
 import './approval-queue.js';
 import type { ApprovalDecidedDetail } from './approval-queue.js';
 import '../visualization/priority-view.js';
-import '../visualization/breakdown-editor.js';
-import '../visualization/coverage-matrix.js';
-import '../visualization/dependency-graph.js';
-import '../agreement/resolution-recorder.js';
-import '../agreement/ownership-grid.js';
-import '../agreement/flag-manager.js';
-import '../contract/contract-diff.js';
-import '../contract/schema-display.js';
-import '../contract/provenance-explorer.js';
 import type { ProvenanceStep } from '../contract/provenance-explorer.js';
-import '../visualization/integration-dashboard.js';
 import './suggestion-bar.js';
 import './onboarding-overlay.js';
 import './milestone-celebration.js';
@@ -239,24 +230,6 @@ export class AppShell extends LitElement {
       margin-left: 0.25rem;
     }
 
-    /* ── Breakdown layout ── */
-    .breakdown-layout {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
-      align-items: start;
-    }
-    .breakdown-sidebar {
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-    }
-    @media (max-width: 900px) {
-      .breakdown-layout {
-        grid-template-columns: 1fr;
-      }
-    }
-
     /* ── Mobile: auto-collapse sidebar, compact header ── */
     @media (max-width: 768px) {
       .app-layout {
@@ -327,68 +300,6 @@ export class AppShell extends LitElement {
       }
     }
 
-    /* ── Integration ready CTA ── */
-    .integration-cta {
-      margin-top: 1.5rem;
-      border-radius: 12px;
-      padding: 1.5rem;
-      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-      border: 2px solid #93c5fd;
-      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
-      display: flex;
-      align-items: center;
-      gap: 1.25rem;
-      animation: integration-cta-in 400ms ease-out;
-    }
-
-    @keyframes integration-cta-in {
-      from {
-        opacity: 0;
-        transform: translateY(-8px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .integration-cta {
-        animation: none;
-      }
-    }
-
-    .integration-cta-icon {
-      flex-shrink: 0;
-      width: 3rem;
-      height: 3rem;
-      border-radius: 50%;
-      background: #1d4ed8;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      line-height: 1;
-    }
-
-    .integration-cta-body {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .integration-cta-heading {
-      font-size: 1.125rem;
-      font-weight: 700;
-      color: #1e3a8a;
-      margin: 0 0 0.25rem;
-    }
-
-    .integration-cta-description {
-      font-size: 0.9375rem;
-      color: #1e40af;
-      margin: 0;
-    }
   `;
 
   private _storeCtrl = new StoreController(this, (s) => s);
@@ -410,8 +321,6 @@ export class AppShell extends LitElement {
   @state() private _workItems: WorkItem[] = [];
   @state() private _resolutions: ConflictResolution[] = [];
   @state() private _flaggedItems: UnresolvedItem[] = [];
-  @state() private _previousContractBundle: ContractBundle | null = null;
-  @state() private _lastContractBundle: ContractBundle | null = null;
   @state() private _tierOverrides = new Map<string, 'must_have' | 'should_have' | 'could_have'>();
   @state() private _votes: Record<string, { up: string[]; down: string[] }> = {};
   @state() private _pendingApprovals: PendingApproval[] = [];
@@ -966,179 +875,78 @@ export class AppShell extends LitElement {
               </help-tip>
             </sl-tab-panel>
             <sl-tab-panel name="breakdown">
-              <help-tip tip-key="breakdown-editor" message=${t('helpTip.breakdownEditor')} ?active=${files.length >= 2}>
-                ${(() => {
-                  const eventNames = this._breakdownEventNames(files);
-                  const decompositionSuggestions = this._computeDecompositionSuggestions(files)
-                    .filter(s => !this._dismissedDecompositionIds.has(s.id));
-                  return html`
-                    <div class="breakdown-layout">
-                      <breakdown-editor
-                        .events=${eventNames}
-                        .workItems=${this._workItems}
-                        .suggestions=${decompositionSuggestions}
-                        @work-item-created=${this._onWorkItemCreated}
-                        @work-item-updated=${this._onWorkItemUpdated}
-                        @suggestion-accepted=${this._onDecompositionSuggestionAccepted}
-                        @suggestion-dismissed=${this._onDecompositionSuggestionDismissed}
-                      ></breakdown-editor>
-                      <div class="breakdown-sidebar">
-                        <coverage-matrix
-                          .events=${eventNames}
-                          .workItems=${this._workItems}
-                        ></coverage-matrix>
-                        <dependency-graph
-                          .workItems=${this._workItems}
-                          @dependency-created=${this._onDependencyCreated}
-                        ></dependency-graph>
-                      </div>
-                    </div>
-                    <draft-editor
-                      .draft=${this._activeDraft}
-                      @draft-change=${this._onDraftChange}
-                      @draft-publish=${this._onDraftPublish}
-                    ></draft-editor>
-                  `;
-                })()}
-              </help-tip>
+              <breakdown-tab
+                .events=${this._breakdownEventNames(files)}
+                .workItems=${this._workItems}
+                .suggestions=${this._computeDecompositionSuggestions(files).filter(s => !this._dismissedDecompositionIds.has(s.id))}
+                .activeDraft=${this._activeDraft}
+                @work-item-created=${this._onWorkItemCreated}
+                @work-item-updated=${this._onWorkItemUpdated}
+                @suggestion-accepted=${this._onDecompositionSuggestionAccepted}
+                @suggestion-dismissed=${this._onDecompositionSuggestionDismissed}
+                @dependency-created=${this._onDependencyCreated}
+                @draft-change=${this._onDraftChange}
+                @draft-publish=${this._onDraftPublish}
+              ></breakdown-tab>
             </sl-tab-panel>
             <sl-tab-panel name="agreements">
-              <help-tip tip-key="agreements-tab" message=${t('helpTip.agreementsTab')} ?active=${files.length >= 2}>
-                ${(() => {
-                  const data = this._agreementsData(files);
-                  const sessionCode = this.appState.sessionState?.code ?? '';
-                  const participantName = this.appState.sessionState
-                    ? (this.appState.sessionState.session.participants.find(
-                        (p) => p.id === this.appState.sessionState!.participantId
-                      )?.name ?? '')
-                    : '';
-                  return html`
-                    ${data.overlaps.length > 0
-                      ? data.overlaps.map((overlap, i) => {
-                          const recorder = html`
-                            <resolution-recorder
-                              .overlap=${overlap}
-                              sessionCode=${sessionCode}
-                              participantName=${participantName}
-                              .suggestion=${this._suggestions.get(overlap.label) ?? null}
-                              ?suggestionLoading=${this._suggestionLoadingLabels.has(overlap.label)}
-                              .existingResolution=${this._resolutions.find((r) => r.overlapLabel === overlap.label) ?? null}
-                              @resolution-recorded=${this._onResolutionRecorded}
-                              @suggestion-requested=${this._onSuggestionRequested}
-                            ></resolution-recorder>
-                          `;
-                          return i === 0
-                            ? html`<help-tip tip-key="conflict-resolve" message=${t('helpTip.conflictResolve')} ?active=${true}>${recorder}</help-tip>`
-                            : recorder;
-                        })
-                      : html`<empty-state
-                      icon="people"
-                      heading="${t('emptyState.agreements.heading')}"
-                      description="${t('emptyState.agreements.description')}"
-                    ></empty-state>`
-                    }
-                    <ownership-grid
-                      .aggregates=${data.aggregates}
-                      .roles=${data.roles}
-                      sessionCode=${sessionCode}
-                      participantName=${participantName}
-                    ></ownership-grid>
-                    <flag-manager
-                      .items=${this._flaggedItems}
-                      sessionCode=${sessionCode}
-                      participantName=${participantName}
-                      .overlapLabels=${data.overlaps.map((o) => o.label)}
-                      @item-flagged=${(e: CustomEvent<{ item: UnresolvedItem }>) => {
-                        this._flaggedItems = [...this._flaggedItems, e.detail.item];
-                      }}
-                    ></flag-manager>
-                  `;
-                })()}
-              </help-tip>
+              ${(() => {
+                const data = this._agreementsData(files);
+                return html`
+                  <agreements-tab
+                    .overlaps=${data.overlaps}
+                    .aggregates=${data.aggregates}
+                    .roles=${data.roles}
+                    sessionCode=${this.appState.sessionState?.code ?? ''}
+                    participantName=${participantName}
+                    .suggestions=${this._suggestions}
+                    .suggestionLoadingLabels=${this._suggestionLoadingLabels}
+                    .resolutions=${this._resolutions}
+                    .flaggedItems=${this._flaggedItems}
+                    @resolution-recorded=${this._onResolutionRecorded}
+                    @suggestion-requested=${this._onSuggestionRequested}
+                    @item-flagged=${(e: CustomEvent<{ item: UnresolvedItem }>) => {
+                      this._flaggedItems = [...this._flaggedItems, e.detail.item];
+                    }}
+                  ></agreements-tab>
+                `;
+              })()}
             </sl-tab-panel>
             <sl-tab-panel name="contracts">
-              <help-tip tip-key="contracts-tab" message=${t('helpTip.contractsTab')} ?active=${files.length >= 2}>
-                ${(() => {
-                  const data = this._contractsData(files);
-                  // Track bundle changes for diff: when contract count changes, rotate bundles
-                  const currentCount = data.bundle.eventContracts.length;
-                  const lastCount = this._lastContractBundle?.eventContracts.length ?? 0;
-                  if (currentCount > 0 && currentCount !== lastCount) {
-                    this._previousContractBundle = this._lastContractBundle;
-                    this._lastContractBundle = data.bundle;
-                  }
-                  const compliance = this._complianceStatus(files);
-                  const showIntegrationCta =
-                    this._workItems.length > 0 &&
-                    compliance.status === 'pass' &&
-                    data.bundle.eventContracts.length > 0;
-                  return html`
-                    <contract-diff
-                      .bundleBefore=${this._previousContractBundle}
-                      .bundleAfter=${data.bundle}
-                    ></contract-diff>
-                    <schema-display
-                      .schema=${data.schemas}
-                      label=${t('shell.contracts.schemaLabel')}
-                    ></schema-display>
-                    <provenance-explorer
-                      .chain=${this._provenanceChain(files)}
-                      subject=${t('shell.contracts.provenanceSubject')}
-                    ></provenance-explorer>
-                    ${showIntegrationCta ? html`
-                      <div
-                        class="integration-cta"
-                        role="status"
-                        aria-label="${t('shell.contracts.integrationCta.heading')}: ${t('shell.contracts.integrationCta.description')}"
-                      >
-                        <div class="integration-cta-icon" aria-hidden="true">&#10003;</div>
-                        <div class="integration-cta-body">
-                          <div class="integration-cta-heading">${t('shell.contracts.integrationCta.heading')}</div>
-                          <p class="integration-cta-description">${t('shell.contracts.integrationCta.description')}</p>
-                        </div>
-                        <sl-button
-                          variant="primary"
-                          size="large"
-                          aria-label="${t('shell.contracts.integrationCta.button')}"
-                          @click=${() => {
-                            this.dispatchEvent(new CustomEvent('integration-check-requested', {
-                              bubbles: true,
-                              composed: true,
-                            }));
-                            this._onIntegrationCheckRequested();
-                          }}
-                        >${t('shell.contracts.integrationCta.button')}</sl-button>
-                      </div>
-                    ` : ''}
-                  `;
-                })()}
-              </help-tip>
+              ${(() => {
+                const data = this._contractsData(files);
+                return html`
+                  <contracts-tab
+                    .bundle=${data.bundle}
+                    .schemas=${data.schemas}
+                    .compliance=${this._complianceStatus(files)}
+                    .provenanceChain=${this._provenanceChain(files)}
+                    .workItemCount=${this._workItems.length}
+                    @integration-check-requested=${this._onIntegrationCheckRequested}
+                  ></contracts-tab>
+                `;
+              })()}
             </sl-tab-panel>
             <sl-tab-panel name="integration">
-              <help-tip tip-key="integration-dashboard" message=${t('helpTip.integrationDashboard')} ?active=${files.length >= 2}>
-                ${(() => {
-                  const data = this._integrationData(files);
-                  const contractsData = this._contractsData(files);
-                  const integrationReport = buildIntegrationReport(
-                    data,
-                    contractsData.bundle.eventContracts.map(ec => ec.eventName),
-                  );
-                  return html`
-                    <integration-dashboard
-                      .checks=${data.checks}
-                      .nodes=${data.nodes}
-                      .connections=${data.connections}
-                      verdict=${data.verdict}
-                      verdictSummary=${data.verdictSummary}
-                      contractCount=${data.contractCount}
-                      aggregateCount=${data.aggregateCount}
-                      .integrationReport=${integrationReport}
-                      @create-work-item-requested=${this._onCreateWorkItemFromCheck}
-                      @run-checks-requested=${this._onRunChecks}
-                    ></integration-dashboard>
-                  `;
-                })()}
-              </help-tip>
+              ${(() => {
+                const data = this._integrationData(files);
+                const contractsData = this._contractsData(files);
+                return html`
+                  <integration-tab
+                    .checks=${data.checks}
+                    .nodes=${data.nodes}
+                    .connections=${data.connections}
+                    verdict=${data.verdict}
+                    verdictSummary=${data.verdictSummary}
+                    .contractCount=${data.contractCount}
+                    .aggregateCount=${data.aggregateCount}
+                    .sourceContracts=${contractsData.bundle.eventContracts.map(ec => ec.eventName)}
+                    ?active=${activeView === 'integration'}
+                    @create-work-item-requested=${this._onCreateWorkItemFromCheck}
+                    @run-checks-requested=${this._onRunChecks}
+                  ></integration-tab>
+                `;
+              })()}
             </sl-tab-panel>
           </sl-tab-group>
           <suggestion-bar
