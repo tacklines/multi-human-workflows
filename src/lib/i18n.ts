@@ -760,6 +760,38 @@ export const messages: Record<string, string> = {
   'integrationDashboard.verdict.go.summary': 'All checks pass. Ready to ship.',
   'integrationDashboard.verdict.noGo.summary': '{{count}} issue(s) require resolution.',
   'integrationDashboard.verdict.caution.summary': 'All critical checks pass, but {{count}} advisory item(s) found.',
+
+  // ---------------------------------------------------------------------------
+  // help-tip
+  // ---------------------------------------------------------------------------
+  'helpTip.gotIt': 'Got it',
+  'helpTip.dismiss': 'Dismiss help tip',
+  'helpTip.comparison-view': 'These are events that appear in multiple participants\u2019 submissions. Amber means they overlap but differ \u2014 the same event has different definitions.',
+  'helpTip.conflict-resolve': 'Choose how your team wants to handle this overlap. Most teams start with Merge.',
+  'helpTip.priority-view': 'Drag events between columns to set priority. Scores are computed from confidence, complexity, and how many participants reference the event.',
+  'helpTip.breakdown-editor': 'Break large events into smaller, more focused domain events. Each slice should represent a single meaningful state change.',
+  'helpTip.integration-dashboard': 'This dashboard shows how domain events flow between services and external systems. Green means confirmed integration; amber means assumed.',
+  'helpTip.file-drop': 'Drop your storm-prep YAML file here to load your domain events. You can load multiple files to compare roles.',
+
+  // ---------------------------------------------------------------------------
+  // onboarding-overlay
+  // ---------------------------------------------------------------------------
+  'onboardingOverlay.title': 'Welcome to Event Storming Visualizer',
+  'onboardingOverlay.description': 'This tool helps teams discover and align on domain events. Upload your event files, explore the flow, and collaborate in real time.',
+  'onboardingOverlay.step1.label': 'Upload your YAML file',
+  'onboardingOverlay.step2.label': 'Explore the event flow',
+  'onboardingOverlay.step3.label': 'Collaborate with your team',
+  'onboardingOverlay.getStarted': 'Get Started',
+  'onboardingOverlay.skip': 'Skip intro',
+  'onboardingOverlay.ariaLabel': 'Welcome onboarding overlay',
+  'onboardingOverlay.closeAriaLabel': 'Close onboarding overlay',
+  'onboardingOverlay.stepsAriaLabel': 'Three steps to get started',
+
+  // ---------------------------------------------------------------------------
+  // empty-state
+  // ---------------------------------------------------------------------------
+  'emptyState.defaultTitle': 'Nothing here yet',
+  'emptyState.defaultDescription': 'There is no content to display.',
 };
 
 /**
