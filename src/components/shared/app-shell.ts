@@ -12,6 +12,8 @@ import { registry } from '../../lib/shortcut-registry.js';
 import { computeWorkflowStatus } from '../../lib/workflow-engine.js';
 import { computeSessionStatus } from '../../lib/prep-completeness.js';
 import type { SuggestionContext } from '../../lib/format-suggestion.js';
+import type { ResolutionSuggestion } from '../../lib/integration-heuristics.js';
+import { suggestResolutionHeuristic } from '../../lib/integration-heuristics.js';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from '../visualization/flow-minimap.js';
 import type { FlowDiagram } from '../visualization/flow-diagram.js';
 import type { DetailNodeData } from '../visualization/detail-panel.js';
@@ -273,6 +275,8 @@ export class AppShell extends LitElement {
   @state() private _sectionSettingsOpen = false;
   @state() private _sectionSettingsName = '';
   @state() private _delegationLevel: DelegationLevel = 'assisted';
+  @state() private _suggestions: Map<string, ResolutionSuggestion> = new Map();
+  @state() private _suggestionLoadingLabels: Set<string> = new Set();
   private _prevMilestoneState: MilestoneState = {
     artifactCount: 0,
     participantCount: 0,
@@ -821,7 +825,11 @@ export class AppShell extends LitElement {
                           .overlap=${overlap}
                           sessionCode=${sessionCode}
                           participantName=${participantName}
+                          .suggestion=${this._suggestions.get(overlap.label) ?? null}
+                          ?suggestionLoading=${this._suggestionLoadingLabels.has(overlap.label)}
+                          .existingResolution=${this._resolutions.find((r) => r.overlapLabel === overlap.label) ?? null}
                           @resolution-recorded=${this._onResolutionRecorded}
+                          @suggestion-requested=${this._onSuggestionRequested}
                         ></resolution-recorder>
                       `)
                     : html`<resolution-recorder></resolution-recorder>`
@@ -1846,6 +1854,57 @@ export class AppShell extends LitElement {
       this._resolutions = this._resolutions.map((r, i) => (i === existing ? resolution : r));
     } else {
       this._resolutions = [...this._resolutions, resolution];
+    }
+  }
+
+  private _onSuggestionRequested(e: CustomEvent<{ overlapLabel: string }>) {
+    const { overlapLabel } = e.detail;
+    // Skip if already loading or already have a suggestion for this label
+    if (this._suggestionLoadingLabels.has(overlapLabel) || this._suggestions.has(overlapLabel)) {
+      return;
+    }
+
+    // Mark as loading
+    this._suggestionLoadingLabels = new Set(this._suggestionLoadingLabels).add(overlapLabel);
+
+    if (this.appState.sessionState?.code) {
+      // Session mode: fetch from API
+      const sessionCode = this.appState.sessionState.code;
+      const apiBase = 'http://localhost:3002';
+      fetch(`${apiBase}/api/sessions/${sessionCode}/suggest-resolution`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ overlapLabel }),
+      })
+        .then((res) => res.json())
+        .then((body: { suggestion: ResolutionSuggestion }) => {
+          const updated = new Map(this._suggestions);
+          updated.set(overlapLabel, body.suggestion);
+          this._suggestions = updated;
+        })
+        .catch(() => {
+          // On API failure, fall back to heuristic
+          const overlapKind = this._comparisonCtrl.overlaps.find((o) => o.label === overlapLabel)?.kind ?? 'same-name';
+          const suggestion = suggestResolutionHeuristic(overlapKind, overlapLabel);
+          const updated = new Map(this._suggestions);
+          updated.set(overlapLabel, suggestion);
+          this._suggestions = updated;
+        })
+        .finally(() => {
+          const remaining = new Set(this._suggestionLoadingLabels);
+          remaining.delete(overlapLabel);
+          this._suggestionLoadingLabels = remaining;
+        });
+    } else {
+      // Solo/offline mode: use heuristic immediately
+      const overlapKind = this._comparisonCtrl.overlaps.find((o) => o.label === overlapLabel)?.kind ?? 'same-name';
+      const suggestion = suggestResolutionHeuristic(overlapKind, overlapLabel);
+      const updated = new Map(this._suggestions);
+      updated.set(overlapLabel, suggestion);
+      this._suggestions = updated;
+      const remaining = new Set(this._suggestionLoadingLabels);
+      remaining.delete(overlapLabel);
+      this._suggestionLoadingLabels = remaining;
     }
   }
 

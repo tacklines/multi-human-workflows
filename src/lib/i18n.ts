@@ -299,6 +299,11 @@ export const messages: Record<string, string> = {
   'resolutionRecorder.resolvedBy': 'Resolved by {{names}}',
   'resolutionRecorder.resolvedAriaLabel': 'Conflict resolved',
   'resolutionRecorder.error.descriptionRequired': 'Please describe the resolution.',
+  'resolutionRecorder.suggestion.loading': 'Analyzing conflict...',
+  'resolutionRecorder.suggestion.banner': 'AI Suggestion',
+  'resolutionRecorder.suggestion.confidence': '{{confidence}}% confidence',
+  'resolutionRecorder.suggestion.apply': 'Apply',
+  'resolutionRecorder.suggestion.dismiss': 'Dismiss',
 
   // ---------------------------------------------------------------------------
   // ownership-grid

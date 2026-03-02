@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { ConflictResolution } from '../../schema/types.js';
 import type { Overlap } from '../../lib/comparison.js';
+import type { ResolutionSuggestion } from '../../lib/integration-heuristics.js';
 import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
@@ -11,6 +12,7 @@ import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
+import '@shoelace-style/shoelace/dist/components/skeleton/skeleton.js';
 
 import '../shared/empty-state.js';
 import '../shared/domain-tooltip.js';
@@ -149,6 +151,72 @@ export class ResolutionRecorder extends LitElement {
       color: #9ca3af;
       font-style: italic;
     }
+
+    /* ── Suggestion banner ── */
+    .suggestion-banner {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 0.625rem 0.75rem;
+      background: #eff6ff;
+      border-left: 3px solid var(--sl-color-primary-500, #3b82f6);
+      border-radius: 6px;
+      margin-bottom: 0.75rem;
+    }
+
+    .suggestion-banner-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .suggestion-banner-title {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: #1d4ed8;
+    }
+
+    .suggestion-banner-title sl-icon {
+      font-size: 0.9375rem;
+    }
+
+    .suggestion-confidence {
+      font-size: 0.75rem;
+      color: #3b82f6;
+      font-weight: 500;
+    }
+
+    .suggestion-reasoning {
+      font-size: 0.8125rem;
+      color: #374151;
+      line-height: 1.4;
+    }
+
+    .suggestion-actions {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    /* ── Suggestion loading skeleton ── */
+    .suggestion-skeleton {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 0.625rem 0.75rem;
+      background: #eff6ff;
+      border-left: 3px solid var(--sl-color-primary-300, #93c5fd);
+      border-radius: 6px;
+      margin-bottom: 0.75rem;
+    }
+
+    .suggestion-skeleton sl-skeleton {
+      --border-radius: 4px;
+    }
   `;
 
   /** The overlap/conflict this recorder is attached to */
@@ -166,10 +234,18 @@ export class ResolutionRecorder extends LitElement {
   /** If already resolved, show the existing resolution instead of the picker */
   @property({ attribute: false }) existingResolution: ConflictResolution | null = null;
 
+  /** AI-generated suggestion for this conflict, or null if none yet */
+  @property({ attribute: false }) suggestion: ResolutionSuggestion | null = null;
+
+  /** True while the suggestion is being computed — shows a loading skeleton */
+  @property({ type: Boolean }) suggestionLoading = false;
+
   @state() private _selectedApproach: QuickApproach | null = null;
   @state() private _customText = '';
   @state() private _loading = false;
   @state() private _error = '';
+  @state() private _suggestionDismissed = false;
+  @state() private _suggestionRequested = false;
 
   render() {
     if (!this.overlap) {
@@ -183,6 +259,20 @@ export class ResolutionRecorder extends LitElement {
     }
     if (this.existingResolution) {
       return this._renderResolved();
+    }
+    // Fire suggestion-requested once per overlap when no suggestion and not dismissed
+    if (!this._suggestionRequested && !this.existingResolution && !this.suggestion && !this._suggestionDismissed) {
+      this._suggestionRequested = true;
+      // Schedule microtask so event fires after initial render settles
+      Promise.resolve().then(() => {
+        this.dispatchEvent(
+          new CustomEvent('suggestion-requested', {
+            detail: { overlapLabel: this.overlap.label },
+            bubbles: true,
+            composed: true,
+          })
+        );
+      });
     }
     return this._renderRecorder();
   }
@@ -205,6 +295,66 @@ export class ResolutionRecorder extends LitElement {
     `;
   }
 
+  private _renderSuggestion() {
+    if (this._suggestionDismissed) return nothing;
+
+    // Loading skeleton
+    if (this.suggestionLoading && !this.suggestion) {
+      return html`
+        <div class="suggestion-skeleton" role="status" aria-label="${t('resolutionRecorder.suggestion.loading')}">
+          <sl-skeleton style="width: 40%; height: 1rem;"></sl-skeleton>
+          <sl-skeleton style="width: 90%; height: 0.875rem;"></sl-skeleton>
+          <sl-skeleton style="width: 70%; height: 0.875rem;"></sl-skeleton>
+        </div>
+      `;
+    }
+
+    if (!this.suggestion) return nothing;
+
+    const confidenceText = t('resolutionRecorder.suggestion.confidence', {
+      confidence: String(Math.round(this.suggestion.confidence * 100)),
+    });
+
+    return html`
+      <div class="suggestion-banner" role="complementary" aria-label="${t('resolutionRecorder.suggestion.banner')}">
+        <div class="suggestion-banner-header">
+          <span class="suggestion-banner-title">
+            <sl-icon name="stars" aria-hidden="true"></sl-icon>
+            ${t('resolutionRecorder.suggestion.banner')}
+          </span>
+          <span class="suggestion-confidence">${confidenceText}</span>
+        </div>
+        <p class="suggestion-reasoning">${this.suggestion.reasoning}</p>
+        <div class="suggestion-actions">
+          <sl-button
+            size="small"
+            variant="primary"
+            @click=${this._applySuggestion}
+          >
+            ${t('resolutionRecorder.suggestion.apply')}
+          </sl-button>
+          <sl-button
+            size="small"
+            variant="text"
+            @click=${() => { this._suggestionDismissed = true; }}
+            aria-label="${t('resolutionRecorder.suggestion.dismiss')}"
+          >
+            ${t('resolutionRecorder.suggestion.dismiss')}
+          </sl-button>
+        </div>
+      </div>
+    `;
+  }
+
+  private _applySuggestion() {
+    if (!this.suggestion) return;
+    const approach = this.suggestion.approach as QuickApproach;
+    this._selectedApproach = approach;
+    this._customText = this.suggestion.resolution;
+    this._suggestionDismissed = true;
+    this._error = '';
+  }
+
   private _renderRecorder() {
     const needsText = this._selectedApproach === 'custom' || this._selectedApproach !== null;
     const canSubmit =
@@ -213,6 +363,9 @@ export class ResolutionRecorder extends LitElement {
 
     return html`
       <div role="group" aria-label="${t('resolutionRecorder.groupAriaLabel', { label: this.overlap?.label ?? 'conflict' })}">
+        <!-- AI suggestion banner (renders above approach picker) -->
+        ${this._renderSuggestion()}
+
         <!-- Quick-approach pill buttons -->
         <div class="approach-row" role="group" aria-label="${t('resolutionRecorder.approachGroupAriaLabel')}">
           ${QUICK_APPROACHES.map(
