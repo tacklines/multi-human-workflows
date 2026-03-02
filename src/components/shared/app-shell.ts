@@ -44,6 +44,7 @@ import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
 import '@shoelace-style/shoelace/dist/components/tag/tag.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
+import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 
 import '../artifact/exploration-guide.js';
 import '../artifact/compliance-badge.js';
@@ -778,38 +779,50 @@ export class AppShell extends LitElement {
             <sl-tab slot="nav" panel="flow" ?active=${activeView === 'flow'}>
               ${t('shell.tab.flow')}
             </sl-tab>
-            <sl-tab slot="nav" panel="comparison" ?active=${activeView === 'comparison'}
-              ?disabled=${files.length < 2}>
-              ${t('shell.tab.conflicts')}
-              ${conflictCount > 0
-                ? html`<sl-badge class="conflict-badge" variant="warning" pill>${conflictCount}</sl-badge>`
-                : nothing}
-              <settings-gear sectionName="comparison"></settings-gear>
-            </sl-tab>
-            <sl-tab slot="nav" panel="priority" ?active=${activeView === 'priority'}
-              ?disabled=${files.length < 2}>
-              ${t('shell.tab.priority')}
-              <settings-gear sectionName="priority"></settings-gear>
-            </sl-tab>
-            <sl-tab slot="nav" panel="breakdown" ?active=${activeView === 'breakdown'}
-              ?disabled=${files.length < 2}>
-              ${t('shell.tab.breakdown')}
-            </sl-tab>
-            <sl-tab slot="nav" panel="agreements" ?active=${activeView === 'agreements'}
-              ?disabled=${files.length < 2}>
-              ${t('shell.tab.agreements')}
-              <settings-gear sectionName="agree"></settings-gear>
-            </sl-tab>
-            <sl-tab slot="nav" panel="contracts" ?active=${activeView === 'contracts'}
-              ?disabled=${files.length < 2}>
-              ${t('shell.tab.contracts')}
-              <settings-gear sectionName="contracts"></settings-gear>
-            </sl-tab>
-            <sl-tab slot="nav" panel="integration" ?active=${activeView === 'integration'}
-              ?disabled=${files.length < 2}>
-              ${t('shell.tab.integration')}
-              <settings-gear sectionName="integration"></settings-gear>
-            </sl-tab>
+            <sl-tooltip content=${t('shell.tab.comparison.locked')} ?disabled=${files.length >= 2}>
+              <sl-tab slot="nav" panel="comparison" ?active=${activeView === 'comparison'}
+                ?disabled=${files.length < 2}>
+                ${t('shell.tab.conflicts')}
+                ${conflictCount > 0
+                  ? html`<sl-badge class="conflict-badge" variant="warning" pill>${conflictCount}</sl-badge>`
+                  : nothing}
+                <settings-gear sectionName="comparison"></settings-gear>
+              </sl-tab>
+            </sl-tooltip>
+            <sl-tooltip content=${t('shell.tab.priority.locked')} ?disabled=${files.length >= 2}>
+              <sl-tab slot="nav" panel="priority" ?active=${activeView === 'priority'}
+                ?disabled=${files.length < 2}>
+                ${t('shell.tab.priority')}
+                <settings-gear sectionName="priority"></settings-gear>
+              </sl-tab>
+            </sl-tooltip>
+            <sl-tooltip content=${t('shell.tab.breakdown.locked')} ?disabled=${files.length >= 2}>
+              <sl-tab slot="nav" panel="breakdown" ?active=${activeView === 'breakdown'}
+                ?disabled=${files.length < 2}>
+                ${t('shell.tab.breakdown')}
+              </sl-tab>
+            </sl-tooltip>
+            <sl-tooltip content=${t('shell.tab.agreements.locked')} ?disabled=${files.length >= 2}>
+              <sl-tab slot="nav" panel="agreements" ?active=${activeView === 'agreements'}
+                ?disabled=${files.length < 2}>
+                ${t('shell.tab.agreements')}
+                <settings-gear sectionName="agree"></settings-gear>
+              </sl-tab>
+            </sl-tooltip>
+            <sl-tooltip content=${t('shell.tab.contracts.locked')} ?disabled=${files.length >= 2}>
+              <sl-tab slot="nav" panel="contracts" ?active=${activeView === 'contracts'}
+                ?disabled=${files.length < 2}>
+                ${t('shell.tab.contracts')}
+                <settings-gear sectionName="contracts"></settings-gear>
+              </sl-tab>
+            </sl-tooltip>
+            <sl-tooltip content=${t('shell.tab.integration.locked')} ?disabled=${files.length >= 2}>
+              <sl-tab slot="nav" panel="integration" ?active=${activeView === 'integration'}
+                ?disabled=${files.length < 2}>
+                ${t('shell.tab.integration')}
+                <settings-gear sectionName="integration"></settings-gear>
+              </sl-tab>
+            </sl-tooltip>
 
             <sl-tab-panel name="cards">
               <card-view
