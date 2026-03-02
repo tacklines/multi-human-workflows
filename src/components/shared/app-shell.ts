@@ -9,6 +9,7 @@ import { t } from '../../lib/i18n.js';
 import { parseAndValidate } from '../../lib/yaml-loader.js';
 import { registry } from '../../lib/shortcut-registry.js';
 import { computeWorkflowStatus } from '../../lib/workflow-engine.js';
+import type { SuggestionContext } from '../../lib/format-suggestion.js';
 import type { MinimapNode, MinimapEdge, ViewTransform, GraphBounds } from '../visualization/flow-minimap.js';
 import type { FlowDiagram } from '../visualization/flow-diagram.js';
 import type { DetailNodeData } from '../visualization/detail-panel.js';
@@ -45,6 +46,7 @@ import '../contract/contract-diff.js';
 import '../contract/schema-display.js';
 import '../visualization/integration-dashboard.js';
 import '../visualization/go-no-go-verdict.js';
+import './suggestion-bar.js';
 
 @customElement('app-shell')
 export class AppShell extends LitElement {
@@ -590,6 +592,13 @@ export class AppShell extends LitElement {
               <go-no-go-verdict></go-no-go-verdict>
             </sl-tab-panel>
           </sl-tab-group>
+          <suggestion-bar
+            .status=${this._workflowStatus(files)}
+            .context=${{
+              sessionCode: this.appState.sessionState?.code ?? 'SOLO',
+              participantNames: this.appState.sessionState?.session.participants.map(p => p.name) ?? [],
+            } as SuggestionContext}
+          ></suggestion-bar>
         </div>
       </div>
 
