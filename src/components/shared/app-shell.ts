@@ -37,6 +37,14 @@ import './filter-panel.js';
 import '../visualization/detail-panel.js';
 import './shortcut-reference.js';
 import './settings-dialog.js';
+import '../visualization/priority-view.js';
+import '../visualization/breakdown-editor.js';
+import '../agreement/resolution-recorder.js';
+import '../agreement/ownership-grid.js';
+import '../contract/contract-diff.js';
+import '../contract/schema-display.js';
+import '../visualization/integration-dashboard.js';
+import '../visualization/go-no-go-verdict.js';
 
 @customElement('app-shell')
 export class AppShell extends LitElement {
@@ -502,6 +510,26 @@ export class AppShell extends LitElement {
                 ? html`<sl-badge class="conflict-badge" variant="warning" pill>${conflictCount}</sl-badge>`
                 : nothing}
             </sl-tab>
+            <sl-tab slot="nav" panel="priority" ?active=${activeView === 'priority'}
+              ?disabled=${files.length < 2}>
+              ${t('shell.tab.priority')}
+            </sl-tab>
+            <sl-tab slot="nav" panel="breakdown" ?active=${activeView === 'breakdown'}
+              ?disabled=${files.length < 2}>
+              ${t('shell.tab.breakdown')}
+            </sl-tab>
+            <sl-tab slot="nav" panel="agreements" ?active=${activeView === 'agreements'}
+              ?disabled=${files.length < 2}>
+              ${t('shell.tab.agreements')}
+            </sl-tab>
+            <sl-tab slot="nav" panel="contracts" ?active=${activeView === 'contracts'}
+              ?disabled=${files.length < 2}>
+              ${t('shell.tab.contracts')}
+            </sl-tab>
+            <sl-tab slot="nav" panel="integration" ?active=${activeView === 'integration'}
+              ?disabled=${files.length < 2}>
+              ${t('shell.tab.integration')}
+            </sl-tab>
 
             <sl-tab-panel name="cards">
               <card-view
@@ -543,6 +571,24 @@ export class AppShell extends LitElement {
             <sl-tab-panel name="comparison">
               <comparison-view .files=${files}></comparison-view>
             </sl-tab-panel>
+            <sl-tab-panel name="priority">
+              <priority-view></priority-view>
+            </sl-tab-panel>
+            <sl-tab-panel name="breakdown">
+              <breakdown-editor></breakdown-editor>
+            </sl-tab-panel>
+            <sl-tab-panel name="agreements">
+              <resolution-recorder></resolution-recorder>
+              <ownership-grid></ownership-grid>
+            </sl-tab-panel>
+            <sl-tab-panel name="contracts">
+              <contract-diff></contract-diff>
+              <schema-display></schema-display>
+            </sl-tab-panel>
+            <sl-tab-panel name="integration">
+              <integration-dashboard></integration-dashboard>
+              <go-no-go-verdict></go-no-go-verdict>
+            </sl-tab-panel>
           </sl-tab-group>
         </div>
       </div>
@@ -569,14 +615,14 @@ export class AppShell extends LitElement {
 
   private _onPhaseNavigate(e: CustomEvent<{ phase: string }>) {
     // Map UX phase to the most relevant tab
-    const phaseToTab: Record<string, 'cards' | 'flow' | 'comparison'> = {
+    const phaseToTab: Record<string, import('../../state/app-state.js').ViewMode> = {
       spark: 'cards',
       explore: 'cards',
-      rank: 'cards',
-      slice: 'comparison',
-      agree: 'comparison',
-      build: 'cards',
-      ship: 'cards',
+      rank: 'priority',
+      slice: 'breakdown',
+      agree: 'agreements',
+      build: 'contracts',
+      ship: 'integration',
     };
     const tab = phaseToTab[e.detail.phase] ?? 'cards';
     store.setView(tab);
@@ -595,7 +641,11 @@ export class AppShell extends LitElement {
 
   private onTabChange(e: CustomEvent) {
     const panel = (e.detail as { name: string }).name;
-    if (panel === 'cards' || panel === 'flow' || panel === 'comparison') {
+    if (
+      panel === 'cards' || panel === 'flow' || panel === 'comparison' ||
+      panel === 'priority' || panel === 'breakdown' || panel === 'agreements' ||
+      panel === 'contracts' || panel === 'integration'
+    ) {
       store.setView(panel);
     }
   }

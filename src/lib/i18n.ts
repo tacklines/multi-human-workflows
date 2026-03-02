@@ -22,6 +22,11 @@ export const messages: Record<string, string> = {
   'shell.tab.events': 'Events',
   'shell.tab.flow': 'Flow',
   'shell.tab.conflicts': 'Conflicts',
+  'shell.tab.priority': 'Priority',
+  'shell.tab.breakdown': 'Breakdown',
+  'shell.tab.agreements': 'Agreements',
+  'shell.tab.contracts': 'Contracts',
+  'shell.tab.integration': 'Integration',
 
   // ---------------------------------------------------------------------------
   // file-drop-zone

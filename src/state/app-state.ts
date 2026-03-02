@@ -1,7 +1,7 @@
 import type { LoadedFile, Participant, ParticipantType } from '../schema/types.js';
 import type { Confidence, Direction } from '../schema/types.js';
 
-export type ViewMode = 'cards' | 'flow' | 'comparison';
+export type ViewMode = 'cards' | 'flow' | 'comparison' | 'priority' | 'breakdown' | 'agreements' | 'contracts' | 'integration';
 
 // Re-export canonical participant types for consumers that import from app-state
 export type { ParticipantType };
@@ -109,7 +109,8 @@ class Store {
       ...this.state,
       files: this.state.files.filter((f) => f.role !== role),
     };
-    if (this.state.files.length < 2 && this.state.activeView === 'comparison') {
+    const multiFileViews: ViewMode[] = ['comparison', 'priority', 'breakdown', 'agreements', 'contracts', 'integration'];
+    if (this.state.files.length < 2 && multiFileViews.includes(this.state.activeView)) {
       this.state.activeView = 'cards';
     }
     this.notify({ type: 'file-removed', role });
