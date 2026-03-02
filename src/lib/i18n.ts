@@ -790,6 +790,10 @@ export const messages: Record<string, string> = {
   'helpTip.breakdown-editor': 'Break large events into smaller, more focused domain events. Each slice should represent a single meaningful state change.',
   'helpTip.integration-dashboard': 'This dashboard shows how domain events flow between services and external systems. Green means confirmed integration; amber means assumed.',
   'helpTip.file-drop': 'Drop your storm-prep YAML file here to load your domain events. You can load multiple files to compare roles.',
+  'helpTip.comparisonView': 'Compare how different participants see the same domain events. Look for shared events and conflicts.',
+  'helpTip.priorityView': 'Drag events between priority tiers or vote to help the team decide what matters most.',
+  'helpTip.breakdownEditor': 'Break prioritized events into work items. Link events to tasks and track coverage.',
+  'helpTip.integrationDashboard': 'Review integration checks across all boundaries. Green means ready to ship.',
 
   // ---------------------------------------------------------------------------
   // onboarding-overlay

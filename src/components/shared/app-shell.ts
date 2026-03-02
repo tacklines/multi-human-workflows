@@ -21,7 +21,7 @@ import type { DriftEvent } from '../artifact/drift-notification.js';
 import type { ContractEntry } from '../artifact/contract-sidebar.js';
 import type { RankedEvent } from '../visualization/priority-view.js';
 import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visualization/integration-dashboard.js';
-import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval, JamArtifacts, IntegrationReport } from '../../schema/types.js';
+import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval, JamArtifacts, IntegrationReport, Draft } from '../../schema/types.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
 
@@ -43,6 +43,7 @@ import '../artifact/contract-sidebar.js';
 import '../artifact/file-drop-zone.js';
 import '../session/session-lobby.js';
 import '../session/spark-canvas.js';
+import '../session/draft-editor.js';
 import '../session/participant-registry.js';
 import './phase-ribbon.js';
 import '../artifact/card-view.js';
@@ -55,6 +56,10 @@ import './filter-panel.js';
 import '../visualization/detail-panel.js';
 import './shortcut-reference.js';
 import './settings-dialog.js';
+import './settings-gear.js';
+import './settings-drawer.js';
+import type { SettingItem } from './settings-drawer.js';
+import './help-tip.js';
 import './approval-queue.js';
 import type { ApprovalDecidedDetail } from './approval-queue.js';
 import '../visualization/priority-view.js';
@@ -260,6 +265,9 @@ export class AppShell extends LitElement {
   @state() private _tierOverrides = new Map<string, 'must_have' | 'should_have' | 'could_have'>();
   @state() private _votes: Record<string, { up: string[]; down: string[] }> = {};
   @state() private _pendingApprovals: PendingApproval[] = [];
+  @state() private _activeDraft: Draft | null = null;
+  @state() private _sectionSettingsOpen = false;
+  @state() private _sectionSettingsName = '';
   private _prevMilestoneState: MilestoneState = {
     artifactCount: 0,
     participantCount: 0,
@@ -466,7 +474,7 @@ export class AppShell extends LitElement {
       `;
     }
 
-    return html`${this.renderAppLayout()}${this._renderPasteToast()}${this._renderShortcutReference()}${this._renderSettingsDialog()}`;
+    return html`${this.renderAppLayout()}${this._renderPasteToast()}${this._renderShortcutReference()}${this._renderSettingsDialog()}${this._renderSectionSettingsDrawer()}`;
   }
 
   private _renderShortcutReference() {
@@ -485,6 +493,18 @@ export class AppShell extends LitElement {
         @settings-dialog-close=${() => { this._settingsOpen = false; }}
         @setting-changed=${this._onSettingChanged}
       ></settings-dialog>
+    `;
+  }
+
+  private _renderSectionSettingsDrawer() {
+    return html`
+      <settings-drawer
+        sectionName=${this._sectionSettingsName}
+        .settings=${this._sectionSettings(this._sectionSettingsName)}
+        ?open=${this._sectionSettingsOpen}
+        @sl-after-hide=${() => { this._sectionSettingsOpen = false; }}
+        @setting-changed=${this._onSettingChanged}
+      ></settings-drawer>
     `;
   }
 
@@ -638,7 +658,7 @@ export class AppShell extends LitElement {
             session-code="${this.appState.sessionState?.code ?? ''}"
             @spark-submit=${this._onSparkSubmit}
           ></spark-canvas>
-          <sl-tab-group @sl-tab-show=${this.onTabChange}>
+          <sl-tab-group @sl-tab-show=${this.onTabChange} @open-settings=${this._onOpenSectionSettings}>
             <sl-tab slot="nav" panel="cards" ?active=${activeView === 'cards'}>
               ${t('shell.tab.events')}
             </sl-tab>
@@ -651,10 +671,12 @@ export class AppShell extends LitElement {
               ${conflictCount > 0
                 ? html`<sl-badge class="conflict-badge" variant="warning" pill>${conflictCount}</sl-badge>`
                 : nothing}
+              <settings-gear sectionName="comparison"></settings-gear>
             </sl-tab>
             <sl-tab slot="nav" panel="priority" ?active=${activeView === 'priority'}
               ?disabled=${files.length < 2}>
               ${t('shell.tab.priority')}
+              <settings-gear sectionName="priority"></settings-gear>
             </sl-tab>
             <sl-tab slot="nav" panel="breakdown" ?active=${activeView === 'breakdown'}
               ?disabled=${files.length < 2}>
@@ -671,6 +693,7 @@ export class AppShell extends LitElement {
             <sl-tab slot="nav" panel="integration" ?active=${activeView === 'integration'}
               ?disabled=${files.length < 2}>
               ${t('shell.tab.integration')}
+              <settings-gear sectionName="integration"></settings-gear>
             </sl-tab>
 
             <sl-tab-panel name="cards">
@@ -711,41 +734,52 @@ export class AppShell extends LitElement {
               </div>
             </sl-tab-panel>
             <sl-tab-panel name="comparison">
-              <comparison-view .files=${files}></comparison-view>
+              <help-tip tip-key="comparison-view" message=${t('helpTip.comparisonView')} ?active=${files.length >= 2}>
+                <comparison-view .files=${files}></comparison-view>
+              </help-tip>
             </sl-tab-panel>
             <sl-tab-panel name="priority">
-              <priority-view
-                .events=${this._rankedEvents(files)}
-                .votes=${this._votes}
-                currentParticipant=${participantName}
-                @priority-changed=${this._onPriorityChanged}
-                @vote-cast=${this._onVoteCast}
-              ></priority-view>
+              <help-tip tip-key="priority-view" message=${t('helpTip.priorityView')} ?active=${files.length >= 2}>
+                <priority-view
+                  .events=${this._rankedEvents(files)}
+                  .votes=${this._votes}
+                  currentParticipant=${participantName}
+                  @priority-changed=${this._onPriorityChanged}
+                  @vote-cast=${this._onVoteCast}
+                ></priority-view>
+              </help-tip>
             </sl-tab-panel>
             <sl-tab-panel name="breakdown">
-              ${(() => {
-                const eventNames = this._breakdownEventNames(files);
-                return html`
-                  <div class="breakdown-layout">
-                    <breakdown-editor
-                      .events=${eventNames}
-                      .workItems=${this._workItems}
-                      @work-item-created=${this._onWorkItemCreated}
-                      @work-item-updated=${this._onWorkItemUpdated}
-                    ></breakdown-editor>
-                    <div class="breakdown-sidebar">
-                      <coverage-matrix
+              <help-tip tip-key="breakdown-editor" message=${t('helpTip.breakdownEditor')} ?active=${files.length >= 2}>
+                ${(() => {
+                  const eventNames = this._breakdownEventNames(files);
+                  return html`
+                    <div class="breakdown-layout">
+                      <breakdown-editor
                         .events=${eventNames}
                         .workItems=${this._workItems}
-                      ></coverage-matrix>
-                      <dependency-graph
-                        .workItems=${this._workItems}
-                        @dependency-created=${this._onDependencyCreated}
-                      ></dependency-graph>
+                        @work-item-created=${this._onWorkItemCreated}
+                        @work-item-updated=${this._onWorkItemUpdated}
+                      ></breakdown-editor>
+                      <div class="breakdown-sidebar">
+                        <coverage-matrix
+                          .events=${eventNames}
+                          .workItems=${this._workItems}
+                        ></coverage-matrix>
+                        <dependency-graph
+                          .workItems=${this._workItems}
+                          @dependency-created=${this._onDependencyCreated}
+                        ></dependency-graph>
+                      </div>
                     </div>
-                  </div>
-                `;
-              })()}
+                    <draft-editor
+                      .draft=${this._activeDraft}
+                      @draft-change=${this._onDraftChange}
+                      @draft-publish=${this._onDraftPublish}
+                    ></draft-editor>
+                  `;
+                })()}
+              </help-tip>
             </sl-tab-panel>
             <sl-tab-panel name="agreements">
               ${(() => {
@@ -812,22 +846,24 @@ export class AppShell extends LitElement {
               })()}
             </sl-tab-panel>
             <sl-tab-panel name="integration">
-              ${(() => {
-                const data = this._integrationData(files);
-                return html`
-                  <integration-dashboard
-                    .checks=${data.checks}
-                    .nodes=${data.nodes}
-                    .connections=${data.connections}
-                    verdict=${data.verdict}
-                    verdictSummary=${data.verdictSummary}
-                    contractCount=${data.contractCount}
-                    aggregateCount=${data.aggregateCount}
-                    @create-work-item-requested=${this._onCreateWorkItemFromCheck}
-                    @run-checks-requested=${this._onRunChecks}
-                  ></integration-dashboard>
-                `;
-              })()}
+              <help-tip tip-key="integration-dashboard" message=${t('helpTip.integrationDashboard')} ?active=${files.length >= 2}>
+                ${(() => {
+                  const data = this._integrationData(files);
+                  return html`
+                    <integration-dashboard
+                      .checks=${data.checks}
+                      .nodes=${data.nodes}
+                      .connections=${data.connections}
+                      verdict=${data.verdict}
+                      verdictSummary=${data.verdictSummary}
+                      contractCount=${data.contractCount}
+                      aggregateCount=${data.aggregateCount}
+                      @create-work-item-requested=${this._onCreateWorkItemFromCheck}
+                      @run-checks-requested=${this._onRunChecks}
+                    ></integration-dashboard>
+                  `;
+                })()}
+              </help-tip>
             </sl-tab-panel>
           </sl-tab-group>
           <suggestion-bar
@@ -1716,6 +1752,48 @@ export class AppShell extends LitElement {
         composed: true,
       })
     );
+  }
+
+  private _onOpenSectionSettings(e: CustomEvent<{ sectionName: string }>) {
+    this._sectionSettingsName = e.detail.sectionName;
+    this._sectionSettingsOpen = true;
+  }
+
+  private _sectionSettings(_sectionName: string): SettingItem[] {
+    // Return settings relevant to this section.
+    // For now, return empty — settings will be populated when SessionConfig is wired.
+    return [];
+  }
+
+  private _onDraftChange(e: CustomEvent<{ id: string; rows: Array<{ eventName: string; aggregate: string; trigger: string }> }>) {
+    if (!this._activeDraft) return;
+    const { rows } = e.detail;
+    this._activeDraft = {
+      ...this._activeDraft,
+      updatedAt: new Date().toISOString(),
+      content: {
+        ...this._activeDraft.content,
+        domain_events: rows.map(r => ({
+          name: r.eventName,
+          aggregate: r.aggregate,
+          trigger: r.trigger,
+          payload: [],
+          integration: { direction: 'internal' as const },
+          confidence: 'POSSIBLE' as const,
+        })),
+      },
+    };
+  }
+
+  private _onDraftPublish(_e: CustomEvent<{ id: string }>) {
+    // Convert draft to a loaded file when published
+    if (!this._activeDraft) return;
+    store.addFile({
+      role: 'draft',
+      filename: 'draft.yaml',
+      data: this._activeDraft.content,
+    });
+    this._activeDraft = null;
   }
 
   private _onWorkItemCreated(e: CustomEvent<{ item: WorkItem }>) {
