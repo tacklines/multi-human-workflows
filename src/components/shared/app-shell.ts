@@ -651,17 +651,18 @@ export class AppShell extends LitElement {
             </sl-tab-panel>
             <sl-tab-panel name="breakdown">
               ${(() => {
-                const data = this._breakdownData(files);
+                const eventNames = this._breakdownEventNames(files);
                 return html`
                   <div class="breakdown-layout">
                     <breakdown-editor
-                      .events=${data.eventNames}
+                      .events=${eventNames}
+                      .workItems=${this._workItems}
                       @work-item-created=${this._onWorkItemCreated}
                       @work-item-updated=${this._onWorkItemUpdated}
                     ></breakdown-editor>
                     <div class="breakdown-sidebar">
                       <coverage-matrix
-                        .events=${data.eventNames}
+                        .events=${eventNames}
                         .workItems=${this._workItems}
                       ></coverage-matrix>
                       <dependency-graph
@@ -1020,16 +1021,24 @@ export class AppShell extends LitElement {
     }
 
     // Determine verdict
-    const hasFailure = checks.some((c) => c.status === 'fail');
-    const hasWarning = checks.some((c) => c.status === 'warn');
-    const verdict: 'go' | 'no-go' | 'caution' = hasFailure ? 'no-go' : hasWarning ? 'caution' : 'go';
+    const failCount = checks.filter((c) => c.status === 'fail').length;
+    const warnCount = checks.filter((c) => c.status === 'warn').length;
+    const passCount = checks.filter((c) => c.status === 'pass').length;
+    const verdict: 'go' | 'no-go' | 'caution' = failCount > 0 ? 'no-go' : warnCount > 0 ? 'caution' : 'go';
+
+    // Build human-readable summary
+    const parts: string[] = [];
+    if (failCount > 0) parts.push(`${failCount} conflict${failCount !== 1 ? 's' : ''}`);
+    if (warnCount > 0) parts.push(`${warnCount} warning${warnCount !== 1 ? 's' : ''}`);
+    if (passCount > 0) parts.push(`${passCount} passing`);
+    const verdictSummary = parts.length > 0 ? parts.join(', ') : 'No checks';
 
     return {
       checks,
       nodes,
       connections,
       verdict,
-      verdictSummary: '',
+      verdictSummary,
       contractCount: this._comparisonCtrl.sharedEvents.length,
       aggregateCount: aggregateSet.size,
     };
@@ -1504,20 +1513,17 @@ export class AppShell extends LitElement {
   }
 
   /**
-   * Derive event names and work items for the breakdown tab from loaded files.
+   * Derive event names for the breakdown tab from loaded files.
    * eventNames: all unique domain event names across all files (for linked-events dropdowns).
-   * workItems: empty array by default — populated by user via breakdown-editor.
+   * Work items are tracked separately in this._workItems state.
    */
-  private _breakdownData(files: AppState['files']): { workItems: WorkItem[]; eventNames: string[] } {
+  private _breakdownEventNames(files: AppState['files']): string[] {
     const eventNameSet = new Set<string>();
     for (const file of files) {
       for (const ev of file.data.domain_events) {
         eventNameSet.add(ev.name);
       }
     }
-    return {
-      workItems: [],
-      eventNames: Array.from(eventNameSet),
-    };
+    return Array.from(eventNameSet);
   }
 }
