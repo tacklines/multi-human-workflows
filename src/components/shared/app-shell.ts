@@ -5,6 +5,7 @@ import { getAllAggregates } from '../../lib/grouping.js';
 import { getAggregateColorIndex } from '../../lib/aggregate-colors.js';
 import { StoreController } from '../controllers/store-controller.js';
 import { ComparisonController } from '../controllers/comparison-controller.js';
+import type { Overlap } from '../../lib/comparison.js';
 import { t } from '../../lib/i18n.js';
 import { parseAndValidate } from '../../lib/yaml-loader.js';
 import { registry } from '../../lib/shortcut-registry.js';
@@ -675,8 +676,33 @@ export class AppShell extends LitElement {
               })()}
             </sl-tab-panel>
             <sl-tab-panel name="agreements">
-              <resolution-recorder></resolution-recorder>
-              <ownership-grid></ownership-grid>
+              ${(() => {
+                const data = this._agreementsData(files);
+                const sessionCode = this.appState.sessionState?.code ?? '';
+                const participantName = this.appState.sessionState
+                  ? (this.appState.sessionState.session.participants.find(
+                      (p) => p.id === this.appState.sessionState!.participantId
+                    )?.name ?? '')
+                  : '';
+                return html`
+                  ${data.overlaps.length > 0
+                    ? data.overlaps.map((overlap) => html`
+                        <resolution-recorder
+                          .overlap=${overlap}
+                          sessionCode=${sessionCode}
+                          participantName=${participantName}
+                        ></resolution-recorder>
+                      `)
+                    : html`<resolution-recorder></resolution-recorder>`
+                  }
+                  <ownership-grid
+                    .aggregates=${data.aggregates}
+                    .roles=${data.roles}
+                    sessionCode=${sessionCode}
+                    participantName=${participantName}
+                  ></ownership-grid>
+                `;
+              })()}
             </sl-tab-panel>
             <sl-tab-panel name="contracts">
               <contract-diff></contract-diff>
@@ -1076,6 +1102,33 @@ export class AppShell extends LitElement {
 
   private _onContractSelected(_e: CustomEvent<{ eventName: string; owner: string }>) {
     store.setView('contracts');
+  }
+
+  /**
+   * Derive data needed for the agreements tab.
+   * Returns all overlaps (for resolution-recorder instances), unique aggregate
+   * names across all files (for ownership-grid rows), and unique role names
+   * across all files (for ownership-grid columns).
+   */
+  private _agreementsData(files: AppState['files']): {
+    overlaps: Overlap[];
+    aggregates: string[];
+    roles: string[];
+  } {
+    const overlaps = this._comparisonCtrl.overlaps;
+    const aggregateSet = new Set<string>();
+    const roleSet = new Set<string>();
+    for (const file of files) {
+      roleSet.add(file.role);
+      for (const ev of file.data.domain_events) {
+        aggregateSet.add(ev.aggregate);
+      }
+    }
+    return {
+      overlaps,
+      aggregates: [...aggregateSet],
+      roles: [...roleSet],
+    };
   }
 
   /**
