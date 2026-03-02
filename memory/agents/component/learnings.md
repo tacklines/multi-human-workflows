@@ -72,6 +72,20 @@
 - CSS-only confetti: stack multiple wrapper divs with `::before`/`::after`; each pseudo-element gets its own `@keyframes` name + animation-delay; wrap in `@media (prefers-reduced-motion: reduce)` to neutralize (added: 2026-03-02, dispatch: 3r3.20)
 - Verdict panel pulse: use a single `box-shadow` keyframe animation on the container, toggled by an `.animating` class added/removed via `setTimeout` — no JS animation API needed (added: 2026-03-02, dispatch: 3r3.20)
 
+## Testing Patterns
+- For KeyboardEvent-dependent tests in node (no jsdom): use plain objects cast with `as unknown as KeyboardEvent` — duck-typed minimal objects work for pure registry logic (added: 2026-03-02, dispatch: 3r3.26)
+- When a module-level singleton needs to be testable, export both the class (for fresh instances per test) and the singleton (for app use) (added: 2026-03-02, dispatch: 3r3.26)
+
+## Event Listener Patterns
+- Global document event listeners in Lit: bind handler to instance field (_boundHandler) in connectedCallback, remove in disconnectedCallback — never use inline arrow for addEventListener that needs removal (added: 2026-03-02, dispatch: 3r3.27)
+
+## SVG Progress Ring
+- SVG progress ring pattern: `stroke-dasharray=circumference`, `stroke-dashoffset=circumference*(1-pct/100)`, rotate via `transform: rotate(-90deg)` on the progress circle (added: 2026-03-02, dispatch: 3r3.23)
+
+## Lit Reactivity Gotchas
+- `@state() private _foo: Set<T>` requires `this._foo = new Set(this._foo)` assignments (not `.add()` in-place) to trigger Lit re-renders (added: 2026-03-02, dispatch: 3r3.25)
+- Timer in Lit component: store as `ReturnType<typeof setInterval> | null`, start in connectedCallback, clear in disconnectedCallback (added: 2026-03-02, dispatch: 3r3.23)
+
 ## Cross-Agent Notes
 - (from logic) ELK returns top-left (x,y) not center; use `_nodeCx`/`_nodeCy` helpers when computing edge endpoints or zoom targets (added: 2026-02-28)
 - SVG `pointer-events` must be applied via `style=` attribute in Lit svg templates, not as a bare attribute (added: 2026-02-28, dispatch: multi-human-workflows-5ku)
