@@ -813,10 +813,12 @@ export class AppShell extends LitElement {
             <sl-tab slot="nav" panel="agreements" ?active=${activeView === 'agreements'}
               ?disabled=${files.length < 2}>
               ${t('shell.tab.agreements')}
+              <settings-gear sectionName="agree"></settings-gear>
             </sl-tab>
             <sl-tab slot="nav" panel="contracts" ?active=${activeView === 'contracts'}
               ?disabled=${files.length < 2}>
               ${t('shell.tab.contracts')}
+              <settings-gear sectionName="contracts"></settings-gear>
             </sl-tab>
             <sl-tab slot="nav" panel="integration" ?active=${activeView === 'integration'}
               ?disabled=${files.length < 2}>
