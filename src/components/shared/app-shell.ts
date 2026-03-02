@@ -414,14 +414,33 @@ export class AppShell extends LitElement {
     registry.register(
       { id: 'action.newEvent', key: 'n', description: t('shortcuts.action.newEvent'), category: t('shortcuts.category.actions') },
       () => {
-        this.dispatchEvent(new CustomEvent('shortcut-new-event', { bubbles: true, composed: true }));
+        // Expand spark canvas if collapsed
+        this._sparkCollapsed = false;
+        // After Lit re-renders, focus the first empty input in spark-canvas
+        this.updateComplete.then(() => {
+          const sparkCanvas = this.renderRoot.querySelector('spark-canvas');
+          const input = sparkCanvas?.shadowRoot?.querySelector<HTMLInputElement>('input');
+          input?.focus();
+        });
       }
     );
 
     registry.register(
       { id: 'action.resolve', key: 'r', description: t('shortcuts.action.resolve'), category: t('shortcuts.category.actions') },
       () => {
-        this.dispatchEvent(new CustomEvent('shortcut-resolve', { bubbles: true, composed: true }));
+        // Navigate to comparison view
+        if (store.get().activeView !== 'comparison') {
+          store.setView('comparison');
+        }
+        // After Lit re-renders, focus/scroll the first conflict-card
+        this.updateComplete.then(() => {
+          const comparisonView = this.renderRoot.querySelector('comparison-view');
+          const conflictCard = comparisonView?.shadowRoot?.querySelector<HTMLElement>('conflict-card');
+          if (conflictCard) {
+            conflictCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            conflictCard.focus();
+          }
+        });
       }
     );
 
