@@ -6,6 +6,8 @@ import { A2ATaskStore, createA2AHandlers, isA2ARoute, parseA2ABody, buildAgentCa
 import { presenceTracker } from './presence.js';
 import type { CandidateEventsFile } from '../schema/types.js';
 import type { ServerResponse } from 'node:http';
+import { compareFiles } from '../lib/comparison.js';
+import { suggestResolutionHeuristic } from '../lib/integration-heuristics.js';
 
 const PORT = Number(process.env.PORT ?? 3002);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
@@ -318,6 +320,30 @@ const server = http.createServer(async (req, res) => {
     if (method === 'GET' && presenceGetMatch) {
       const code = presenceGetMatch[1];
       sendJson(res, 200, { presence: presenceTracker.getPresence(code) });
+      return;
+    }
+
+    // POST /api/sessions/:code/suggest-resolution — Get heuristic resolution suggestion
+    const suggestResolutionMatch = url.match(/^\/api\/sessions\/([^/]+)\/suggest-resolution$/);
+    if (method === 'POST' && suggestResolutionMatch) {
+      const code = suggestResolutionMatch[1];
+      const session = store.getSession(code);
+      if (!session) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      const body = await parseBody(req) as { overlapLabel?: string };
+      if (typeof body.overlapLabel !== 'string' || body.overlapLabel.trim() === '') {
+        sendJson(res, 400, { error: 'overlapLabel is required' });
+        return;
+      }
+      const overlapLabel = body.overlapLabel.trim();
+      const files = store.getSessionFiles(code);
+      const overlaps = compareFiles(files);
+      const overlap = overlaps.find((o) => o.label === overlapLabel);
+      const overlapKind = overlap?.kind ?? 'same-name';
+      const suggestion = suggestResolutionHeuristic(overlapKind, overlapLabel);
+      sendJson(res, 200, { suggestion });
       return;
     }
 
