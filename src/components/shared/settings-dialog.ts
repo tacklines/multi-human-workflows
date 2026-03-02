@@ -231,7 +231,7 @@ export class SettingsDialog extends LitElement {
         value: this._settings.get('workflowTemplate') ?? 'event-storming',
         defaultValue: 'event-storming',
         options: [
-          { label: 'Event Storming', value: 'event-storming' },
+          { label: 'Boundary Negotiation', value: 'event-storming' },
           { label: 'Domain Discovery', value: 'domain-discovery' },
           { label: 'Custom', value: 'custom' },
         ],
