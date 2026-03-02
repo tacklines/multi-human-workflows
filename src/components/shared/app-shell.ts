@@ -19,6 +19,7 @@ import type { ComplianceDetail } from '../artifact/compliance-badge.js';
 import type { DriftEvent } from '../artifact/drift-notification.js';
 import type { ContractEntry } from '../artifact/contract-sidebar.js';
 import type { RankedEvent } from '../visualization/priority-view.js';
+import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visualization/integration-dashboard.js';
 
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
@@ -638,8 +639,22 @@ export class AppShell extends LitElement {
               <schema-display></schema-display>
             </sl-tab-panel>
             <sl-tab-panel name="integration">
-              <integration-dashboard></integration-dashboard>
-              <go-no-go-verdict></go-no-go-verdict>
+              ${(() => {
+                const data = this._integrationData(files);
+                return html`
+                  <integration-dashboard
+                    .checks=${data.checks}
+                    .nodes=${data.nodes}
+                    .connections=${data.connections}
+                    verdict=${data.verdict}
+                    verdictSummary=${data.verdictSummary}
+                    contractCount=${data.contractCount}
+                    aggregateCount=${data.aggregateCount}
+                    @create-work-item-requested=${(_e: CustomEvent) => {}}
+                    @run-checks-requested=${(_e: CustomEvent) => {}}
+                  ></integration-dashboard>
+                `;
+              })()}
             </sl-tab-panel>
           </sl-tab-group>
           <suggestion-bar
@@ -790,6 +805,154 @@ export class AppShell extends LitElement {
       contracts: null,
       integrationReport: null,
     });
+  }
+
+  /**
+   * Derive integration dashboard data (checks, nodes, connections, verdict, counts)
+   * from loaded files and the comparison controller.
+   * Pure derivation — no side effects.
+   */
+  private _integrationData(files: AppState['files']): {
+    checks: IntegrationCheck[];
+    nodes: BoundaryNode[];
+    connections: BoundaryConnection[];
+    verdict: 'go' | 'no-go' | 'caution';
+    verdictSummary: string;
+    contractCount: number;
+    aggregateCount: number;
+  } {
+    if (files.length === 0) {
+      return {
+        checks: [],
+        nodes: [],
+        connections: [],
+        verdict: 'go',
+        verdictSummary: '',
+        contractCount: 0,
+        aggregateCount: 0,
+      };
+    }
+
+    // Build a map of eventName -> aggregate from all files (first occurrence wins)
+    const eventAggregateMap = new Map<string, string>();
+    for (const file of files) {
+      for (const ev of file.data.domain_events) {
+        if (!eventAggregateMap.has(ev.name)) {
+          eventAggregateMap.set(ev.name, ev.aggregate);
+        }
+      }
+    }
+
+    // Build a set of event names that have conflicts
+    const conflictEventNames = new Set<string>(
+      this._comparisonCtrl.conflicts.map((c) => c.label)
+    );
+
+    const checks: IntegrationCheck[] = [];
+
+    // For each conflict (assumption-conflict), create a 'fail' check
+    for (const conflict of this._comparisonCtrl.conflicts) {
+      checks.push({
+        id: `conflict-${conflict.label}`,
+        label: conflict.label,
+        description: `Conflicting boundary assumptions between roles: ${conflict.roles.join(', ')}`,
+        status: 'fail',
+        details: conflict.details,
+        owner: conflict.roles[0],
+      });
+    }
+
+    // For each shared event with no conflict, create a 'pass' check
+    for (const shared of this._comparisonCtrl.sharedEvents) {
+      if (!conflictEventNames.has(shared.label)) {
+        checks.push({
+          id: `shared-${shared.label}`,
+          label: shared.label,
+          description: `Shared event across roles: ${shared.roles.join(', ')}`,
+          status: 'pass',
+          details: shared.details,
+          owner: shared.roles[0],
+        });
+      }
+    }
+
+    // For boundary assumptions of type 'contract' (integration points needing verification), create 'warn' checks
+    for (const file of files) {
+      for (const assumption of file.data.boundary_assumptions) {
+        if (assumption.type === 'contract') {
+          checks.push({
+            id: `assumption-${assumption.id}`,
+            label: assumption.id,
+            description: assumption.statement,
+            status: 'warn',
+            details: assumption.verify_with ? `Verify with: ${assumption.verify_with}` : undefined,
+            owner: file.role,
+          });
+        }
+      }
+    }
+
+    // Build BoundaryNodes: one per unique aggregate across all files
+    const aggregateSet = new Set<string>();
+    for (const file of files) {
+      for (const ev of file.data.domain_events) {
+        aggregateSet.add(ev.aggregate);
+      }
+    }
+    const nodes: BoundaryNode[] = [...aggregateSet].map((agg) => ({
+      id: agg.toLowerCase().replace(/\s+/g, '-'),
+      label: agg,
+    }));
+
+    // Build BoundaryConnections: one per shared event between aggregates
+    // The 'from' aggregate is the event's primary aggregate; 'to' is the aggregate
+    // of the same event in the other file(s) when they differ, or the role's aggregate
+    const connections: BoundaryConnection[] = [];
+    const seenConnectionKeys = new Set<string>();
+    for (const shared of this._comparisonCtrl.sharedEvents) {
+      const eventName = shared.label;
+      // Find aggregates from different files for this event
+      const aggregatesForEvent: string[] = [];
+      for (const file of files) {
+        for (const ev of file.data.domain_events) {
+          if (ev.name === eventName) {
+            aggregatesForEvent.push(ev.aggregate);
+            break;
+          }
+        }
+      }
+      // Create connections between distinct aggregates
+      for (let i = 0; i < aggregatesForEvent.length - 1; i++) {
+        const fromAgg = aggregatesForEvent[i].toLowerCase().replace(/\s+/g, '-');
+        const toAgg = aggregatesForEvent[i + 1].toLowerCase().replace(/\s+/g, '-');
+        if (fromAgg === toAgg) continue;
+        const key = `${fromAgg}->${toAgg}`;
+        if (seenConnectionKeys.has(key)) continue;
+        seenConnectionKeys.add(key);
+        const hasConflict = conflictEventNames.has(eventName);
+        connections.push({
+          from: fromAgg,
+          to: toAgg,
+          status: hasConflict ? 'fail' : 'pass',
+          label: eventName,
+        });
+      }
+    }
+
+    // Determine verdict
+    const hasFailure = checks.some((c) => c.status === 'fail');
+    const hasWarning = checks.some((c) => c.status === 'warn');
+    const verdict: 'go' | 'no-go' | 'caution' = hasFailure ? 'no-go' : hasWarning ? 'caution' : 'go';
+
+    return {
+      checks,
+      nodes,
+      connections,
+      verdict,
+      verdictSummary: '',
+      contractCount: this._comparisonCtrl.sharedEvents.length,
+      aggregateCount: aggregateSet.size,
+    };
   }
 
   private _complianceStatus(files: AppState['files']): { status: 'pass' | 'warn' | 'fail'; details: ComplianceDetail[] } {
