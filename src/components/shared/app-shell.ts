@@ -17,6 +17,7 @@ import type { DetailNodeData } from '../visualization/detail-panel.js';
 import type { ExplorationGap, ExplorationPrompt, ExplorationPattern } from '../artifact/exploration-guide.js';
 import type { ComplianceDetail } from '../artifact/compliance-badge.js';
 import type { DriftEvent } from '../artifact/drift-notification.js';
+import type { ContractEntry } from '../artifact/contract-sidebar.js';
 
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
@@ -32,6 +33,7 @@ import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import '../artifact/exploration-guide.js';
 import '../artifact/compliance-badge.js';
 import '../artifact/drift-notification.js';
+import '../artifact/contract-sidebar.js';
 import '../artifact/file-drop-zone.js';
 import '../session/session-lobby.js';
 import '../session/spark-canvas.js';
@@ -522,6 +524,15 @@ export class AppShell extends LitElement {
             })()}
             <sl-divider></sl-divider>
             <filter-panel></filter-panel>
+            ${files.length >= 2
+              ? html`
+                  <sl-divider></sl-divider>
+                  <contract-sidebar
+                    .contracts=${this._contractEntries(files)}
+                    @contract-selected=${this._onContractSelected}
+                  ></contract-sidebar>
+                `
+              : nothing}
           </div>
         </div>
 
@@ -793,6 +804,66 @@ export class AppShell extends LitElement {
     }));
     const status = conflictCount > 3 ? 'fail' : 'warn';
     return { status, details };
+  }
+
+  /**
+   * Derive ContractEntry[] from loaded files.
+   * Events appearing in 2+ files are potential contract points.
+   * Uses sharedEvents from the comparison controller for overlap detection.
+   */
+  private _contractEntries(files: AppState['files']): ContractEntry[] {
+    if (files.length < 2) return [];
+
+    const sharedEvents = this._comparisonCtrl.sharedEvents;
+    if (sharedEvents.length === 0) return [];
+
+    // Build a map of eventName -> { aggregate, roles } from all files
+    const eventAggregateMap = new Map<string, string>();
+    for (const file of files) {
+      for (const ev of file.data.domain_events) {
+        if (!eventAggregateMap.has(ev.name)) {
+          eventAggregateMap.set(ev.name, ev.aggregate);
+        }
+      }
+    }
+
+    // Build a map of eventName -> all event definitions (for conflict detection)
+    const eventDefinitions = new Map<string, { aggregate: string; trigger: string | undefined; role: string }[]>();
+    for (const file of files) {
+      for (const ev of file.data.domain_events) {
+        const defs = eventDefinitions.get(ev.name) ?? [];
+        defs.push({ aggregate: ev.aggregate, trigger: ev.trigger, role: file.role });
+        eventDefinitions.set(ev.name, defs);
+      }
+    }
+
+    return sharedEvents.map((overlap): ContractEntry => {
+      const eventName = overlap.label;
+      const defs = eventDefinitions.get(eventName) ?? [];
+      const owner = defs[0]?.aggregate ?? overlap.roles[0];
+
+      // Consumers are roles that reference this event but are not the first definer
+      const consumers = overlap.roles.slice(1);
+
+      // Determine status: fail if aggregates disagree, warn if triggers differ, pass otherwise
+      const aggregates = [...new Set(defs.map((d) => d.aggregate))];
+      const triggers = [...new Set(defs.map((d) => d.trigger).filter(Boolean))];
+
+      let status: 'pass' | 'warn' | 'fail';
+      if (aggregates.length > 1) {
+        status = 'fail';
+      } else if (triggers.length > 1) {
+        status = 'warn';
+      } else {
+        status = 'pass';
+      }
+
+      return { eventName, owner, consumers, status };
+    });
+  }
+
+  private _onContractSelected(_e: CustomEvent<{ eventName: string; owner: string }>) {
+    store.setView('contracts');
   }
 
   private _onPhaseNavigate(e: CustomEvent<{ phase: string }>) {
