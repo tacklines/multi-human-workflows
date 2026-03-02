@@ -381,6 +381,35 @@ export interface WorkItem {
 }
 
 /**
+ * A directed dependency between two work items.
+ * The item identified by `fromId` must complete before the item identified by `toId`.
+ * Stored separately from the WorkItem record to allow bidirectional queries.
+ */
+export interface WorkItemDependency {
+  /** ID of the work item that must complete first */
+  fromId: string;
+  /** ID of the work item that depends on fromId */
+  toId: string;
+  /** Participant who set this dependency */
+  participantId: string;
+  /** ISO timestamp when the dependency was recorded */
+  setAt: string;
+}
+
+/**
+ * A computed coverage record showing which work items address a domain event.
+ * Produced by DecompositionService.getCoverageMatrix().
+ */
+export interface CoverageEntry {
+  /** Name of the domain event */
+  eventName: string;
+  /** IDs of work items that list this event in their linkedEvents */
+  workItemIds: string[];
+  /** True when at least one work item covers this event */
+  covered: boolean;
+}
+
+/**
  * A draft artifact visible only to the author — a staging area before formal submission.
  * Created via `create_draft`, promoted via `submit_artifact`.
  */

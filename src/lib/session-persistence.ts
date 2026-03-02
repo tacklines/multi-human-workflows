@@ -30,6 +30,8 @@ function sessionToJson(session: Session): SerializedSession {
     config: session.config,
     priorities: session.priorities,
     votes: session.votes,
+    workItems: session.workItems,
+    workItemDependencies: session.workItemDependencies,
   };
 }
 
@@ -50,6 +52,8 @@ function sessionFromJson(json: SerializedSession): Session {
     config: json.config ?? DEFAULT_SESSION_CONFIG,
     priorities: json.priorities ?? [],
     votes: json.votes ?? [],
+    workItems: json.workItems ?? [],
+    workItemDependencies: json.workItemDependencies ?? [],
   };
 }
 

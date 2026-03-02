@@ -14,6 +14,8 @@ import {
   DEFAULT_SESSION_CONFIG,
   EventPriority,
   Vote,
+  WorkItem,
+  WorkItemDependency,
 } from '../schema/types.js';
 import { EventStore } from '../contexts/session/event-store.js';
 import type {
@@ -62,6 +64,8 @@ export interface Session {
   config: SessionConfig;
   priorities: EventPriority[];
   votes: Vote[];
+  workItems: WorkItem[];
+  workItemDependencies: WorkItemDependency[];
 }
 
 export interface SerializedSession {
@@ -77,6 +81,8 @@ export interface SerializedSession {
   config: SessionConfig;
   priorities: EventPriority[];
   votes: Vote[];
+  workItems: WorkItem[];
+  workItemDependencies: WorkItemDependency[];
 }
 
 function generateCode(): string {
@@ -106,6 +112,8 @@ export function serializeSession(session: Session): SerializedSession {
     config: session.config,
     priorities: session.priorities,
     votes: session.votes,
+    workItems: session.workItems,
+    workItemDependencies: session.workItemDependencies,
   };
 }
 
@@ -123,6 +131,8 @@ export function deserializeSession(serialized: SerializedSession): Session {
     config: serialized.config ?? DEFAULT_SESSION_CONFIG,
     priorities: serialized.priorities ?? [],
     votes: serialized.votes ?? [],
+    workItems: serialized.workItems ?? [],
+    workItemDependencies: serialized.workItemDependencies ?? [],
   };
 }
 
@@ -163,6 +173,8 @@ export class SessionStore {
       config: { ...DEFAULT_SESSION_CONFIG },
       priorities: [],
       votes: [],
+      workItems: [],
+      workItemDependencies: [],
     };
 
     this.sessions.set(code, session);

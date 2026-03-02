@@ -22,6 +22,8 @@ function makeSession(code: string = 'TEST01'): Session {
     config: DEFAULT_SESSION_CONFIG,
     priorities: [],
     votes: [],
+    workItems: [],
+    workItemDependencies: [],
   };
 }
 

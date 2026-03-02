@@ -75,6 +75,8 @@ function makeSession(overrides: Partial<Omit<Session, 'participants'>> & { parti
     config: DEFAULT_SESSION_CONFIG,
     priorities: [],
     votes: [],
+    workItems: [],
+    workItemDependencies: [],
     ...overrides,
   };
 }

@@ -23,6 +23,8 @@ function makeSession(code = 'ABCDEF', jam: JamArtifacts | null = null): Session 
     config: DEFAULT_SESSION_CONFIG,
     priorities: [],
     votes: [],
+    workItems: [],
+    workItemDependencies: [],
   };
 }
 
