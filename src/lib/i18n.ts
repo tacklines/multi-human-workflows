@@ -416,6 +416,41 @@ export const messages: Record<string, string> = {
   'settings-drawer.notifications.silentEvents.hint': 'Comma-separated event names that will never trigger a toast. Default: none.',
 
   // ---------------------------------------------------------------------------
+  // spark-canvas
+  // ---------------------------------------------------------------------------
+  'spark-canvas.title': 'Create Your Events',
+  'spark-canvas.add-row': 'Add new event...',
+  'spark-canvas.submit': 'Submit to Session',
+  'spark-canvas.collapsed-label': 'Add more events',
+  'spark-canvas.template-label': 'Quick Start',
+  'spark-canvas.template-blank': 'Blank Canvas',
+  'spark-canvas.template-ecommerce': 'E-commerce Order Flow',
+  'spark-canvas.template-auth': 'User Authentication',
+  'spark-canvas.template-payment': 'Payment Processing',
+  'spark-canvas.template-subscription': 'Subscription Lifecycle',
+  'spark-canvas.view-canvas': 'Canvas',
+  'spark-canvas.view-yaml': 'YAML',
+  'spark-canvas.ai-assist': 'AI Assist',
+  'spark-canvas.col-event': 'What happened?',
+  'spark-canvas.col-aggregate': 'To what?',
+  'spark-canvas.col-trigger': 'Triggered by?',
+
+  // ---------------------------------------------------------------------------
+  // draft-editor
+  // ---------------------------------------------------------------------------
+  'draft-editor.title': 'Edit Draft',
+  'draft-editor.publish': 'Publish Draft',
+  'draft-editor.publish-aria-label': 'Publish this draft to the session',
+  'draft-editor.discard': 'Discard',
+  'draft-editor.discard-aria-label': 'Discard this draft permanently',
+  'draft-editor.empty': 'No draft selected.',
+  'draft-editor.no-events': 'No events in this draft.',
+  'draft-editor.col-event': 'What happened?',
+  'draft-editor.col-aggregate': 'To what?',
+  'draft-editor.col-trigger': 'Triggered by?',
+  'draft-editor.updated-at': 'Last updated {{time}}',
+
+  // ---------------------------------------------------------------------------
   // schema-display
   // ---------------------------------------------------------------------------
   'schemaDisplay.empty': 'No schema fields defined',
