@@ -63,6 +63,15 @@
 - When casting a typed sub-config to `Record<string, unknown>` for generic default comparison, use `as unknown as Record<string, unknown>` — direct cast fails TS overlap check when source lacks index signature (added: 2026-03-02, dispatch: z8j)
 - `sl-switch` fires `sl-change` and exposes `.checked` on the target (not `.value`) — cast as `{ checked: boolean }` (added: 2026-03-02, dispatch: z8j)
 
+## Shoelace Advanced Patterns
+- `sl-details` with custom summary (text + badge): use `slot="summary"` div pattern inside the element, not the `summary=""` string attribute (added: 2026-03-02, dispatch: 3r3.19)
+- Fixed-position toast stack: use `pointer-events: none` on host, re-enable on notification wrappers so host doesn't block page interaction (added: 2026-03-02, dispatch: 3r3.19)
+
+## SVG Interaction Patterns
+- SVG drag-to-connect uses mousedown/mouseup + window.addEventListener — HTML DnD API is unreliable on SVG elements (added: 2026-03-02, dispatch: 3r3.18)
+- CSS-only confetti: stack multiple wrapper divs with `::before`/`::after`; each pseudo-element gets its own `@keyframes` name + animation-delay; wrap in `@media (prefers-reduced-motion: reduce)` to neutralize (added: 2026-03-02, dispatch: 3r3.20)
+- Verdict panel pulse: use a single `box-shadow` keyframe animation on the container, toggled by an `.animating` class added/removed via `setTimeout` — no JS animation API needed (added: 2026-03-02, dispatch: 3r3.20)
+
 ## Cross-Agent Notes
 - (from logic) ELK returns top-left (x,y) not center; use `_nodeCx`/`_nodeCy` helpers when computing edge endpoints or zoom targets (added: 2026-02-28)
 - SVG `pointer-events` must be applied via `style=` attribute in Lit svg templates, not as a bare attribute (added: 2026-02-28, dispatch: multi-human-workflows-5ku)
