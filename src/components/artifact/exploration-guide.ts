@@ -219,6 +219,46 @@ export class ExplorationGuide extends LitElement {
       font-style: italic;
     }
 
+    /* --- Compare Ready card --- */
+    .compare-ready-card {
+      background: linear-gradient(135deg, var(--sl-color-success-50) 0%, var(--sl-color-primary-50) 100%);
+      border: 1px solid var(--sl-color-success-300);
+      border-radius: var(--sl-border-radius-medium);
+      padding: 0.875rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .compare-ready-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.375rem;
+    }
+
+    .compare-ready-icon {
+      color: var(--sl-color-success-600);
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+
+    .compare-ready-title {
+      font-weight: var(--sl-font-weight-semibold);
+      color: var(--sl-color-success-800);
+      font-size: var(--sl-font-size-small);
+    }
+
+    .compare-ready-description {
+      color: var(--sl-color-neutral-700);
+      margin-bottom: 0.375rem;
+      font-size: var(--sl-font-size-small);
+    }
+
+    .compare-ready-detail {
+      color: var(--sl-color-neutral-600);
+      font-size: var(--sl-font-size-x-small);
+      margin-bottom: 0.625rem;
+    }
+
     /* Responsive adjustments */
     sl-details::part(base) {
       margin-bottom: 0.5rem;
@@ -233,6 +273,8 @@ export class ExplorationGuide extends LitElement {
     }
   `;
 
+  @property({ type: Boolean }) compareReady = false;
+  @property({ type: Number }) overlapCount = 0;
   @property({ type: Number }) completenessScore = 0;
   @property({ type: Array }) gaps: ExplorationGap[] = [];
   @property({ type: Array }) prompts: ExplorationPrompt[] = [];
@@ -311,6 +353,39 @@ export class ExplorationGuide extends LitElement {
         composed: true,
       }),
     );
+  }
+
+  private _onViewComparison(): void {
+    this.dispatchEvent(
+      new CustomEvent('view-comparison', {
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private _renderCompareReadySection() {
+    return html`
+      <div class="compare-ready-card" role="region" aria-label="${t('explorationGuide.compareReady.title')}">
+        <div class="compare-ready-header">
+          <span class="compare-ready-icon" aria-hidden="true">✓</span>
+          <span class="compare-ready-title">${t('explorationGuide.compareReady.title')}</span>
+        </div>
+        <div class="compare-ready-description">
+          ${t('explorationGuide.compareReady.description', { count: String(this.overlapCount) })}
+        </div>
+        <div class="compare-ready-detail">
+          ${t('explorationGuide.compareReady.detail')}
+        </div>
+        <sl-button
+          variant="primary"
+          size="small"
+          @click=${this._onViewComparison}
+        >
+          ${t('explorationGuide.compareReady.viewButton')}
+        </sl-button>
+      </div>
+    `;
   }
 
   /** Compute SVG ring values for the progress circle */
@@ -508,6 +583,8 @@ export class ExplorationGuide extends LitElement {
   render() {
     return html`
       <h2 class="guide-title">${t('explorationGuide.title')}</h2>
+
+      ${this.compareReady ? this._renderCompareReadySection() : nothing}
 
       <sl-details>
         <div slot="summary" class="section-summary">

@@ -995,6 +995,10 @@ export const messages: Record<string, string> = {
   'explorationGuide.patternAdd': 'Add',
   'explorationGuide.patternDismiss': 'Skip',
   'explorationGuide.noPatterns': 'No pattern suggestions for current events.',
+  'explorationGuide.compareReady.title': 'Compare Ready',
+  'explorationGuide.compareReady.description': '{{count}} overlapping events found across participants',
+  'explorationGuide.compareReady.detail': 'Comparison reveals where participants agree, conflict, or cover different ground.',
+  'explorationGuide.compareReady.viewButton': 'View Comparison',
 
   // Flow diagram hints
   'flowHints.suggested': 'Suggested: {{name}}',

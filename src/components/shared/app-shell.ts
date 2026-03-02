@@ -647,12 +647,16 @@ export class AppShell extends LitElement {
             <sl-divider></sl-divider>
             ${(() => {
               const ed = this._explorationData(files);
+              const overlapCount = this._comparisonCtrl.overlaps.length;
               return html`
                 <exploration-guide
+                  .compareReady=${files.length >= 2}
+                  .overlapCount=${overlapCount}
                   .completenessScore=${ed.score}
                   .gaps=${ed.gaps}
                   .prompts=${ed.prompts}
                   .patterns=${ed.patterns}
+                  @view-comparison=${this._onViewComparison}
                 ></exploration-guide>
               `;
             })()}
@@ -1677,6 +1681,10 @@ export class AppShell extends LitElement {
     ) {
       store.setView(panel);
     }
+  }
+
+  private _onViewComparison(): void {
+    store.setView('comparison');
   }
 
   private onAggregateSelect(e: CustomEvent) {
