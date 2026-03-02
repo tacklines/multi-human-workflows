@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { LoadedFile } from '../../schema/types.js';
+import type { LoadedFile, ConflictResolution, EventPriority } from '../../schema/types.js';
 import { ComparisonController } from '../controllers/comparison-controller.js';
 import { t } from '../../lib/i18n.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
@@ -123,9 +123,60 @@ export class ComparisonView extends LitElement {
       padding: 2rem;
       color: #6b7280;
     }
+
+    /* ---- Progress bar ---- */
+    .progress-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .progress-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .progress-header.all-resolved {
+      color: #16a34a;
+    }
+
+    .progress-checkmark {
+      font-size: 1rem;
+      color: #16a34a;
+      aria-hidden: true;
+    }
+
+    .progress-track {
+      background: #e5e7eb;
+      border-radius: 9999px;
+      height: 8px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 9999px;
+      background: var(--sl-color-primary-500, #6366f1);
+      transition: width 500ms ease-in-out, background-color 500ms ease-in-out;
+    }
+
+    .progress-fill.complete {
+      background: #16a34a;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .progress-fill {
+        transition: none;
+      }
+    }
   `;
 
   @property({ attribute: false }) files: LoadedFile[] = [];
+  @property({ attribute: false }) resolutions: ConflictResolution[] = [];
+  @property({ attribute: false }) priorities: EventPriority[] = [];
 
   private _comparisonCtrl = new ComparisonController(this);
 
@@ -146,7 +197,50 @@ export class ComparisonView extends LitElement {
     const sharedEvents = this._comparisonCtrl.sharedEvents;
     const sharedAggregates = this._comparisonCtrl.sharedAggregates;
 
+    // Sort conflicts by priority tier if priorities are available
+    const tierOrder: EventPriority['tier'][] = ['must_have', 'should_have', 'could_have'];
+    const priorityMap = new Map(this.priorities.map((p) => [p.eventName, tierOrder.indexOf(p.tier)]));
+    const sortedConflicts = this.priorities.length > 0
+      ? [...conflicts].sort((a, b) => {
+          const aIdx = priorityMap.get(a.label) ?? tierOrder.length;
+          const bIdx = priorityMap.get(b.label) ?? tierOrder.length;
+          return aIdx - bIdx;
+        })
+      : conflicts;
+
+    // Progress bar computation
+    const totalConflicts = conflicts.length;
+    const resolvedCount = this.resolutions.length;
+    const progressPct = totalConflicts > 0 ? Math.min(100, (resolvedCount / totalConflicts) * 100) : 0;
+    const allResolved = totalConflicts > 0 && resolvedCount >= totalConflicts;
+
     return html`
+      <!-- Negotiation Progress Bar -->
+      ${totalConflicts > 0 ? html`
+        <div class="progress-section" role="region" aria-label="Negotiation progress">
+          <div class="progress-header ${allResolved ? 'all-resolved' : ''}">
+            ${allResolved
+              ? html`<span class="progress-checkmark" aria-hidden="true">&#10003;</span>
+                     ${t('comparisonView.allResolved')}`
+              : t('comparisonView.progress', { resolved: String(resolvedCount), total: String(totalConflicts) })
+            }
+          </div>
+          <div
+            class="progress-track"
+            role="progressbar"
+            aria-valuenow=${resolvedCount}
+            aria-valuemin="0"
+            aria-valuemax=${totalConflicts}
+            aria-label="${t('comparisonView.progress', { resolved: String(resolvedCount), total: String(totalConflicts) })}"
+          >
+            <div
+              class="progress-fill ${allResolved ? 'complete' : ''}"
+              style="width: ${progressPct}%"
+            ></div>
+          </div>
+        </div>
+      ` : ''}
+
       <!-- Dashboard Header -->
       <div class="stats" role="region" aria-label="Comparison summary">
         <div class="stat-card conflicts" role="status" aria-label="${conflicts.length} ${t('comparisonView.conflicts').toLowerCase()} found">
@@ -174,9 +268,9 @@ export class ComparisonView extends LitElement {
         <h2 class="section-heading conflicts">
           <domain-tooltip term="conflict">${t('comparisonView.conflicts')}</domain-tooltip>
         </h2>
-        ${conflicts.length > 0
+        ${sortedConflicts.length > 0
           ? html`<div class="card-list">
-              ${conflicts.map(
+              ${sortedConflicts.map(
                 (o) => html`<conflict-card .overlap=${o} .files=${this.files}></conflict-card>`
               )}
             </div>`

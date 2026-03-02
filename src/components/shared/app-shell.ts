@@ -21,7 +21,7 @@ import type { DriftEvent } from '../artifact/drift-notification.js';
 import type { ContractEntry } from '../artifact/contract-sidebar.js';
 import type { RankedEvent } from '../visualization/priority-view.js';
 import type { IntegrationCheck, BoundaryNode, BoundaryConnection } from '../visualization/integration-dashboard.js';
-import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval, JamArtifacts, IntegrationReport, Draft, BoundaryAssumption, DelegationLevel } from '../../schema/types.js';
+import type { WorkItem, ContractBundle, EventContract, BoundaryContract, UnresolvedItem, PendingApproval, JamArtifacts, IntegrationReport, Draft, BoundaryAssumption, DelegationLevel, ConflictResolution, EventPriority } from '../../schema/types.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
 
@@ -262,6 +262,7 @@ export class AppShell extends LitElement {
   @state() private _shortcutReferenceOpen = false;
   @state() private _settingsOpen = false;
   @state() private _workItems: WorkItem[] = [];
+  @state() private _resolutions: ConflictResolution[] = [];
   @state() private _flaggedItems: UnresolvedItem[] = [];
   @state() private _previousContractBundle: ContractBundle | null = null;
   @state() private _lastContractBundle: ContractBundle | null = null;
@@ -753,7 +754,11 @@ export class AppShell extends LitElement {
             </sl-tab-panel>
             <sl-tab-panel name="comparison">
               <help-tip tip-key="comparison-view" message=${t('helpTip.comparisonView')} ?active=${files.length >= 2}>
-                <comparison-view .files=${files}></comparison-view>
+                <comparison-view
+                  .files=${files}
+                  .resolutions=${this._resolutions}
+                  .priorities=${this._comparisonPriorities(files)}
+                ></comparison-view>
                 <comparison-diff .files=${files}></comparison-diff>
               </help-tip>
             </sl-tab-panel>
@@ -816,6 +821,7 @@ export class AppShell extends LitElement {
                           .overlap=${overlap}
                           sessionCode=${sessionCode}
                           participantName=${participantName}
+                          @resolution-recorded=${this._onResolutionRecorded}
                         ></resolution-recorder>
                       `)
                     : html`<resolution-recorder></resolution-recorder>`
@@ -1548,6 +1554,19 @@ export class AppShell extends LitElement {
     return ranked.sort((a, b) => b.compositeScore - a.compositeScore);
   }
 
+  /**
+   * Derive EventPriority[] from ranked events for the comparison-view progress bar.
+   * Maps RankedEvent tier (snake_case) to EventPriority tier.
+   */
+  private _comparisonPriorities(files: AppState['files']): EventPriority[] {
+    return this._rankedEvents(files).map((ev) => ({
+      eventName: ev.name,
+      participantId: 'local',
+      tier: ev.tier,
+      setAt: new Date().toISOString(),
+    }));
+  }
+
   private _onPriorityChanged(e: CustomEvent<{ eventName: string; tier: string }>) {
     const { eventName, tier } = e.detail;
     const newOverrides = new Map(this._tierOverrides);
@@ -1817,6 +1836,17 @@ export class AppShell extends LitElement {
       data: this._activeDraft.content,
     });
     this._activeDraft = null;
+  }
+
+  private _onResolutionRecorded(e: CustomEvent<{ resolution: ConflictResolution }>) {
+    const { resolution } = e.detail;
+    // Replace existing resolution for the same overlap label, or append new one
+    const existing = this._resolutions.findIndex((r) => r.overlapLabel === resolution.overlapLabel);
+    if (existing >= 0) {
+      this._resolutions = this._resolutions.map((r, i) => (i === existing ? resolution : r));
+    } else {
+      this._resolutions = [...this._resolutions, resolution];
+    }
   }
 
   private _onWorkItemCreated(e: CustomEvent<{ item: WorkItem }>) {

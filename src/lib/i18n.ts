@@ -113,6 +113,8 @@ export const messages: Record<string, string> = {
   'comparisonView.rolePanels': 'Role Panels',
   'comparisonView.nEvents': '{{count}} events',
   'comparisonView.nAssumptions': '{{count}} assumptions',
+  'comparisonView.progress': '{{resolved}} of {{total}} conflicts resolved',
+  'comparisonView.allResolved': 'All conflicts resolved!',
 
   // ---------------------------------------------------------------------------
   // conflict-card
