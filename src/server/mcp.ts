@@ -1,12 +1,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { sessionStore } from './store.js';
+import { sessionStore, eventStore } from './store.js';
 import { parseAndValidate } from '../lib/yaml-validator-server.js';
 import { computePrepStatus, computeSessionStatus } from '../lib/prep-completeness.js';
 import { computeWorkflowStatus } from '../lib/workflow-engine.js';
 import { serializeSession } from '../lib/session-store.js';
 import { compareFiles } from '../lib/comparison.js';
+import { DecompositionService } from '../contexts/decomposition/decomposition-service.js';
+import { suggestDecomposition } from '../lib/decomposition-heuristics.js';
 
 // ---------------------------------------------------------------------------
 // CLI arg parsing for scoped mode: --session=CODE --user=NAME
@@ -925,6 +927,134 @@ async function main(): Promise<void> {
   );
 
   // -------------------------------------------------------------------------
+  // Phase IV tools — Slice (Decomposition)
+  // -------------------------------------------------------------------------
+
+  // Tool: create_work_items — batch-create work items from an aggregate decomposition
+  server.registerTool(
+    'create_work_items',
+    {
+      description: 'Batch-create work items from an aggregate decomposition. Returns all created work items with their assigned IDs.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        items: z.array(
+          z.object({
+            title: z.string().describe('Work item title'),
+            description: z.string().describe('Work item description'),
+            acceptanceCriteria: z.array(z.string()).describe('Acceptance criteria list'),
+            complexity: z.enum(['S', 'M', 'L', 'XL']).describe('Complexity estimate'),
+            linkedEvents: z.array(z.string()).describe('Domain event names this work item covers'),
+            dependencies: z.array(z.string()).describe('Work item IDs this depends on'),
+          })
+        ).describe('Work items to create'),
+      },
+    },
+    ({ code, items }) => {
+      const svc = new DecompositionService(
+        (c: string) => sessionStore.getSession(c) ?? null,
+        eventStore
+      );
+      const session = sessionStore.getSession(code);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const created = items.map((item) => svc.createWorkItem(code, item)).filter(Boolean);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ created }) }],
+      };
+    }
+  );
+
+  // Tool: get_decomposition — get all work items and their dependency graph
+  server.registerTool(
+    'get_decomposition',
+    {
+      description: 'Get all work items and their dependency graph, plus a coverage matrix showing which domain events are covered.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+      },
+    },
+    ({ code }) => {
+      const svc = new DecompositionService(
+        (c: string) => sessionStore.getSession(c) ?? null,
+        eventStore
+      );
+      const workItems = svc.getDecomposition(code);
+      if (workItems === null) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const session = sessionStore.getSession(code)!;
+      const dependencies = [...session.workItemDependencies];
+      const coverage = svc.getCoverageMatrix(code) ?? [];
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ workItems, dependencies, coverage }) }],
+      };
+    }
+  );
+
+  // Tool: suggest_decomposition — heuristic suggestions for decomposing aggregates
+  server.registerTool(
+    'suggest_decomposition',
+    {
+      description: 'Generate heuristic suggestions for decomposing domain events into vertical slice work items. Optionally filter to a single aggregate.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        aggregate: z.string().optional().describe('If provided, only suggest work items for this aggregate'),
+      },
+    },
+    ({ code, aggregate }) => {
+      const session = sessionStore.getSession(code);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      const allEvents = session.submissions.flatMap((s) => s.data.domain_events);
+      const suggestions = suggestDecomposition(allEvents, aggregate);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ suggestions }) }],
+      };
+    }
+  );
+
+  // Tool: set_dependency — set a dependency between two work items
+  server.registerTool(
+    'set_dependency',
+    {
+      description: 'Set a dependency between two work items. Idempotent: repeated calls with the same fromId+toId return the existing record.',
+      inputSchema: {
+        code: z.string().describe('Session join code'),
+        fromId: z.string().describe('Work item ID that depends on toId'),
+        toId: z.string().describe('Work item ID that must complete first'),
+        participantId: z.string().describe('ID of the participant setting the dependency'),
+      },
+    },
+    ({ code, fromId, toId, participantId }) => {
+      const svc = new DecompositionService(
+        (c: string) => sessionStore.getSession(c) ?? null,
+        eventStore
+      );
+      const dependency = svc.setDependency(code, { fromId, toId, participantId });
+      if (!dependency) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ dependency }) }],
+      };
+    }
+  );
+
+  // -------------------------------------------------------------------------
   // Scoped tools — only registered when --session/--user are provided
   // -------------------------------------------------------------------------
 
@@ -1088,6 +1218,43 @@ async function main(): Promise<void> {
               lastChecked,
             }),
           }],
+        };
+      }
+    );
+
+    // Tool: my_create_work_items — scoped variant; auto-fills participantId from caller context
+    server.registerTool(
+      'my_create_work_items',
+      {
+        description: 'Batch-create work items in your session. Participates as the scoped user — no need to provide participantId.',
+        inputSchema: {
+          items: z.array(
+            z.object({
+              title: z.string().describe('Work item title'),
+              description: z.string().describe('Work item description'),
+              acceptanceCriteria: z.array(z.string()).describe('Acceptance criteria list'),
+              complexity: z.enum(['S', 'M', 'L', 'XL']).describe('Complexity estimate'),
+              linkedEvents: z.array(z.string()).describe('Domain event names this work item covers'),
+              dependencies: z.array(z.string()).describe('Work item IDs this depends on'),
+            })
+          ).describe('Work items to create'),
+        },
+      },
+      ({ items }) => {
+        const svc = new DecompositionService(
+          (c: string) => sessionStore.getSession(c) ?? null,
+          eventStore
+        );
+        const session = sessionStore.getSession(ctx.sessionCode);
+        if (!session) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+            isError: true,
+          };
+        }
+        const created = items.map((item) => svc.createWorkItem(ctx.sessionCode, item)).filter(Boolean);
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ created, participantId: ctx.participantId }) }],
         };
       }
     );
