@@ -10,7 +10,7 @@ test.describe('App Shell', () => {
 
     // The session lobby renders inside app-shell's shadow DOM
     // Playwright pierces shadow DOM by default with locators
-    const heading = page.getByRole('heading', { name: 'Storm-Prep Visualizer' });
+    const heading = page.getByRole('heading', { name: 'Seam' });
     await expect(heading).toBeVisible();
   });
 
