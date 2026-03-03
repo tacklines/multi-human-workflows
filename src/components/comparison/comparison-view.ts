@@ -469,7 +469,7 @@ export class ComparisonView extends LitElement {
         </div>
         <div class="stat-card assumptions" role="status" aria-label="${matchedCount} ${t('comparisonView.assumptions').toLowerCase()} matched">
           <div class="stat-number" aria-hidden="true">${matchedCount}</div>
-          <div class="stat-label">${t('comparisonView.assumptions')}</div>
+          <div class="stat-label"><domain-tooltip term="assumption">${t('comparisonView.assumptions')}</domain-tooltip></div>
         </div>
       </div>
 
@@ -517,7 +517,7 @@ export class ComparisonView extends LitElement {
 
       <!-- Matched Assumptions Section -->
       <div class="section" role="region" aria-label="${t('comparisonView.matchedAssumptions')}" aria-live="polite">
-        <h2 class="section-heading assumptions">${t('comparisonView.matchedAssumptions')}</h2>
+        <h2 class="section-heading assumptions"><domain-tooltip term="assumption">${t('comparisonView.matchedAssumptions')}</domain-tooltip></h2>
         ${assumptionMatches.length > 0
           ? html`<div class="card-list">
               ${assumptionMatches.map((m) => html`

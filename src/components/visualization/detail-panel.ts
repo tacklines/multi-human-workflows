@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { ref, createRef } from 'lit/directives/ref.js';
 import { t } from '../../lib/i18n.js';
+import '../shared/domain-tooltip.js';
 
 export interface DetailEventEntry {
   name: string;
@@ -355,7 +356,7 @@ export class DetailPanel extends LitElement {
     const aggBg = AGG_BGS[data.colorIndex] ?? AGG_BGS[0];
 
     return html`
-      <div class="section-label">${t('detailPanel.aboutAggregate')}</div>
+      <div class="section-label"><domain-tooltip term="aggregate">${t('detailPanel.aboutAggregate')}</domain-tooltip></div>
       <div class="summary-pills">
         <span class="pill aggregate"
           style="--agg-text:${AGG_COLORS[data.colorIndex] ?? '#374151'};--agg-bg:${aggBg};--agg-stroke:${aggColor}">
@@ -363,7 +364,7 @@ export class DetailPanel extends LitElement {
         </span>
       </div>
 
-      <div class="section-label" style="margin-top:16px">${t('detailPanel.domainEvents')}</div>
+      <div class="section-label" style="margin-top:16px"><domain-tooltip term="domain-event">${t('detailPanel.domainEvents')}</domain-tooltip></div>
       ${data.events.length === 0
         ? html`<div class="empty-state">${t('detailPanel.noEvents')}</div>`
         : html`
@@ -394,21 +395,21 @@ export class DetailPanel extends LitElement {
         <div class="event-name">${ev.name}</div>
         <div class="event-meta">
           <div class="meta-row">
-            <span class="meta-key">${t('detailPanel.meta.confidenceLevel')}</span>
+            <span class="meta-key"><domain-tooltip term="confidence">${t('detailPanel.meta.confidenceLevel')}</domain-tooltip></span>
             <span class="meta-val">${this._renderConfidenceBadge(ev.confidence)}</span>
           </div>
           <div class="meta-row">
-            <span class="meta-key">${t('detailPanel.meta.trigger')}</span>
+            <span class="meta-key"><domain-tooltip term="trigger">${t('detailPanel.meta.trigger')}</domain-tooltip></span>
             <span class="meta-val">${triggerLabel}</span>
           </div>
           <div class="meta-row">
-            <span class="meta-key">${t('detailPanel.meta.integration')}</span>
+            <span class="meta-key"><domain-tooltip term="integration">${t('detailPanel.meta.integration')}</domain-tooltip></span>
             <span class="meta-val">${directionLabel}</span>
           </div>
           ${ev.channel
             ? html`
               <div class="meta-row">
-                <span class="meta-key">${t('detailPanel.meta.channel')}</span>
+                <span class="meta-key"><domain-tooltip term="channel">${t('detailPanel.meta.channel')}</domain-tooltip></span>
                 <span class="meta-val">${ev.channel}</span>
               </div>
             `
@@ -435,11 +436,11 @@ export class DetailPanel extends LitElement {
                 <div class="event-name">${ev.name}</div>
                 <div class="event-meta">
                   <div class="meta-row">
-                    <span class="meta-key">${t('detailPanel.meta.direction')}</span>
+                    <span class="meta-key"><domain-tooltip term="integration">${t('detailPanel.meta.direction')}</domain-tooltip></span>
                     <span class="meta-val">${ev.direction === 'inbound' ? t('detailPanel.direction.systemToAggregate') : t('detailPanel.direction.aggregateToSystem')}</span>
                   </div>
                   <div class="meta-row">
-                    <span class="meta-key">${t('detailPanel.meta.confidenceLevel')}</span>
+                    <span class="meta-key"><domain-tooltip term="confidence">${t('detailPanel.meta.confidenceLevel')}</domain-tooltip></span>
                     <span class="meta-val">${this._renderConfidenceBadge(ev.confidence)}</span>
                   </div>
                 </div>

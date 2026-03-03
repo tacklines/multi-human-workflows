@@ -6,6 +6,7 @@ import { t } from '../../lib/i18n.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
+import './domain-tooltip.js';
 
 const CONFIDENCE_VARIANT: Record<string, string> = {
   CONFIRMED: 'success',
@@ -181,7 +182,7 @@ export class EventCard extends LitElement {
               variant=${CONFIDENCE_VARIANT[e.confidence] ?? 'neutral'}
               pill
               ?filled=${e.confidence === 'CONFIRMED'}
-            >${e.confidence}</sl-badge>
+            ><domain-tooltip term="confidence">${e.confidence}</domain-tooltip></sl-badge>
             <sl-badge
               variant=${DIRECTION_VARIANT[e.integration.direction] ?? 'neutral'}
               pill
@@ -189,10 +190,10 @@ export class EventCard extends LitElement {
           </div>
         </div>
         <div class="meta">
-          <strong>${t('eventCard.trigger')}</strong> ${e.trigger}
+          <strong><domain-tooltip term="trigger">${t('eventCard.trigger')}</domain-tooltip></strong> ${e.trigger}
         </div>
-        ${e.state_change ? html`<div class="meta"><strong>${t('eventCard.state')}</strong> ${e.state_change}</div>` : nothing}
-        ${e.integration.channel ? html`<div class="meta"><strong>${t('eventCard.channel')}</strong> ${e.integration.channel}</div>` : nothing}
+        ${e.state_change ? html`<div class="meta"><strong><domain-tooltip term="state-change">${t('eventCard.state')}</domain-tooltip></strong> ${e.state_change}</div>` : nothing}
+        ${e.integration.channel ? html`<div class="meta"><strong><domain-tooltip term="channel">${t('eventCard.channel')}</domain-tooltip></strong> ${e.integration.channel}</div>` : nothing}
         ${e.payload.length > 0 ? html`
           <sl-details summary="${t('eventCard.payload', { count: e.payload.length })}">
             <table class="payload-table">

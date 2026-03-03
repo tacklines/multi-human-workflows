@@ -6,6 +6,7 @@ import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
+import './domain-tooltip.js';
 
 const TYPE_COLORS: Record<AssumptionType, string> = {
   ownership: '#e11d48',
@@ -218,7 +219,7 @@ export class AssumptionList extends LitElement {
     return html`
       <div class="stats-bar" role="status" aria-label="Boundary assumptions summary">
         <span class="stat">
-          <span class="stat-count">${this.assumptions.length}</span> ${t('assumptionList.heading')}
+          <span class="stat-count">${this.assumptions.length}</span> <domain-tooltip term="boundary-assumption">${t('assumptionList.heading')}</domain-tooltip>
         </span>
         ${(['CONFIRMED', 'LIKELY', 'POSSIBLE'] as Confidence[]).map(
           (c) => html`

@@ -68,4 +68,24 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     term: 'State Change',
     definition: 'The difference this event made — what changed in the system after this event was recorded.',
   },
+  'confidence': {
+    term: 'Confidence',
+    definition: 'How certain you are this event exists. CONFIRMED means verified, LIKELY means probably right, POSSIBLE means it needs checking.',
+  },
+  'integration': {
+    term: 'Integration',
+    definition: 'How this event connects to other systems — whether it flows inward, outward, or stays internal to one team.',
+  },
+  'boundary-assumption': {
+    term: 'Boundary Assumption',
+    definition: 'A belief about where one team\'s responsibility ends and another\'s begins. Making these explicit prevents costly misunderstandings.',
+  },
+  'event-contract': {
+    term: 'Event Contract',
+    definition: 'An agreed-upon definition of an event — its name, payload fields, and meaning — so all teams interpret it the same way.',
+  },
+  'boundary-contract': {
+    term: 'Boundary Contract',
+    definition: 'An agreed-upon rule about team boundaries — who owns what, and how teams coordinate at the edges.',
+  },
 };

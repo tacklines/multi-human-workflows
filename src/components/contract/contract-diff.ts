@@ -11,6 +11,7 @@ import '@shoelace-style/shoelace/dist/components/tab/tab.js';
 import '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js';
 
 import '../shared/empty-state.js';
+import '../shared/domain-tooltip.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -339,6 +340,7 @@ export class ContractDiff extends LitElement {
     if (!config) return nothing;
 
     const kindLabel = change.kind === 'eventContract' ? t('contractDiff.kind.event') : t('contractDiff.kind.boundary');
+    const kindTerm = change.kind === 'eventContract' ? 'event-contract' : 'boundary-contract';
     const typeLabel = t(`contractDiff.changeType.${change.type}`);
 
     return html`
@@ -360,7 +362,7 @@ export class ContractDiff extends LitElement {
           class="change-kind-badge"
           variant="neutral"
           pill
-        >${kindLabel}</sl-badge>
+        ><domain-tooltip term="${kindTerm}">${kindLabel}</domain-tooltip></sl-badge>
       </li>
     `;
   }

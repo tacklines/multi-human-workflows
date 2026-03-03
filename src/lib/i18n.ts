@@ -1104,6 +1104,11 @@ export const messages: Record<string, string> = {
   'glossary.channel': 'How this event gets delivered to other systems — for example, a message queue, REST call, or event stream.',
   'glossary.trigger': 'What caused this event to happen — a user action, a scheduled job, or another event.',
   'glossary.state-change': 'The difference this event made — what changed in the system after this event was recorded.',
+  'glossary.confidence': 'How certain you are this event exists. CONFIRMED means verified, LIKELY means probably right, POSSIBLE means it needs checking.',
+  'glossary.integration': 'How this event connects to other systems — whether it flows inward, outward, or stays internal to one team.',
+  'glossary.boundary-assumption': 'A belief about where one team\'s responsibility ends and another\'s begins. Making these explicit prevents costly misunderstandings.',
+  'glossary.event-contract': 'An agreed-upon definition of an event — its name, payload fields, and meaning — so all teams interpret it the same way.',
+  'glossary.boundary-contract': 'An agreed-upon rule about team boundaries — who owns what, and how teams coordinate at the edges.',
 };
 
 /**

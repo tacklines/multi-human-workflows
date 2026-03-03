@@ -238,11 +238,11 @@ export class ConflictCard extends LitElement {
   private _renderBadge() {
     switch (this.overlap.kind) {
       case 'same-name':
-        return html`<sl-badge variant="warning" pill>${t('conflictCard.kind.sharedEvent')}</sl-badge>`;
+        return html`<sl-badge variant="warning" pill><domain-tooltip term="overlap">${t('conflictCard.kind.sharedEvent')}</domain-tooltip></sl-badge>`;
       case 'same-aggregate':
-        return html`<sl-badge variant="primary" pill>${t('conflictCard.kind.sharedAggregate')}</sl-badge>`;
+        return html`<sl-badge variant="primary" pill><domain-tooltip term="aggregate">${t('conflictCard.kind.sharedAggregate')}</domain-tooltip></sl-badge>`;
       case 'assumption-conflict':
-        return html`<sl-badge variant="danger" pill>${t('conflictCard.kind.assumptionConflict')}</sl-badge>`;
+        return html`<sl-badge variant="danger" pill><domain-tooltip term="assumption">${t('conflictCard.kind.assumptionConflict')}</domain-tooltip></sl-badge>`;
     }
   }
 
