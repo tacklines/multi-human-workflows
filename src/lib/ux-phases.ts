@@ -83,8 +83,8 @@ export const UX_PHASES: UxPhaseInfo[] = [
  * Multiple UX phases share the same engine phase (particularly during `prep`).
  * The differentiator is the artifact inventory:
  *
- *   - lobby (no submissions)         → spark
- *   - prep, 1 submission             → explore
+ *   - lobby (no submissions/reqs)     → spark
+ *   - prep, requirements OR 1 sub    → explore
  *   - prep, 2+ submissions (no jam)  → rank (ranking available, comparison pending)
  *   - compare (2+ subs, no jam)      → slice (comparison visible, decomp can begin)
  *   - jam started                    → agree
@@ -102,15 +102,17 @@ export function inferUxPhase(status: WorkflowStatus): UxPhase {
       return 'spark';
 
     case 'prep':
-      // Spark ends when the first artifact is submitted.
-      // Explore: active while a single participant has submitted.
+      // Spark ends when the first artifact is submitted or a requirement is added.
+      // Requirements indicate the user has started articulating their domain,
+      // moving past the initial spark even without a YAML submission.
+      // Explore: active while a single participant has submitted or requirements exist.
       // Rank: overlaps with Explore — ranking is available once enough events
       //       exist. We transition to rank once multiple submissions are present
       //       but comparison hasn't started yet.
-      if (artifactInventory.submissionCount === 0) {
+      if (artifactInventory.submissionCount === 0 && artifactInventory.requirementCount === 0) {
         return 'spark';
       }
-      if (artifactInventory.submissionCount === 1) {
+      if (artifactInventory.submissionCount <= 1) {
         return 'explore';
       }
       // 2+ submissions still in prep state (comparison can begin)
@@ -146,7 +148,7 @@ export function inferUxPhase(status: WorkflowStatus): UxPhase {
  * This is used by the Phase Ribbon to render completed-phase styling.
  *
  * Completion conditions mirror the narrative from experience-design.md:
- *   spark    — first artifact submitted (submissionCount >= 1)
+ *   spark    — first artifact submitted or requirement added (submissionCount >= 1 OR requirementCount > 0)
  *   explore  — more than one submission exists (submissionCount >= 2)
  *   rank     — comparison has started (submissionCount >= 2 AND compare or later)
  *   slice    — jam has been started (hasJam)
@@ -159,7 +161,7 @@ export function isPhaseComplete(phase: UxPhase, status: WorkflowStatus): boolean
 
   switch (phase) {
     case 'spark':
-      return inv.submissionCount >= 1;
+      return inv.submissionCount >= 1 || inv.requirementCount > 0;
 
     case 'explore':
       return inv.submissionCount >= 2;

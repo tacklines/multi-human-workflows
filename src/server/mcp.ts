@@ -635,6 +635,7 @@ async function main(): Promise<void> {
       const status = computeWorkflowStatus({
         participantCount: session.participants.size,
         submissionCount: session.submissions.length,
+        requirementCount: session.requirements.length,
         jam: session.jam,
         contracts: session.contracts,
         integrationReport: session.integrationReport,
@@ -668,6 +669,7 @@ async function main(): Promise<void> {
       const status = computeWorkflowStatus({
         participantCount: session.participants.size,
         submissionCount: session.submissions.length,
+        requirementCount: session.requirements.length,
         jam: session.jam,
         contracts: session.contracts,
         integrationReport: session.integrationReport,
@@ -1958,6 +1960,7 @@ async function main(): Promise<void> {
         const status = computeWorkflowStatus({
           participantCount: session.participants.size,
           submissionCount: session.submissions.length,
+          requirementCount: session.requirements.length,
           jam: session.jam,
           contracts: session.contracts,
           integrationReport: session.integrationReport,

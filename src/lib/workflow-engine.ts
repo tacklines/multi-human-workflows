@@ -19,6 +19,7 @@ export interface WorkflowStatus {
 export interface ArtifactInventory {
   participantCount: number;
   submissionCount: number;
+  requirementCount: number;
   hasJam: boolean;
   resolutionCount: number;
   ownershipCount: number;
@@ -34,6 +35,7 @@ export interface ArtifactInventory {
 export interface SessionData {
   participantCount: number;
   submissionCount: number;
+  requirementCount: number;
   jam: JamArtifacts | null;
   contracts: ContractBundle | null;
   integrationReport: IntegrationReport | null;
@@ -95,7 +97,7 @@ const PHASE_ORDER: WorkflowPhase[] = [
 ];
 
 export function buildArtifactInventory(session: SessionData): ArtifactInventory {
-  const { participantCount, submissionCount, jam, contracts, integrationReport, workItemProgress, workItemCount } = session;
+  const { participantCount, submissionCount, requirementCount, jam, contracts, integrationReport, workItemProgress, workItemCount } = session;
 
   const totalItems = workItemCount ?? 0;
   const allWorkItemsComplete =
@@ -107,6 +109,7 @@ export function buildArtifactInventory(session: SessionData): ArtifactInventory 
   return {
     participantCount,
     submissionCount,
+    requirementCount,
     hasJam: jam !== null,
     resolutionCount: jam?.resolutions.length ?? 0,
     ownershipCount: jam?.ownershipMap.length ?? 0,
@@ -233,6 +236,7 @@ export function detectPhaseTransition(
 export function sessionToSessionData(session: {
   participants: Map<string, unknown>;
   submissions: unknown[];
+  requirements?: unknown[];
   jam: JamArtifacts | null;
   contracts: ContractBundle | null;
   integrationReport: IntegrationReport | null;
@@ -240,6 +244,7 @@ export function sessionToSessionData(session: {
   return {
     participantCount: session.participants.size,
     submissionCount: session.submissions.length,
+    requirementCount: session.requirements?.length ?? 0,
     jam: session.jam,
     contracts: session.contracts,
     integrationReport: session.integrationReport,

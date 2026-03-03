@@ -48,6 +48,7 @@ function makeIntegrationReport(
 function makeSession(overrides: {
   participantCount?: number;
   submissionCount?: number;
+  requirementCount?: number;
   jam?: JamArtifacts | null;
   contracts?: ContractBundle | null;
   integrationReport?: IntegrationReport | null;
@@ -57,6 +58,7 @@ function makeSession(overrides: {
   return {
     participantCount: overrides.participantCount ?? 1,
     submissionCount: overrides.submissionCount ?? 0,
+    requirementCount: overrides.requirementCount ?? 0,
     jam: overrides.jam ?? null,
     contracts: overrides.contracts ?? null,
     integrationReport: overrides.integrationReport ?? null,
@@ -73,6 +75,7 @@ describe('buildArtifactInventory', () => {
     expect(inventory).toEqual<ArtifactInventory>({
       participantCount: 1,
       submissionCount: 0,
+      requirementCount: 0,
       hasJam: false,
       resolutionCount: 0,
       ownershipCount: 0,
@@ -187,6 +190,7 @@ describe('inferPhase', () => {
     return {
       participantCount: 1,
       submissionCount: 0,
+      requirementCount: 0,
       hasJam: false,
       resolutionCount: 0,
       ownershipCount: 0,

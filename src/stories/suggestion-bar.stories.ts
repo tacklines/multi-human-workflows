@@ -39,6 +39,7 @@ export const LobbyNoParticipants: Story = {
       artifactInventory: {
         participantCount: 0,
         submissionCount: 0,
+        requirementCount: 0,
         hasJam: false,
         resolutionCount: 0,
         ownershipCount: 0,
@@ -67,6 +68,7 @@ export const LobbyWithParticipants: Story = {
       artifactInventory: {
         participantCount: 2,
         submissionCount: 0,
+        requirementCount: 0,
         hasJam: false,
         resolutionCount: 0,
         ownershipCount: 0,
@@ -95,6 +97,7 @@ export const PrepOneSubmission: Story = {
       artifactInventory: {
         participantCount: 2,
         submissionCount: 1,
+        requirementCount: 0,
         hasJam: false,
         resolutionCount: 0,
         ownershipCount: 0,
@@ -123,6 +126,7 @@ export const ComparePhase: Story = {
       artifactInventory: {
         participantCount: 3,
         submissionCount: 3,
+        requirementCount: 0,
         hasJam: false,
         resolutionCount: 0,
         ownershipCount: 0,
@@ -151,6 +155,7 @@ export const JamWithConflicts: Story = {
       artifactInventory: {
         participantCount: 2,
         submissionCount: 2,
+        requirementCount: 0,
         hasJam: true,
         resolutionCount: 2,
         ownershipCount: 1,
@@ -179,6 +184,7 @@ export const JamAllResolved: Story = {
       artifactInventory: {
         participantCount: 2,
         submissionCount: 2,
+        requirementCount: 0,
         hasJam: true,
         resolutionCount: 5,
         ownershipCount: 4,
@@ -207,6 +213,7 @@ export const Done: Story = {
       artifactInventory: {
         participantCount: 2,
         submissionCount: 2,
+        requirementCount: 0,
         hasJam: true,
         resolutionCount: 5,
         ownershipCount: 4,
