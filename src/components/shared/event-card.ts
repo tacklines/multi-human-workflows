@@ -1,10 +1,11 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { DomainEvent } from '../../schema/types.js';
+import type { DomainEvent, PriorityTier } from '../../schema/types.js';
 import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
+import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 
 const CONFIDENCE_VARIANT: Record<string, string> = {
   CONFIRMED: 'success',
@@ -128,11 +129,36 @@ export class EventCard extends LitElement {
       padding-left: 0.5rem;
       border-left: 2px solid #e5e7eb;
     }
+
+    .priority-star {
+      display: inline-flex;
+      align-items: center;
+      color: #d97706;
+      font-size: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .priority-star sl-icon {
+      font-size: 0.875rem;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
   `;
 
   @property({ attribute: false }) event!: DomainEvent;
   @property({ type: String }) aggregateColor = '';
   @property({ type: Boolean }) highlight = false;
+  @property({ type: String }) tier: PriorityTier | '' = '';
 
   render() {
     const e = this.event;
@@ -144,6 +170,12 @@ export class EventCard extends LitElement {
       <div class="card ${this.highlight ? 'highlight' : ''}" style=${cardStyle}>
         <div class="header">
           <span class="event-name">${e.name}</span>
+          ${this.tier === 'must_have' ? html`
+            <span class="priority-star" title="${t('eventCard.highPriority')}" aria-hidden="true">
+              <sl-icon name="star-fill"></sl-icon>
+            </span>
+            <span class="sr-only">${t('eventCard.highPriority')}</span>
+          ` : nothing}
           <div class="badges">
             <sl-badge
               variant=${CONFIDENCE_VARIANT[e.confidence] ?? 'neutral'}

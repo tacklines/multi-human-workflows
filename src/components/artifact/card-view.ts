@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { LoadedFile, Confidence, Direction } from '../../schema/types.js';
+import type { LoadedFile, Confidence, Direction, EventPriority } from '../../schema/types.js';
 import { getAllAggregates } from '../../lib/grouping.js';
 import { getAggregateColor } from '../../lib/aggregate-colors.js';
 import { EventFilterController } from '../controllers/event-filter-controller.js';
@@ -136,6 +136,8 @@ export class CardView extends LitElement {
   @property({ attribute: false }) confidenceFilter = new Set<Confidence>(['CONFIRMED', 'LIKELY', 'POSSIBLE']);
   @property({ attribute: false }) directionFilter = new Set<Direction>(['inbound', 'outbound', 'internal']);
   @property({ type: String }) selectedAggregate: string | null = null;
+  /** Priority records for events — used to show tier indicators on event cards */
+  @property({ attribute: false }) priorities: EventPriority[] = [];
 
   private _eventFilterCtrl = new EventFilterController(this);
 
@@ -192,6 +194,7 @@ export class CardView extends LitElement {
     this._eventFilterCtrl.setFilters(this.confidenceFilter, this.directionFilter);
 
     const allAggregates = getAllAggregates(this.files);
+    const tierMap = new Map(this.priorities.map((p) => [p.eventName, p.tier]));
 
     return html`
       ${this.renderStatsBar()}
@@ -227,6 +230,7 @@ export class CardView extends LitElement {
                           (e) => html`<event-card
                             .event=${e}
                             .aggregateColor=${color}
+                            tier=${tierMap.get(e.name) ?? ''}
                           ></event-card>`
                         )}
                       </div>

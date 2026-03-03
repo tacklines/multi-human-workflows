@@ -565,9 +565,10 @@ export class ComparisonView extends LitElement {
                   ${t('comparisonView.nAssumptions', { count: file.data.boundary_assumptions.length })}
                 </div>
                 <div class="events-list">
-                  ${file.data.domain_events.map(
-                    (e) => html`<event-card .event=${e}></event-card>`
-                  )}
+                  ${file.data.domain_events.map((e) => {
+                    const tier = this.priorities.find((p) => p.eventName === e.name)?.tier ?? '';
+                    return html`<event-card .event=${e} tier=${tier}></event-card>`;
+                  })}
                 </div>
                 <assumption-list .assumptions=${file.data.boundary_assumptions}></assumption-list>
               </div>

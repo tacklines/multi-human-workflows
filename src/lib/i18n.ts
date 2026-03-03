@@ -82,6 +82,7 @@ export const messages: Record<string, string> = {
   'eventCard.payload': 'Payload ({{count}} fields)',
   'eventCard.payloadField': 'field',
   'eventCard.payloadType': 'type',
+  'eventCard.highPriority': 'High priority',
 
   // ---------------------------------------------------------------------------
   // filter-panel

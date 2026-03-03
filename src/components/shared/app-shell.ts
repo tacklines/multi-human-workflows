@@ -857,6 +857,7 @@ export class AppShell extends LitElement {
                 .files=${files}
                 .confidenceFilter=${filters.confidence}
                 .directionFilter=${filters.direction}
+                .priorities=${this._comparisonPriorities(files)}
               ></card-view>
             </sl-tab-panel>
             <sl-tab-panel name="flow">
