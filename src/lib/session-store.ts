@@ -658,6 +658,12 @@ export class SessionStore {
     return session.requirements;
   }
 
+  getRequirement(code: string, requirementId: string): Requirement | undefined {
+    const session = this.sessions.get(code.toUpperCase());
+    if (!session) return undefined;
+    return session.requirements.find(r => r.id === requirementId);
+  }
+
   getRequirementCoverage(
     code: string,
     requirementId?: string
