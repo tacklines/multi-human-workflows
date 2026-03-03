@@ -751,6 +751,7 @@ export class AppShell extends LitElement {
               const overlapCount = this._comparisonCtrl.overlaps.length;
               return html`
                 <exploration-guide
+                  .artifactCount=${files.length}
                   .compareReady=${files.length >= 2}
                   .overlapCount=${overlapCount}
                   .completenessScore=${ed.score}
