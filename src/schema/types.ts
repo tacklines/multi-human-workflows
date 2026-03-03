@@ -450,3 +450,16 @@ export interface PendingApproval {
   /** ISO 8601 timestamp when this approval request expires (default: 24 hours after creation) */
   expiresAt: string;
 }
+
+/**
+ * A session-level requirement that domain events should fulfill.
+ * A requirement is "covered" when at least one domain event is derived from it.
+ */
+export interface Requirement {
+  /** Unique identifier for the requirement */
+  id: string;
+  /** Human-readable description of what is required */
+  description: string;
+  /** Names of domain events that fulfill this requirement */
+  derivedEvents: string[];
+}

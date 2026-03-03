@@ -17,6 +17,7 @@ import {
   WorkItem,
   WorkItemDependency,
   Draft,
+  Requirement,
 } from '../schema/types.js';
 import { EventStore } from '../contexts/session/event-store.js';
 import type {
@@ -68,6 +69,7 @@ export interface Session {
   workItems: WorkItem[];
   workItemDependencies: WorkItemDependency[];
   drafts: Draft[];
+  requirements: Requirement[];
 }
 
 export interface SerializedSession {
@@ -86,6 +88,7 @@ export interface SerializedSession {
   workItems: WorkItem[];
   workItemDependencies: WorkItemDependency[];
   drafts: Draft[];
+  requirements: Requirement[];
 }
 
 function generateCode(): string {
@@ -118,6 +121,7 @@ export function serializeSession(session: Session): SerializedSession {
     workItems: session.workItems,
     workItemDependencies: session.workItemDependencies,
     drafts: session.drafts,
+    requirements: session.requirements,
   };
 }
 
@@ -138,6 +142,7 @@ export function deserializeSession(serialized: SerializedSession): Session {
     workItems: serialized.workItems ?? [],
     workItemDependencies: serialized.workItemDependencies ?? [],
     drafts: serialized.drafts ?? [],
+    requirements: serialized.requirements ?? [],
   };
 }
 
@@ -181,6 +186,7 @@ export class SessionStore {
       workItems: [],
       workItemDependencies: [],
       drafts: [],
+      requirements: [],
     };
 
     this.sessions.set(code, session);

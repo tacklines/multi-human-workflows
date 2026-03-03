@@ -4,6 +4,7 @@ import type {
   Direction,
   BoundaryAssumption,
   LoadedFile,
+  Requirement,
 } from '../schema/types.js';
 
 export interface PrepStatus {
@@ -188,6 +189,47 @@ export function computePrepStatus(file: CandidateEventsFile): PrepStatus {
     completenessScore,
     gaps,
   };
+}
+
+export interface RequirementCoverage {
+  total: number;
+  fulfilled: number;
+  unfulfilled: Requirement[];
+}
+
+/**
+ * Compute coverage metrics for session requirements against submitted domain events.
+ * A requirement is "covered" if at least one of its derivedEvents appears in the
+ * set of all domain event names across all submitted files.
+ */
+export function computeRequirementCoverage(
+  requirements: Requirement[],
+  files: LoadedFile[]
+): RequirementCoverage {
+  if (requirements.length === 0) {
+    return { total: 0, fulfilled: 0, unfulfilled: [] };
+  }
+
+  const allEventNames = new Set<string>();
+  for (const file of files) {
+    for (const event of file.data.domain_events) {
+      allEventNames.add(event.name);
+    }
+  }
+
+  const unfulfilled: Requirement[] = [];
+  let fulfilled = 0;
+
+  for (const req of requirements) {
+    const isCovered = req.derivedEvents.some((name) => allEventNames.has(name));
+    if (isCovered) {
+      fulfilled++;
+    } else {
+      unfulfilled.push(req);
+    }
+  }
+
+  return { total: requirements.length, fulfilled, unfulfilled };
 }
 
 export function computeSessionStatus(files: LoadedFile[]): SessionPrepStatus {
