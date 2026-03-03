@@ -336,7 +336,7 @@ export class ResolutionRecorder extends LitElement {
           <sl-button
             size="small"
             variant="text"
-            @click=${() => { this._suggestionDismissed = true; }}
+            @click=${this._dismissSuggestion}
             aria-label="${t('resolutionRecorder.suggestion.dismiss')}"
           >
             ${t('resolutionRecorder.suggestion.dismiss')}
@@ -353,6 +353,23 @@ export class ResolutionRecorder extends LitElement {
     this._customText = this.suggestion.resolution;
     this._suggestionDismissed = true;
     this._error = '';
+    this.dispatchEvent(
+      new CustomEvent('suggestion-applied', {
+        detail: { suggestion: this.suggestion },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
+  private _dismissSuggestion() {
+    this._suggestionDismissed = true;
+    this.dispatchEvent(
+      new CustomEvent('suggestion-dismissed', {
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 
   private _renderRecorder() {
