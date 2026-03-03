@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { sessionStore, eventStore } from './store.js';
 import { parseAndValidate } from '../lib/yaml-validator-server.js';
-import { computePrepStatus, computeSessionStatus } from '../lib/prep-completeness.js';
+import { computePrepStatus, computeSessionStatus, computeRequirementCoverage } from '../lib/prep-completeness.js';
 import { computeWorkflowStatus } from '../lib/workflow-engine.js';
 import { serializeSession, generateId } from '../lib/session-store.js';
 import { compareFiles } from '../lib/comparison.js';
@@ -284,8 +284,13 @@ async function main(): Promise<void> {
         };
       }
       const status = computeSessionStatus(files);
+      const session = sessionStore.getSession(code)!;
+      const result: Record<string, unknown> = { ...status };
+      if (session.requirements.length > 0) {
+        result.requirementCoverage = computeRequirementCoverage(session.requirements, files);
+      }
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(status) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
       };
     }
   );

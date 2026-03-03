@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computePrepStatus, computeSessionStatus } from './prep-completeness.js';
-import type { CandidateEventsFile, DomainEvent, BoundaryAssumption, LoadedFile } from '../schema/types.js';
+import { computePrepStatus, computeSessionStatus, computeRequirementCoverage } from './prep-completeness.js';
+import type { CandidateEventsFile, DomainEvent, BoundaryAssumption, LoadedFile, Requirement } from '../schema/types.js';
 
 // Helper to build a minimal valid CandidateEventsFile
 function makeFile(
@@ -400,5 +400,111 @@ describe('computeSessionStatus — single file', () => {
     expect(session.overallScore).toBe(0);
     expect(session.fileCount).toBe(0);
     expect(session.totalEvents).toBe(0);
+  });
+});
+
+describe('computeRequirementCoverage', () => {
+  it('should return zeroed metrics when no requirements exist', () => {
+    const result = computeRequirementCoverage([], []);
+
+    expect(result.total).toBe(0);
+    expect(result.fulfilled).toBe(0);
+    expect(result.unfulfilled).toHaveLength(0);
+  });
+
+  it('should mark a requirement as fulfilled when a derived event exists', () => {
+    const requirements: Requirement[] = [
+      { id: 'R-1', description: 'Must handle order placement', derivedEvents: ['OrderPlaced'] },
+    ];
+    const files: LoadedFile[] = [
+      makeLoadedFile('backend', {
+        events: [{ name: 'OrderPlaced', aggregate: 'Order' }],
+      }),
+    ];
+
+    const result = computeRequirementCoverage(requirements, files);
+
+    expect(result.total).toBe(1);
+    expect(result.fulfilled).toBe(1);
+    expect(result.unfulfilled).toHaveLength(0);
+  });
+
+  it('should mark a requirement as unfulfilled when no derived event exists', () => {
+    const requirements: Requirement[] = [
+      { id: 'R-1', description: 'Must handle refunds', derivedEvents: ['RefundIssued'] },
+    ];
+    const files: LoadedFile[] = [
+      makeLoadedFile('backend', {
+        events: [{ name: 'OrderPlaced', aggregate: 'Order' }],
+      }),
+    ];
+
+    const result = computeRequirementCoverage(requirements, files);
+
+    expect(result.total).toBe(1);
+    expect(result.fulfilled).toBe(0);
+    expect(result.unfulfilled).toHaveLength(1);
+    expect(result.unfulfilled[0].id).toBe('R-1');
+  });
+
+  it('should handle mixed fulfilled and unfulfilled requirements', () => {
+    const requirements: Requirement[] = [
+      { id: 'R-1', description: 'Must handle orders', derivedEvents: ['OrderPlaced'] },
+      { id: 'R-2', description: 'Must handle refunds', derivedEvents: ['RefundIssued'] },
+      { id: 'R-3', description: 'Must handle payments', derivedEvents: ['PaymentProcessed', 'PaymentFailed'] },
+    ];
+    const files: LoadedFile[] = [
+      makeLoadedFile('backend', {
+        events: [
+          { name: 'OrderPlaced', aggregate: 'Order' },
+          { name: 'PaymentFailed', aggregate: 'Payment' },
+        ],
+      }),
+    ];
+
+    const result = computeRequirementCoverage(requirements, files);
+
+    expect(result.total).toBe(3);
+    expect(result.fulfilled).toBe(2);
+    expect(result.unfulfilled).toHaveLength(1);
+    expect(result.unfulfilled[0].id).toBe('R-2');
+  });
+
+  it('should check events across multiple files', () => {
+    const requirements: Requirement[] = [
+      { id: 'R-1', description: 'Must handle orders', derivedEvents: ['OrderPlaced'] },
+      { id: 'R-2', description: 'Must handle payments', derivedEvents: ['PaymentProcessed'] },
+    ];
+    const files: LoadedFile[] = [
+      makeLoadedFile('frontend', {
+        events: [{ name: 'OrderPlaced', aggregate: 'Order' }],
+      }),
+      makeLoadedFile('backend', {
+        events: [{ name: 'PaymentProcessed', aggregate: 'Payment' }],
+      }),
+    ];
+
+    const result = computeRequirementCoverage(requirements, files);
+
+    expect(result.total).toBe(2);
+    expect(result.fulfilled).toBe(2);
+    expect(result.unfulfilled).toHaveLength(0);
+  });
+
+  it('should treat requirements with no derivedEvents as unfulfilled', () => {
+    const requirements: Requirement[] = [
+      { id: 'R-1', description: 'Vague requirement', derivedEvents: [] },
+    ];
+    const files: LoadedFile[] = [
+      makeLoadedFile('backend', {
+        events: [{ name: 'OrderPlaced', aggregate: 'Order' }],
+      }),
+    ];
+
+    const result = computeRequirementCoverage(requirements, files);
+
+    expect(result.total).toBe(1);
+    expect(result.fulfilled).toBe(0);
+    expect(result.unfulfilled).toHaveLength(1);
   });
 });
