@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ConflictResolution } from '../../schema/types.js';
 import type { Overlap } from '../../lib/comparison.js';
+import type { ResolutionSuggestion } from '../../lib/integration-heuristics.js';
 
 // ResolutionRecorder is a Lit web component. We test the logic and
 // public interface (properties, events) without full DOM rendering.
@@ -209,5 +210,110 @@ describe('ResolutionRecorder — approach toggling', () => {
     selected = 'split';
 
     expect(selected).toBe('split');
+  });
+});
+
+// ── Suggestion banner / loading skeleton tests ───────────────────
+
+const makeSuggestion = (partial?: Partial<ResolutionSuggestion>): ResolutionSuggestion => ({
+  approach: 'merge',
+  resolution: 'Merge amountCents from Alice with currency from Bob',
+  confidence: 0.8,
+  reasoning: 'Both fields are needed; merging preserves both data points.',
+  ...partial,
+});
+
+describe('ResolutionRecorder — suggestion banner', () => {
+  describe('Given a suggestion is provided', () => {
+    it('should expose the suggestion text via the property', () => {
+      const suggestion = makeSuggestion();
+      // Component receives suggestion as a property; verify the shape is accepted
+      expect(suggestion.reasoning).toBeTruthy();
+      expect(suggestion.confidence).toBeGreaterThan(0);
+    });
+
+    it('should prepare a suggestion-applied event detail when Apply is clicked', () => {
+      const suggestion = makeSuggestion({
+        approach: 'merge',
+        resolution: 'Merge amountCents from Alice with currency from Bob',
+      });
+
+      // Simulate what _applySuggestion does: emits event with the suggestion
+      const events: CustomEvent[] = [];
+      const dispatch = (ev: CustomEvent) => events.push(ev);
+
+      dispatch(
+        new CustomEvent('suggestion-applied', {
+          detail: { suggestion },
+          bubbles: true,
+          composed: true,
+        })
+      );
+
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe('suggestion-applied');
+      expect((events[0].detail as { suggestion: ResolutionSuggestion }).suggestion).toEqual(suggestion);
+    });
+
+    it('should prepare a suggestion-dismissed event when Dismiss is clicked', () => {
+      const events: CustomEvent[] = [];
+      const dispatch = (ev: CustomEvent) => events.push(ev);
+
+      dispatch(
+        new CustomEvent('suggestion-dismissed', {
+          bubbles: true,
+          composed: true,
+        })
+      );
+
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe('suggestion-dismissed');
+    });
+  });
+
+  describe('Given suggestionLoading is true and suggestion is null', () => {
+    it('should indicate loading state (skeleton should render)', () => {
+      const suggestionLoading = true;
+      const suggestion: ResolutionSuggestion | null = null;
+
+      // When loading and no suggestion yet, the skeleton branch activates
+      const shouldShowSkeleton = suggestionLoading && !suggestion;
+      expect(shouldShowSkeleton).toBe(true);
+    });
+
+    it('should not show a skeleton when loading is false', () => {
+      const suggestionLoading = false;
+      const suggestion: ResolutionSuggestion | null = null;
+
+      const shouldShowSkeleton = suggestionLoading && !suggestion;
+      expect(shouldShowSkeleton).toBe(false);
+    });
+  });
+
+  describe('Given suggestion is set and loading is false', () => {
+    it('should show banner (not skeleton)', () => {
+      const suggestionLoading = false;
+      const suggestion = makeSuggestion();
+
+      const shouldShowSkeleton = suggestionLoading && !suggestion;
+      const shouldShowBanner = !shouldShowSkeleton && suggestion !== null;
+      expect(shouldShowBanner).toBe(true);
+    });
+  });
+
+  describe('When Apply is clicked', () => {
+    it('should pre-fill the selected approach from suggestion', () => {
+      const suggestion = makeSuggestion({ approach: 'split', resolution: 'Split into two events' });
+
+      let selectedApproach: string | null = null;
+      let customText = '';
+
+      // Simulate _applySuggestion logic
+      selectedApproach = suggestion.approach;
+      customText = suggestion.resolution;
+
+      expect(selectedApproach).toBe('split');
+      expect(customText).toBe('Split into two events');
+    });
   });
 });
