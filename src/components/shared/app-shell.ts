@@ -58,6 +58,7 @@ import '../artifact/contract-sidebar.js';
 import '../artifact/file-drop-zone.js';
 import '../session/session-lobby.js';
 import '../session/spark-canvas.js';
+import '../session/derivation-review-panel.js';
 import '../session/participant-registry.js';
 import './phase-ribbon.js';
 import '../artifact/card-view.js';
@@ -847,6 +848,13 @@ export class AppShell extends LitElement {
               @spark-submit=${this._onSparkSubmit}
             ></spark-canvas>
           </help-tip>
+          ${this.appState.derivationSuggestions.length > 0 ? html`
+            <derivation-review-panel
+              .suggestions=${this.appState.derivationSuggestions}
+              @events-accepted=${this._onEventsAccepted}
+              @event-edit-requested=${this._onEventEditRequested}
+            ></derivation-review-panel>
+          ` : nothing}
           <sl-tab-group @sl-tab-show=${this.onTabChange} @open-settings=${this._onOpenSectionSettings}>
             <sl-tab slot="nav" panel="cards" ?active=${activeView === 'cards'}>
               ${t('shell.tab.events')}
@@ -1302,6 +1310,15 @@ export class AppShell extends LitElement {
         store.addError('spark-canvas.yaml', [err.message]);
       });
     }
+  }
+
+  private _onEventsAccepted(e: CustomEvent) {
+    store.clearDerivationSuggestions();
+    console.debug('Events accepted:', e.detail);
+  }
+
+  private _onEventEditRequested(e: CustomEvent) {
+    console.debug('Event edit requested:', e.detail);
   }
 
   private onTabChange(e: CustomEvent) {
