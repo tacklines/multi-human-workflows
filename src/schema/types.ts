@@ -312,26 +312,6 @@ export const DEFAULT_SESSION_CONFIG: SessionConfig = {
 /** Priority tier for ranking domain events — MoSCoW-style classification */
 export type PriorityTier = 'must_have' | 'should_have' | 'could_have';
 
-/** Lifecycle status of a requirement */
-export type RequirementStatus = 'draft' | 'active' | 'fulfilled' | 'deferred';
-
-/**
- * A plain-language requirement stated by a participant.
- * Requirements drive the discovery of domain events and assumptions —
- * the platform derives structured artifacts from these statements.
- */
-export interface Requirement {
-  id: string;
-  statement: string;
-  authorId: string;
-  createdAt: string;
-  priority?: PriorityTier;
-  tags?: string[];
-  derivedEvents: string[];
-  derivedAssumptions: string[];
-  status: RequirementStatus;
-}
-
 /**
  * Per-participant priority record for a single domain event.
  * Stored in the session and used to compute composite scores.

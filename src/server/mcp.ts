@@ -1685,6 +1685,54 @@ async function main(): Promise<void> {
   );
 
   // -------------------------------------------------------------------------
+  // Requirement coverage
+  // -------------------------------------------------------------------------
+
+  // Tool: get_requirement_coverage
+  server.registerTool(
+    'get_requirement_coverage',
+    {
+      description:
+        'Get coverage metrics for requirements in a session. ' +
+        'Shows how many domain events each requirement has derived, and whether it is fulfilled. ' +
+        'Optionally filter to a single requirement by ID.',
+      inputSchema: {
+        sessionCode: z.string().describe('Session join code'),
+        requirementId: z.string().optional().describe('Optional requirement ID to filter to a single requirement'),
+      },
+    },
+    ({ sessionCode, requirementId }) => {
+      const session = sessionStore.getSession(sessionCode);
+      if (!session) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Session not found' }) }],
+          isError: true,
+        };
+      }
+
+      const rawCoverage = sessionStore.getRequirementCoverage(sessionCode, requirementId);
+
+      // Enrich with the requirement statement for readability
+      const requirementMap = new Map(
+        session.requirements.map(r => [r.id, r])
+      );
+      const coverage = rawCoverage.map(entry => ({
+        reqId: entry.reqId,
+        statement: requirementMap.get(entry.reqId)?.statement ?? '',
+        eventCount: entry.eventCount,
+        fulfilled: entry.fulfilled,
+      }));
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ coverage }),
+        }],
+      };
+    }
+  );
+
+  // -------------------------------------------------------------------------
   // Scoped tools — only registered when --session/--user are provided
   // -------------------------------------------------------------------------
 
