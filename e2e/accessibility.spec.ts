@@ -8,7 +8,7 @@ const FIXTURE_DIR = path.join(__dirname, '..', 'src', 'fixtures');
 test.describe('Accessibility — Landing Page', () => {
   test('landing page has a visible heading', async ({ page }) => {
     await page.goto('/');
-    const heading = page.getByRole('heading', { name: 'Storm-Prep Visualizer' });
+    const heading = page.getByRole('heading', { name: 'Seam' });
     await expect(heading).toBeVisible();
   });
 

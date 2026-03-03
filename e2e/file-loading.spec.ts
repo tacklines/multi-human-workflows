@@ -17,7 +17,7 @@ test.describe('File Loading Flow', () => {
     await expect(dropZone).toBeAttached();
 
     // Should show instructional text
-    await expect(page.getByText('Drop storm-prep YAML files here')).toBeVisible();
+    await expect(page.getByText('Drop perspective YAML files here')).toBeVisible();
   });
 
   test('loads a single YAML fixture file and shows the app layout', async ({ page }) => {
@@ -26,7 +26,7 @@ test.describe('File Loading Flow', () => {
     await fileInput.setInputFiles(path.join(FIXTURE_DIR, 'checkout-frontend.yaml'));
 
     // After loading, the app should transition to the main layout
-    // The header title "Storm-Prep" should appear (use exact match to avoid ambiguity)
+    // The header title "Seam" should appear (use exact match to avoid ambiguity)
     const headerTitle = page.locator('.header-title');
     await expect(headerTitle).toBeVisible({ timeout: 10_000 });
 
