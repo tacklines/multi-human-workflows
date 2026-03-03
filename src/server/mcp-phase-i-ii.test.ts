@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { SessionStore } from '../lib/session-store.js';
 import { DraftService } from '../contexts/draft/draft-service.js';
 import { ArtifactService } from '../contexts/artifact/artifact-service.js';
-import { computePrepStatus } from '../lib/prep-completeness.js';
+import { suggestImprovementsForFile, type ImprovementSuggestion } from '../lib/improvement-heuristics.js';
 import type { CandidateEventsFile, DomainEvent } from '../schema/types.js';
 
 // ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ function handleSuggestImprovements(
       isError: true,
     };
   }
-  const suggestions = computeSuggestionsForFile(submission.data);
+  const suggestions = suggestImprovementsForFile(submission.data);
   return {
     content: [{ type: 'text' as const, text: JSON.stringify({ suggestions }) }],
   };
@@ -137,80 +137,6 @@ function handleUpdateArtifact(
   return {
     content: [{ type: 'text' as const, text: JSON.stringify({ version: versioned.version }) }],
   };
-}
-
-// ---------------------------------------------------------------------------
-// Inline heuristic logic mirroring mcp.ts (avoids importing the module directly
-// since it registers stdio transport on import)
-// ---------------------------------------------------------------------------
-
-interface ImprovementSuggestion {
-  type: 'missing_event' | 'missing_assumption' | 'confidence_upgrade' | 'pattern_match';
-  description: string;
-  suggestedContent?: Partial<DomainEvent>;
-}
-
-function computeSuggestionsForFile(file: CandidateEventsFile): ImprovementSuggestion[] {
-  const suggestions: ImprovementSuggestion[] = [];
-  const status = computePrepStatus(file);
-
-  // Missing failure events
-  const eventNames = file.domain_events.map((e) => e.name);
-  const commandEvents = eventNames.filter((n) =>
-    /Created|Updated|Submitted|Initiated|Approved|Placed/i.test(n)
-  );
-  for (const cmd of commandEvents) {
-    const base = cmd.replace(/Created|Updated|Submitted|Initiated|Approved|Placed/i, '');
-    const hasFailed = eventNames.some(
-      (n) =>
-        n.toLowerCase().includes(base.toLowerCase() + 'fail') ||
-        n.toLowerCase().includes('failed')
-    );
-    if (!hasFailed) {
-      suggestions.push({
-        type: 'missing_event',
-        description: `Consider adding a failure event for "${cmd}" — e.g., "${base}Failed"`,
-        suggestedContent: {
-          name: `${base}Failed`,
-          aggregate: file.domain_events.find((e) => e.name === cmd)?.aggregate ?? base,
-          trigger: `${cmd} processing fails`,
-          payload: [{ field: 'reason', type: 'string' }],
-          integration: { direction: 'internal' },
-          confidence: 'POSSIBLE',
-        },
-      });
-    }
-  }
-
-  // Missing assumptions
-  if (status.assumptionCount === 0) {
-    suggestions.push({
-      type: 'missing_assumption',
-      description:
-        'No boundary assumptions declared — add at least one to clarify service ownership or external dependencies',
-    });
-  }
-
-  // Confidence upgrades
-  const possibleEvents = file.domain_events.filter((e) => e.confidence === 'POSSIBLE');
-  for (const event of possibleEvents) {
-    suggestions.push({
-      type: 'confidence_upgrade',
-      description: `"${event.name}" is POSSIBLE — if there is stakeholder evidence, upgrade to LIKELY`,
-      suggestedContent: { name: event.name, confidence: 'LIKELY' },
-    });
-  }
-
-  // Pattern match: no outbound events
-  if (status.directionBreakdown['outbound'] === 0 && status.eventCount > 0) {
-    suggestions.push({
-      type: 'pattern_match',
-      description:
-        'No outbound events found — consider which events are emitted to other bounded contexts',
-    });
-  }
-
-  return suggestions;
 }
 
 interface DomainPattern {

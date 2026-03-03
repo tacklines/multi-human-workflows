@@ -8,6 +8,89 @@ import type { DomainEvent, EventPriority } from '../schema/types.js';
 // Pure function: no side effects, no DOM dependencies.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// suggestPrioritiesHeuristic — lightweight heuristic used by the suggest_priorities
+// MCP tool. Accepts a flat list of events and a cross-reference count map, and
+// returns suggestions with an eventName / suggestedTier / reasoning triple.
+//
+// This differs from suggestPriorities (below) which accepts existingPriorities
+// for filtering and produces a confidence score. Both are pure.
+// ---------------------------------------------------------------------------
+
+export interface PrioritySuggestion {
+  eventName: string;
+  suggestedTier: 'must_have' | 'should_have' | 'could_have';
+  reasoning: string;
+}
+
+/**
+ * Suggest MoSCoW priority tiers for domain events using lightweight heuristics.
+ *
+ * Rules applied (in order, may stack):
+ * 1. confidence === 'CONFIRMED' → must_have
+ * 2. confidence === 'LIKELY' → should_have
+ * 3. integration.direction === 'outbound' → escalate one tier
+ * 4. refCount[event.name] >= 2 → must_have (high-agreement override)
+ *
+ * Deduplication: first occurrence of each event name wins.
+ *
+ * @param allEvents  All domain events (may contain duplicates from multiple files).
+ * @param refCount   Map of event name → number of submissions containing that event.
+ */
+export function suggestPrioritiesHeuristic(
+  allEvents: DomainEvent[],
+  refCount: Record<string, number>
+): PrioritySuggestion[] {
+  // Deduplicate by name (use first occurrence)
+  const seen = new Set<string>();
+  const uniqueEvents: DomainEvent[] = [];
+  for (const event of allEvents) {
+    if (!seen.has(event.name)) {
+      seen.add(event.name);
+      uniqueEvents.push(event);
+    }
+  }
+
+  return uniqueEvents.map((event): PrioritySuggestion => {
+    const reasons: string[] = [];
+    let tier: 'must_have' | 'should_have' | 'could_have' = 'could_have';
+
+    // Signal 1: confidence level
+    if (event.confidence === 'CONFIRMED') {
+      tier = 'must_have';
+      reasons.push('confidence is CONFIRMED');
+    } else if (event.confidence === 'LIKELY') {
+      tier = 'should_have';
+      reasons.push('confidence is LIKELY');
+    } else {
+      reasons.push('confidence is POSSIBLE');
+    }
+
+    // Signal 2: outbound events are integration points — escalate one tier
+    if (event.integration?.direction === 'outbound') {
+      if (tier === 'could_have') {
+        tier = 'should_have';
+      } else if (tier === 'should_have') {
+        tier = 'must_have';
+      }
+      reasons.push('outbound integration point (cross-context dependency)');
+    }
+
+    // Signal 3: appears in multiple submissions — high agreement signals must_have
+    const count = refCount[event.name] ?? 1;
+    if (count >= 2) {
+      tier = 'must_have';
+      reasons.push(`referenced in ${count} participant submissions (high agreement)`);
+    }
+
+    return {
+      eventName: event.name,
+      suggestedTier: tier,
+      reasoning: reasons.join('; '),
+    };
+  });
+}
+
 export interface PrioritySuggestionResult {
   eventName: string;
   suggestedTier: 'must_have' | 'should_have' | 'could_have';

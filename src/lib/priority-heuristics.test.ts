@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { suggestPriorities } from './priority-heuristics.js';
+import { suggestPriorities, suggestPrioritiesHeuristic } from './priority-heuristics.js';
 import type { DomainEvent, EventPriority } from '../schema/types.js';
 
 // ---------------------------------------------------------------------------
@@ -185,6 +185,119 @@ describe('suggestPriorities', () => {
 
       const results = suggestPriorities([high, low], []);
       expect(results[0].confidence).toBeGreaterThanOrEqual(results[1].confidence);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: suggestPrioritiesHeuristic
+// ---------------------------------------------------------------------------
+
+describe('suggestPrioritiesHeuristic', () => {
+  describe('Given empty input', () => {
+    it('Then returns empty array for no events', () => {
+      expect(suggestPrioritiesHeuristic([], {})).toEqual([]);
+    });
+  });
+
+  describe('Given events with varying confidence levels', () => {
+    it('Then assigns must_have to CONFIRMED events', () => {
+      const ev = makeEvent({ name: 'OrderConfirmed', confidence: 'CONFIRMED' });
+      const results = suggestPrioritiesHeuristic([ev], {});
+      expect(results).toHaveLength(1);
+      expect(results[0].suggestedTier).toBe('must_have');
+      expect(results[0].reasoning).toContain('CONFIRMED');
+    });
+
+    it('Then assigns should_have to LIKELY events', () => {
+      const ev = makeEvent({ name: 'OrderCreated', confidence: 'LIKELY' });
+      const results = suggestPrioritiesHeuristic([ev], {});
+      expect(results).toHaveLength(1);
+      expect(results[0].suggestedTier).toBe('should_have');
+      expect(results[0].reasoning).toContain('LIKELY');
+    });
+
+    it('Then assigns could_have to POSSIBLE events', () => {
+      const ev = makeEvent({ name: 'MaybeEvent', confidence: 'POSSIBLE' });
+      const results = suggestPrioritiesHeuristic([ev], {});
+      expect(results).toHaveLength(1);
+      expect(results[0].suggestedTier).toBe('could_have');
+      expect(results[0].reasoning).toContain('POSSIBLE');
+    });
+  });
+
+  describe('Given outbound integration events', () => {
+    it('Then escalates could_have to should_have for POSSIBLE outbound events', () => {
+      const ev = makeEvent({
+        name: 'PaymentFailed',
+        confidence: 'POSSIBLE',
+        integration: { direction: 'outbound' },
+      });
+      const results = suggestPrioritiesHeuristic([ev], {});
+      expect(results[0].suggestedTier).toBe('should_have');
+      expect(results[0].reasoning).toContain('outbound integration point');
+    });
+
+    it('Then escalates should_have to must_have for LIKELY outbound events', () => {
+      const ev = makeEvent({
+        name: 'OrderShipped',
+        confidence: 'LIKELY',
+        integration: { direction: 'outbound' },
+      });
+      const results = suggestPrioritiesHeuristic([ev], {});
+      expect(results[0].suggestedTier).toBe('must_have');
+    });
+
+    it('Then keeps must_have at must_have for CONFIRMED outbound events', () => {
+      const ev = makeEvent({
+        name: 'OrderConfirmed',
+        confidence: 'CONFIRMED',
+        integration: { direction: 'outbound' },
+      });
+      const results = suggestPrioritiesHeuristic([ev], {});
+      expect(results[0].suggestedTier).toBe('must_have');
+    });
+  });
+
+  describe('Given cross-referenced events (refCount >= 2)', () => {
+    it('Then overrides tier to must_have regardless of confidence', () => {
+      const ev = makeEvent({ name: 'SharedEvent', confidence: 'POSSIBLE' });
+      const results = suggestPrioritiesHeuristic([ev], { SharedEvent: 2 });
+      expect(results[0].suggestedTier).toBe('must_have');
+      expect(results[0].reasoning).toContain('2 participant submissions');
+    });
+
+    it('Then includes the count in the reasoning', () => {
+      const ev = makeEvent({ name: 'HighlyShared', confidence: 'LIKELY' });
+      const results = suggestPrioritiesHeuristic([ev], { HighlyShared: 5 });
+      expect(results[0].reasoning).toContain('5 participant submissions');
+    });
+  });
+
+  describe('Given duplicate event names', () => {
+    it('Then deduplicates by name keeping first occurrence', () => {
+      const ev1 = makeEvent({ name: 'OrderCreated', aggregate: 'Order', confidence: 'LIKELY' });
+      const ev2 = makeEvent({ name: 'OrderCreated', aggregate: 'Payment', confidence: 'CONFIRMED' });
+      const results = suggestPrioritiesHeuristic([ev1, ev2], {});
+      expect(results).toHaveLength(1);
+      // First occurrence (LIKELY) wins
+      expect(results[0].suggestedTier).toBe('should_have');
+    });
+  });
+
+  describe('Given multiple events', () => {
+    it('Then returns one result per unique event name', () => {
+      const events = [
+        makeEvent({ name: 'Alpha', confidence: 'CONFIRMED' }),
+        makeEvent({ name: 'Beta', confidence: 'LIKELY' }),
+        makeEvent({ name: 'Gamma', confidence: 'POSSIBLE' }),
+      ];
+      const results = suggestPrioritiesHeuristic(events, {});
+      expect(results).toHaveLength(3);
+      const names = results.map((r) => r.eventName);
+      expect(names).toContain('Alpha');
+      expect(names).toContain('Beta');
+      expect(names).toContain('Gamma');
     });
   });
 });

@@ -9,7 +9,6 @@ import { serializeSession } from '../lib/session-store.js';
 import { compareFiles } from '../lib/comparison.js';
 import { DraftService } from '../contexts/draft/draft-service.js';
 import { ArtifactService } from '../contexts/artifact/artifact-service.js';
-import type { DomainEvent } from '../schema/types.js';
 import { PrioritizationService } from '../contexts/prioritization/prioritization-service.js';
 import { DecompositionService } from '../contexts/decomposition/decomposition-service.js';
 import { suggestDecomposition } from '../lib/decomposition-heuristics.js';
@@ -19,6 +18,8 @@ import {
   deriveOverallStatus,
 } from '../lib/integration-heuristics.js';
 import { suggestEventsHeuristic } from '../lib/event-suggestions.js';
+import { suggestImprovementsForFile } from '../lib/improvement-heuristics.js';
+import { suggestPrioritiesHeuristic } from '../lib/priority-heuristics.js';
 
 // ---------------------------------------------------------------------------
 // Module-level progress store for report_progress (Phase VI — Build)
@@ -61,136 +62,6 @@ interface ScopedContext {
 
 const draftService = new DraftService((code) => sessionStore.getSession(code));
 const artifactService = new ArtifactService();
-
-/**
- * Analyze an artifact and generate improvement suggestions.
- */
-interface ImprovementSuggestion {
-  type: 'missing_event' | 'missing_assumption' | 'confidence_upgrade' | 'pattern_match';
-  description: string;
-  suggestedContent?: Partial<DomainEvent>;
-}
-
-function suggestImprovementsForFile(file: import('../schema/types.js').CandidateEventsFile): ImprovementSuggestion[] {
-  const suggestions: ImprovementSuggestion[] = [];
-  const status = computePrepStatus(file);
-
-  // Missing failure events: if command-like events exist but no failure counterpart
-  const eventNames = file.domain_events.map((e) => e.name);
-  const commandEvents = eventNames.filter((n) =>
-    /Created|Updated|Submitted|Initiated|Approved|Placed/i.test(n)
-  );
-  for (const cmd of commandEvents) {
-    const base = cmd.replace(/Created|Updated|Submitted|Initiated|Approved|Placed/i, '');
-    const hasFailed = eventNames.some((n) => n.toLowerCase().includes(base.toLowerCase() + 'fail') || n.toLowerCase().includes('failed'));
-    if (!hasFailed) {
-      suggestions.push({
-        type: 'missing_event',
-        description: `Consider adding a failure event for "${cmd}" — e.g., "${base}Failed"`,
-        suggestedContent: {
-          name: `${base}Failed`,
-          aggregate: file.domain_events.find((e) => e.name === cmd)?.aggregate ?? base,
-          trigger: `${cmd} processing fails`,
-          payload: [{ field: 'reason', type: 'string' }],
-          integration: { direction: 'internal' },
-          confidence: 'POSSIBLE',
-        },
-      });
-    }
-  }
-
-  // Missing assumptions
-  if (status.assumptionCount === 0) {
-    suggestions.push({
-      type: 'missing_assumption',
-      description: 'No boundary assumptions declared — add at least one to clarify service ownership or external dependencies',
-    });
-  }
-
-  // Confidence upgrades: POSSIBLE events that could be LIKELY
-  const possibleEvents = file.domain_events.filter((e) => e.confidence === 'POSSIBLE');
-  for (const event of possibleEvents) {
-    suggestions.push({
-      type: 'confidence_upgrade',
-      description: `"${event.name}" is POSSIBLE — if there is stakeholder evidence, upgrade to LIKELY`,
-      suggestedContent: { name: event.name, confidence: 'LIKELY' },
-    });
-  }
-
-  // Pattern match: if no outbound events, suggest integration
-  if (status.directionBreakdown['outbound'] === 0 && status.eventCount > 0) {
-    suggestions.push({
-      type: 'pattern_match',
-      description: 'No outbound events found — consider which events are emitted to other bounded contexts',
-    });
-  }
-
-  return suggestions;
-}
-
-// ---------------------------------------------------------------------------
-// Priority suggestion heuristics (Phase III — Rank)
-// ---------------------------------------------------------------------------
-
-interface PrioritySuggestion {
-  eventName: string;
-  suggestedTier: 'must_have' | 'should_have' | 'could_have';
-  reasoning: string;
-}
-
-function suggestPrioritiesHeuristic(
-  allEvents: DomainEvent[],
-  refCount: Record<string, number>
-): PrioritySuggestion[] {
-  // Deduplicate by name (use first occurrence)
-  const seen = new Set<string>();
-  const uniqueEvents: DomainEvent[] = [];
-  for (const event of allEvents) {
-    if (!seen.has(event.name)) {
-      seen.add(event.name);
-      uniqueEvents.push(event);
-    }
-  }
-
-  return uniqueEvents.map((event): PrioritySuggestion => {
-    const reasons: string[] = [];
-    let tier: 'must_have' | 'should_have' | 'could_have' = 'could_have';
-
-    // Signal 1: confidence level
-    if (event.confidence === 'CONFIRMED') {
-      tier = 'must_have';
-      reasons.push('confidence is CONFIRMED');
-    } else if (event.confidence === 'LIKELY') {
-      tier = 'should_have';
-      reasons.push('confidence is LIKELY');
-    } else {
-      reasons.push('confidence is POSSIBLE');
-    }
-
-    // Signal 2: outbound events are integration points — escalate one tier
-    if (event.integration?.direction === 'outbound') {
-      if (tier === 'could_have') {
-        tier = 'should_have';
-      } else if (tier === 'should_have') {
-        tier = 'must_have';
-      }
-      reasons.push('outbound integration point (cross-context dependency)');
-    }
-
-    // Signal 3: appears in multiple submissions — high agreement signals must_have
-    const count = refCount[event.name] ?? 1;
-    if (count >= 2) {
-      tier = 'must_have';
-      reasons.push(`referenced in ${count} participant submissions (high agreement)`);
-    }
-
-    return {
-      eventName: event.name,
-      suggestedTier: tier,
-      reasoning: reasons.join('; '),
-    };
-  });
-}
 
 async function main(): Promise<void> {
   const cliArgs = parseArgs();

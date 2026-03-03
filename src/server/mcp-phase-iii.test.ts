@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { SessionStore } from '../lib/session-store.js';
 import { PrioritizationService } from '../contexts/prioritization/prioritization-service.js';
+import { suggestPrioritiesHeuristic, type PrioritySuggestion } from '../lib/priority-heuristics.js';
 import type { CandidateEventsFile, DomainEvent } from '../schema/types.js';
 
 // ---------------------------------------------------------------------------
@@ -139,63 +140,6 @@ function handleGetPriorities(store: SessionStore, sessionCode: string): ToolResu
   };
 }
 
-// Inline heuristic — mirrors the suggestPrioritiesHeuristic in mcp.ts
-interface PrioritySuggestion {
-  eventName: string;
-  suggestedTier: 'must_have' | 'should_have' | 'could_have';
-  reasoning: string;
-}
-
-function suggestPrioritiesHeuristicTest(
-  allEvents: DomainEvent[],
-  refCount: Record<string, number>
-): PrioritySuggestion[] {
-  const seen = new Set<string>();
-  const uniqueEvents: DomainEvent[] = [];
-  for (const event of allEvents) {
-    if (!seen.has(event.name)) {
-      seen.add(event.name);
-      uniqueEvents.push(event);
-    }
-  }
-
-  return uniqueEvents.map((event): PrioritySuggestion => {
-    const reasons: string[] = [];
-    let tier: 'must_have' | 'should_have' | 'could_have' = 'could_have';
-
-    if (event.confidence === 'CONFIRMED') {
-      tier = 'must_have';
-      reasons.push('confidence is CONFIRMED');
-    } else if (event.confidence === 'LIKELY') {
-      tier = 'should_have';
-      reasons.push('confidence is LIKELY');
-    } else {
-      reasons.push('confidence is POSSIBLE');
-    }
-
-    if (event.integration?.direction === 'outbound') {
-      if (tier === 'could_have') {
-        tier = 'should_have';
-      } else if (tier === 'should_have') {
-        tier = 'must_have';
-      }
-      reasons.push('outbound integration point (cross-context dependency)');
-    }
-
-    const count = refCount[event.name] ?? 1;
-    if (count >= 2) {
-      tier = 'must_have';
-      reasons.push(`referenced in ${count} participant submissions (high agreement)`);
-    }
-
-    return {
-      eventName: event.name,
-      suggestedTier: tier,
-      reasoning: reasons.join('; '),
-    };
-  });
-}
-
 function handleSuggestPriorities(store: SessionStore, sessionCode: string): ToolResult {
   const session = store.getSession(sessionCode);
   if (!session) {
@@ -219,7 +163,7 @@ function handleSuggestPriorities(store: SessionStore, sessionCode: string): Tool
     }
   }
 
-  const suggestions = suggestPrioritiesHeuristicTest(allEvents, refCount);
+  const suggestions = suggestPrioritiesHeuristic(allEvents, refCount);
   return {
     content: [{ type: 'text' as const, text: JSON.stringify({ suggestions }) }],
   };
