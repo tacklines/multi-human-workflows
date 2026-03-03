@@ -92,6 +92,14 @@
         "notes": {
           "type": "string",
           "description": "Optional free-text notes, caveats, or context."
+        },
+        "source_requirements": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Requirement ID that drove the creation of this event."
+          },
+          "description": "IDs of requirements that this domain event was derived from."
         }
       }
     },
