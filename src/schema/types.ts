@@ -450,3 +450,35 @@ export interface PendingApproval {
   /** ISO 8601 timestamp when this approval request expires (default: 24 hours after creation) */
   expiresAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Requirements — plain-language statements that derive domain events
+// ---------------------------------------------------------------------------
+
+/** Lifecycle status of a requirement */
+export type RequirementStatus = 'draft' | 'active' | 'fulfilled' | 'deferred';
+
+/**
+ * A plain-language requirement that drives event derivation.
+ * Requirements are the natural entry point for non-technical participants.
+ */
+export interface Requirement {
+  /** Unique identifier */
+  id: string;
+  /** Plain-language statement, e.g. "We need offline support" */
+  statement: string;
+  /** Participant who authored the requirement */
+  authorId: string;
+  /** ISO 8601 timestamp when created */
+  createdAt: string;
+  /** Optional MoSCoW priority tier */
+  priority?: PriorityTier;
+  /** Optional labels for grouping */
+  tags?: string[];
+  /** Event names derived from this requirement */
+  derivedEvents: string[];
+  /** Assumption IDs derived from this requirement */
+  derivedAssumptions: string[];
+  /** Current lifecycle status */
+  status: RequirementStatus;
+}

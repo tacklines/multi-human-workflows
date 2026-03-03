@@ -1035,6 +1035,19 @@ export const messages: Record<string, string> = {
   'presence.viewingMultiple': '{{names}} are viewing',
 
   // ---------------------------------------------------------------------------
+  // requirements-panel
+  // ---------------------------------------------------------------------------
+  'requirements.heading': 'Requirements ({{count}})',
+  'requirements.eventCount': '{{count}} events',
+  'requirements.eventCountSingular': '1 event',
+  'requirements.needsDerivation': 'Needs derivation',
+  'requirements.status.draft': 'Draft',
+  'requirements.status.active': 'Active',
+  'requirements.status.fulfilled': 'Fulfilled',
+  'requirements.status.deferred': 'Deferred',
+  'requirements.empty': 'No requirements yet. Add a requirement to get started.',
+
+  // ---------------------------------------------------------------------------
   // glossary — plain-language definitions for DDD / boundary negotiation terms
   // ---------------------------------------------------------------------------
   'glossary.aggregate': 'A cluster of related things that change together. Think of it as a "unit of work" — like an Order with its line items.',
