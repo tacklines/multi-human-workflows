@@ -846,20 +846,15 @@ export const messages: Record<string, string> = {
   // ---------------------------------------------------------------------------
   'helpTip.gotIt': 'Got it',
   'helpTip.dismiss': 'Dismiss help tip',
-  'helpTip.comparison-view': 'These are events that appear in multiple participants\u2019 submissions. Amber means they overlap but differ \u2014 the same event has different definitions.',
-  'helpTip.conflict-resolve': 'Choose how your team wants to handle this overlap. Most teams start with Merge.',
-  'helpTip.priority-view': 'Drag events between columns to set priority. Scores are computed from confidence, complexity, and how many participants reference the event.',
-  'helpTip.breakdown-editor': 'Break large events into smaller, more focused domain events. Each slice should represent a single meaningful state change.',
-  'helpTip.integration-dashboard': 'This dashboard shows how domain events flow between services and external systems. Green means confirmed integration; amber means assumed.',
-  'helpTip.file-drop': 'Drop your perspective YAML file here to load your domain events. You can load multiple files to compare roles.',
+  'helpTip.fileDrop': 'Drop your perspective YAML file here to load your domain events. You can load multiple files to compare roles.',
+  'helpTip.sparkCanvas': 'Start by adding domain events here. Type event names, aggregates, and triggers — or drop a YAML file.',
   'helpTip.comparisonView': 'Compare how different participants see the same domain events. Look for shared events and conflicts.',
+  'helpTip.conflictResolve': 'Each conflict card shows differences between submissions. Use the suggestion banner or write your own resolution, then submit to record the team\'s decision.',
   'helpTip.priorityView': 'Drag events between priority tiers or vote to help the team decide what matters most.',
   'helpTip.breakdownEditor': 'Break prioritized events into work items. Link events to tasks and track coverage.',
-  'helpTip.integrationDashboard': 'Review integration checks across all boundaries. Green means ready to ship.',
-  'helpTip.sparkCanvas': 'Start by adding domain events here. Type event names, aggregates, and triggers — or drop a YAML file.',
   'helpTip.agreementsTab': 'Review overlapping domain events between roles. Resolve conflicts by choosing how your team handles each overlap.',
-  'helpTip.conflictResolve': 'Each conflict card shows differences between submissions. Use the suggestion banner or write your own resolution, then submit to record the team\'s decision.',
   'helpTip.contractsTab': 'Formalized event contracts appear here. Review schemas, check provenance, and verify compliance before integration.',
+  'helpTip.integrationDashboard': 'Review integration checks across all boundaries. Green means ready to ship.',
 
   // ---------------------------------------------------------------------------
   // onboarding-overlay
