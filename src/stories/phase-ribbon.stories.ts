@@ -39,6 +39,7 @@ export const SparkPhase: Story = {
       artifactInventory: {
         participantCount: 1,
         submissionCount: 0,
+        requirementCount: 0,
         hasJam: false,
         resolutionCount: 0,
         ownershipCount: 0,
@@ -63,6 +64,7 @@ export const ExplorePhase: Story = {
       artifactInventory: {
         participantCount: 2,
         submissionCount: 1,
+        requirementCount: 0,
         hasJam: false,
         resolutionCount: 0,
         ownershipCount: 0,
@@ -87,6 +89,7 @@ export const RankPhase: Story = {
       artifactInventory: {
         participantCount: 2,
         submissionCount: 2,
+        requirementCount: 0,
         hasJam: false,
         resolutionCount: 0,
         ownershipCount: 0,
@@ -111,6 +114,7 @@ export const SlicePhase: Story = {
       artifactInventory: {
         participantCount: 2,
         submissionCount: 2,
+        requirementCount: 0,
         hasJam: false,
         resolutionCount: 0,
         ownershipCount: 0,
@@ -135,6 +139,7 @@ export const AgreePhase: Story = {
       artifactInventory: {
         participantCount: 2,
         submissionCount: 2,
+        requirementCount: 0,
         hasJam: true,
         resolutionCount: 3,
         ownershipCount: 2,
@@ -159,6 +164,7 @@ export const BuildPhase: Story = {
       artifactInventory: {
         participantCount: 2,
         submissionCount: 2,
+        requirementCount: 0,
         hasJam: true,
         resolutionCount: 5,
         ownershipCount: 4,
@@ -183,6 +189,7 @@ export const ShipPhase: Story = {
       artifactInventory: {
         participantCount: 2,
         submissionCount: 2,
+        requirementCount: 0,
         hasJam: true,
         resolutionCount: 5,
         ownershipCount: 4,
@@ -207,6 +214,7 @@ export const AllComplete: Story = {
       artifactInventory: {
         participantCount: 2,
         submissionCount: 2,
+        requirementCount: 0,
         hasJam: true,
         resolutionCount: 5,
         ownershipCount: 4,

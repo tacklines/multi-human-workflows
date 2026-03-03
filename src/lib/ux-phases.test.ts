@@ -13,6 +13,7 @@ function makeInventory(overrides: Partial<ArtifactInventory> = {}): ArtifactInve
   return {
     participantCount: 1,
     submissionCount: 0,
+    requirementCount: 0,
     hasJam: false,
     resolutionCount: 0,
     ownershipCount: 0,
@@ -104,12 +105,21 @@ describe('inferUxPhase', () => {
   });
 
   describe('Given engine phase is prep', () => {
-    it('returns spark when submissionCount is 0', () => {
+    it('returns spark when submissionCount is 0 and no requirements', () => {
       expect(inferUxPhase(makeStatus('prep', { submissionCount: 0 }))).toBe('spark');
     });
 
     it('returns explore when exactly 1 submission exists', () => {
       expect(inferUxPhase(makeStatus('prep', { submissionCount: 1 }))).toBe('explore');
+    });
+
+    it('returns explore when requirements exist but no submissions', () => {
+      expect(inferUxPhase(makeStatus('prep', { submissionCount: 0, requirementCount: 1 }))).toBe('explore');
+      expect(inferUxPhase(makeStatus('prep', { submissionCount: 0, requirementCount: 3 }))).toBe('explore');
+    });
+
+    it('returns explore when requirements exist with one submission', () => {
+      expect(inferUxPhase(makeStatus('prep', { submissionCount: 1, requirementCount: 2 }))).toBe('explore');
     });
 
     it('returns rank when 2 or more submissions exist', () => {
@@ -193,13 +203,18 @@ describe('inferUxPhase', () => {
 
 describe('isPhaseComplete', () => {
   describe('spark', () => {
-    it('is incomplete when no submissions exist', () => {
+    it('is incomplete when no submissions and no requirements exist', () => {
       expect(isPhaseComplete('spark', makeStatus('lobby', { submissionCount: 0 }))).toBe(false);
     });
 
     it('is complete when at least one submission exists', () => {
       expect(isPhaseComplete('spark', makeStatus('prep', { submissionCount: 1 }))).toBe(true);
       expect(isPhaseComplete('spark', makeStatus('prep', { submissionCount: 5 }))).toBe(true);
+    });
+
+    it('is complete when requirements exist even without submissions', () => {
+      expect(isPhaseComplete('spark', makeStatus('prep', { submissionCount: 0, requirementCount: 1 }))).toBe(true);
+      expect(isPhaseComplete('spark', makeStatus('prep', { submissionCount: 0, requirementCount: 3 }))).toBe(true);
     });
   });
 

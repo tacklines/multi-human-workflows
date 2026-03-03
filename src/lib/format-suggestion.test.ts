@@ -8,6 +8,7 @@ function makeInventory(overrides: Partial<ArtifactInventory> = {}): ArtifactInve
   return {
     participantCount: 0,
     submissionCount: 0,
+    requirementCount: 0,
     hasJam: false,
     resolutionCount: 0,
     ownershipCount: 0,

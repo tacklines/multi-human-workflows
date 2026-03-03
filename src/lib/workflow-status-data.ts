@@ -51,6 +51,7 @@ export function deriveWorkflowStatus(
   return computeWorkflowStatus({
     participantCount: files.length,
     submissionCount: files.length,
+    requirementCount: 0,
     jam,
     contracts,
     integrationReport,
