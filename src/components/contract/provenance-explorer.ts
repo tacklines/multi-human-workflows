@@ -16,7 +16,7 @@ import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
  *   - artifact:    a submitted YAML artifact that contributed
  *   - participant: a human participant who submitted an artifact
  */
-export type ProvenanceStepKind = 'resolution' | 'conflict' | 'artifact' | 'participant';
+export type ProvenanceStepKind = 'requirement' | 'resolution' | 'conflict' | 'artifact' | 'participant';
 
 export interface ProvenanceStep {
   /** Discriminator for which kind of lineage step this is. */
@@ -35,6 +35,11 @@ const STEP_CONFIG: Record<
   ProvenanceStepKind,
   { icon: string; colorClass: string; ariaKindLabel: string }
 > = {
+  requirement: {
+    icon: '★',
+    colorClass: 'step-requirement',
+    ariaKindLabel: 'requirement',
+  },
   resolution: {
     icon: '✓',
     colorClass: 'step-resolution',
@@ -147,6 +152,14 @@ export class ProvenanceExplorer extends LitElement {
       min-width: 1.875rem;
     }
 
+    /* Requirement — teal, hexagon-ish (rounded square rotated) */
+    .step-requirement .step-node {
+      background: #0d9488;
+      border-color: #0f766e;
+      color: #fff;
+      border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+    }
+
     /* Resolution — green, filled circle */
     .step-resolution .step-node {
       background: #16a34a;
@@ -244,6 +257,7 @@ export class ProvenanceExplorer extends LitElement {
       display: inline-block;
     }
 
+    .legend-requirement { background: #0d9488; border-color: #0f766e; border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; }
     .legend-resolution { background: #16a34a; border-color: #15803d; }
     .legend-conflict { background: #d97706; border-color: #b45309; border-radius: 2px; transform: rotate(45deg); }
     .legend-artifact { background: #2563eb; border-color: #1d4ed8; border-radius: 2px; }
@@ -317,7 +331,9 @@ export class ProvenanceExplorer extends LitElement {
           <div class="step-kind-pill">
             <sl-badge
               variant=${
-                step.kind === 'resolution'
+                step.kind === 'requirement'
+                  ? 'success'
+                  : step.kind === 'resolution'
                   ? 'success'
                   : step.kind === 'conflict'
                   ? 'warning'
@@ -349,7 +365,7 @@ export class ProvenanceExplorer extends LitElement {
   }
 
   private _renderLegend() {
-    const kinds: ProvenanceStepKind[] = ['resolution', 'conflict', 'artifact', 'participant'];
+    const kinds: ProvenanceStepKind[] = ['requirement', 'resolution', 'conflict', 'artifact', 'participant'];
     const usedKinds = new Set(this.chain.map((s) => s.kind));
     const relevantKinds = kinds.filter((k) => usedKinds.has(k));
 

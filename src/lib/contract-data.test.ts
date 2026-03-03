@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { deriveContractEntries, deriveContractsData, deriveProvenanceChain } from './contract-data.js';
-import type { LoadedFile, DomainEvent } from '../schema/types.js';
+import type { LoadedFile, DomainEvent, Requirement } from '../schema/types.js';
 import type { Overlap } from './comparison.js';
 
 function makeFile(role: string, events: Partial<DomainEvent>[] = []): LoadedFile {
@@ -144,6 +144,75 @@ describe('deriveProvenanceChain', () => {
       const chain = deriveProvenanceChain(files, [], []);
       const participantA = chain.find((s) => s.kind === 'participant' && s.label === 'role-a');
       expect(participantA?.detail).toContain('2 events');
+    });
+  });
+
+  describe('Given events with sourceRequirements and a requirements map', () => {
+    it('includes requirement steps at the top of the chain', () => {
+      const requirements: Requirement[] = [
+        { id: 'REQ-1', statement: 'Users must be able to place orders', source: 'product-backlog' },
+        { id: 'REQ-2', statement: 'Inventory must update on order', source: 'ops-team' },
+      ];
+      const files = [
+        makeFile('role-a', [{ name: 'OrderPlaced', aggregate: 'Order', sourceRequirements: ['REQ-1'] }]),
+        makeFile('role-b', [{ name: 'InventoryUpdated', aggregate: 'Inventory', sourceRequirements: ['REQ-2'] }]),
+      ];
+      const chain = deriveProvenanceChain(files, [], [], requirements);
+      const reqSteps = chain.filter((s) => s.kind === 'requirement');
+      expect(reqSteps).toHaveLength(2);
+      expect(reqSteps[0].label).toBe('Users must be able to place orders');
+      expect(reqSteps[0].detail).toBe('Source: product-backlog');
+      expect(reqSteps[1].label).toBe('Inventory must update on order');
+      expect(reqSteps[1].detail).toBe('Source: ops-team');
+    });
+
+    it('deduplicates requirements referenced by multiple events', () => {
+      const requirements: Requirement[] = [
+        { id: 'REQ-1', statement: 'Shared requirement' },
+      ];
+      const files = [
+        makeFile('role-a', [{ name: 'EventA', aggregate: 'AggA', sourceRequirements: ['REQ-1'] }]),
+        makeFile('role-b', [{ name: 'EventB', aggregate: 'AggB', sourceRequirements: ['REQ-1'] }]),
+      ];
+      const chain = deriveProvenanceChain(files, [], [], requirements);
+      const reqSteps = chain.filter((s) => s.kind === 'requirement');
+      expect(reqSteps).toHaveLength(1);
+      expect(reqSteps[0].label).toBe('Shared requirement');
+    });
+
+    it('falls back to requirement ID when requirement not in map', () => {
+      const files = [
+        makeFile('role-a', [{ name: 'EventA', aggregate: 'AggA', sourceRequirements: ['REQ-UNKNOWN'] }]),
+        makeFile('role-b', [{ name: 'EventB', aggregate: 'AggB' }]),
+      ];
+      const chain = deriveProvenanceChain(files, [], [], []);
+      const reqSteps = chain.filter((s) => s.kind === 'requirement');
+      expect(reqSteps).toHaveLength(1);
+      expect(reqSteps[0].label).toBe('REQ-UNKNOWN');
+      expect(reqSteps[0].detail).toBe('Requirement REQ-UNKNOWN');
+    });
+
+    it('produces no requirement steps when no sourceRequirements exist', () => {
+      const requirements: Requirement[] = [
+        { id: 'REQ-1', statement: 'Unused requirement' },
+      ];
+      const files = [
+        makeFile('role-a', [{ name: 'EventA', aggregate: 'AggA' }]),
+        makeFile('role-b', [{ name: 'EventB', aggregate: 'AggB' }]),
+      ];
+      const chain = deriveProvenanceChain(files, [], [], requirements);
+      const reqSteps = chain.filter((s) => s.kind === 'requirement');
+      expect(reqSteps).toHaveLength(0);
+    });
+
+    it('works without requirements parameter (backward compatible)', () => {
+      const files = [
+        makeFile('role-a', [{ name: 'EventA', aggregate: 'AggA' }]),
+        makeFile('role-b', [{ name: 'EventB', aggregate: 'AggB' }]),
+      ];
+      const chain = deriveProvenanceChain(files, [], []);
+      const reqSteps = chain.filter((s) => s.kind === 'requirement');
+      expect(reqSteps).toHaveLength(0);
     });
   });
 });

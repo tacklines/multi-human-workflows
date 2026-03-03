@@ -396,6 +396,7 @@ export const messages: Record<string, string> = {
   'provenanceExplorer.step': 'Step {{n}} of {{total}}:',
   'provenanceExplorer.at': 'at {{timestamp}}',
   'provenanceExplorer.legend': 'Legend',
+  'provenanceExplorer.kind.requirement': 'requirement',
   'provenanceExplorer.kind.resolution': 'resolution',
   'provenanceExplorer.kind.conflict': 'conflict overlap',
   'provenanceExplorer.kind.artifact': 'artifact',

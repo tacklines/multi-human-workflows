@@ -57,6 +57,19 @@ describe('ProvenanceExplorer — ProvenanceStep types', () => {
     });
   });
 
+  describe('Given a valid requirement step', () => {
+    it('has the correct shape', () => {
+      const step: ProvenanceStep = {
+        kind: 'requirement',
+        label: 'Users must be able to place orders',
+        detail: 'Source: product-backlog',
+      };
+      expect(step.kind).toBe('requirement');
+      expect(step.label).toBe('Users must be able to place orders');
+      expect(step.detail).toBe('Source: product-backlog');
+    });
+  });
+
   describe('Given a step with only required fields', () => {
     it('works without optional detail and timestamp', () => {
       const step: ProvenanceStep = {
@@ -73,8 +86,13 @@ describe('ProvenanceExplorer — ProvenanceStep types', () => {
 
 describe('ProvenanceExplorer — chain structure', () => {
   describe('Given a complete lineage chain', () => {
-    it('can represent a full resolution -> conflict -> artifact -> participant chain', () => {
+    it('can represent a full requirement -> resolution -> conflict -> artifact -> participant chain', () => {
       const chain: ProvenanceStep[] = [
+        {
+          kind: 'requirement',
+          label: 'Users must be able to place orders',
+          detail: 'Source: product-backlog',
+        },
         {
           kind: 'resolution',
           label: 'Chose orders-team approach',
@@ -99,9 +117,9 @@ describe('ProvenanceExplorer — chain structure', () => {
         },
       ];
 
-      expect(chain).toHaveLength(4);
-      expect(chain[0].kind).toBe('resolution');
-      expect(chain[3].kind).toBe('participant');
+      expect(chain).toHaveLength(5);
+      expect(chain[0].kind).toBe('requirement');
+      expect(chain[4].kind).toBe('participant');
     });
   });
 
@@ -126,11 +144,11 @@ describe('ProvenanceExplorer — chain structure', () => {
 // ── Step kind enumeration ────────────────────────────────────────────────
 
 describe('ProvenanceExplorer — ProvenanceStepKind', () => {
-  it('covers all four lineage node types', () => {
-    const kinds: ProvenanceStepKind[] = ['resolution', 'conflict', 'artifact', 'participant'];
-    expect(kinds).toHaveLength(4);
+  it('covers all five lineage node types', () => {
+    const kinds: ProvenanceStepKind[] = ['requirement', 'resolution', 'conflict', 'artifact', 'participant'];
+    expect(kinds).toHaveLength(5);
     // Ensure these are distinct
-    expect(new Set(kinds).size).toBe(4);
+    expect(new Set(kinds).size).toBe(5);
   });
 });
 
