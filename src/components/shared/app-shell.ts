@@ -59,6 +59,7 @@ import '../artifact/file-drop-zone.js';
 import '../session/session-lobby.js';
 import '../session/spark-canvas.js';
 import '../session/participant-registry.js';
+import '../session/requirements-panel.js';
 import './phase-ribbon.js';
 import '../artifact/card-view.js';
 import '../visualization/flow-diagram.js';
@@ -809,6 +810,16 @@ export class AppShell extends LitElement {
                 ></exploration-guide>
               `;
             })()}
+            ${(() => {
+              const reqs = this.appState.sessionState?.session?.requirements ?? [];
+              return reqs.length > 0 ? html`
+                <sl-divider></sl-divider>
+                <requirements-panel
+                  .requirements=${reqs}
+                  @requirement-selected=${this._onRequirementSelected}
+                ></requirements-panel>
+              ` : nothing;
+            })()}
             <sl-divider></sl-divider>
             ${(() => {
               const allAssumptions: BoundaryAssumption[] = files.flatMap(f => f.data.boundary_assumptions);
@@ -1317,6 +1328,11 @@ export class AppShell extends LitElement {
 
   private _onViewComparison(): void {
     store.setView('comparison');
+  }
+
+  private _onRequirementSelected(e: CustomEvent<{ requirementId: string }>) {
+    // Future: filter/highlight events derived from this requirement
+    console.debug('Requirement selected:', e.detail.requirementId);
   }
 
   private onAggregateSelect(e: CustomEvent) {

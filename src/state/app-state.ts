@@ -8,6 +8,7 @@ import type {
   WorkItemDependency,
   OwnershipAssignment,
   ConflictResolution,
+  Requirement,
 } from '../schema/types.js';
 import type { Confidence, Direction } from '../schema/types.js';
 import { saveSessionIdentity, clearSessionIdentity } from '../lib/session-identity-persistence.js';
@@ -35,6 +36,7 @@ export interface ActiveSession {
   workItemDependencies: WorkItemDependency[];
   ownershipMap: OwnershipAssignment[];
   resolutions: ConflictResolution[];
+  requirements: Requirement[];
 }
 
 export interface SessionState {
