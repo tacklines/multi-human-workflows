@@ -637,6 +637,10 @@ export class AppShell extends LitElement {
     const hasRankableArtifact = files.some(f => f.data.domain_events.length >= 5);
     this._comparisonCtrl.setFiles(files);
     const conflictCount = this._comparisonCtrl.conflictCount;
+    // Contracts tab unlocks when shared events exist (events appearing in 2+ perspectives)
+    const hasSharedEvents = this._comparisonCtrl.sharedEvents.length > 0;
+    // Integration tab unlocks when contracts are available (same semantic gate as contracts tab)
+    const hasContractsForIntegration = hasSharedEvents;
     const participantName = this.appState.sessionState
       ? (this.appState.sessionState.session.participants.find(
           (p) => p.id === this.appState.sessionState!.participantId
@@ -837,16 +841,16 @@ export class AppShell extends LitElement {
                 <settings-gear sectionName="agree"></settings-gear>
               </sl-tab>
             </sl-tooltip>
-            <sl-tooltip content=${t('shell.tab.contracts.locked')} ?disabled=${files.length >= 2}>
+            <sl-tooltip content=${t('shell.tab.contracts.locked')} ?disabled=${hasSharedEvents}>
               <sl-tab slot="nav" panel="contracts" ?active=${activeView === 'contracts'}
-                ?disabled=${files.length < 2}>
+                ?disabled=${!hasSharedEvents}>
                 ${t('shell.tab.contracts')}
                 <settings-gear sectionName="contracts"></settings-gear>
               </sl-tab>
             </sl-tooltip>
-            <sl-tooltip content=${t('shell.tab.integration.locked')} ?disabled=${files.length >= 2}>
+            <sl-tooltip content=${t('shell.tab.integration.locked')} ?disabled=${hasContractsForIntegration}>
               <sl-tab slot="nav" panel="integration" ?active=${activeView === 'integration'}
-                ?disabled=${files.length < 2}>
+                ?disabled=${!hasContractsForIntegration}>
                 ${t('shell.tab.integration')}
                 <settings-gear sectionName="integration"></settings-gear>
               </sl-tab>
