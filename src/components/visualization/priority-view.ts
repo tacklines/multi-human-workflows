@@ -885,7 +885,15 @@ export class PriorityView extends LitElement {
                   ${t('priorityView.col.crossRefs')}
                   <span class="sort-indicator" aria-hidden="true">${this._sortIndicator('crossRefs')}</span>
                 </th>
-                <th scope="col">${t('priorityView.col.score')}</th>
+                <th scope="col" style="white-space: nowrap;">
+                  ${t('priorityView.col.score')}
+                  <sl-tooltip content="${t('priorityView.scoreHelpContent')}">
+                    <button
+                      style="background: none; border: none; padding: 0 0 0 0.25rem; font-size: 14px; color: var(--sl-color-neutral-500); cursor: help; line-height: 1; vertical-align: middle;"
+                      aria-label="${t('priorityView.scoreHelp')}"
+                    >?</button>
+                  </sl-tooltip>
+                </th>
                 <th scope="col">${t('priorityView.col.tier')}</th>
                 <th scope="col">Votes</th>
               </tr>

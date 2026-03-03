@@ -380,6 +380,8 @@ export interface WorkItem {
   linkedEvents: string[];
   /** IDs of work items that must complete before this one can start */
   dependencies: string[];
+  /** Categorization of this work item */
+  type?: 'story' | 'task' | 'spike';
 }
 
 /**

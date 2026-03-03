@@ -661,6 +661,20 @@ export const messages: Record<string, string> = {
   'breakdownEditor.template.i18n.tooltip': 'Add internationalization acceptance criteria (string extraction, text expansion, Intl API)',
   'breakdownEditor.template.i18n.ariaLabel': 'Add internationalization acceptance criteria',
 
+  // Work item type selector
+  'workItem.type.story': 'Story',
+  'workItem.type.task': 'Task',
+  'workItem.type.spike': 'Spike',
+
+  // INVEST quality checklist
+  'breakdownEditor.invest.title': 'INVEST quality checklist',
+  'breakdownEditor.invest.independent': 'Independent',
+  'breakdownEditor.invest.negotiable': 'Negotiable',
+  'breakdownEditor.invest.valuable': 'Valuable',
+  'breakdownEditor.invest.estimable': 'Estimable',
+  'breakdownEditor.invest.small': 'Small',
+  'breakdownEditor.invest.testable': 'Testable',
+
   // ---------------------------------------------------------------------------
   // coverage-matrix
   // ---------------------------------------------------------------------------
@@ -1136,6 +1150,12 @@ export const messages: Record<string, string> = {
   'glossary.boundary-assumption': 'A belief about where one team\'s responsibility ends and another\'s begins. Making these explicit prevents costly misunderstandings.',
   'glossary.event-contract': 'An agreed-upon definition of an event — its name, payload fields, and meaning — so all teams interpret it the same way.',
   'glossary.boundary-contract': 'An agreed-upon rule about team boundaries — who owns what, and how teams coordinate at the edges.',
+
+  // ---------------------------------------------------------------------------
+  // priority-view score explanation
+  // ---------------------------------------------------------------------------
+  'priorityView.scoreHelp': 'How scores are calculated',
+  'priorityView.scoreHelpContent': 'Score = Confidence \u00d7 Reach \u00d7 Coverage, normalized 0\u2013100. CONFIRMED outbound events with many cross-references score highest. Drag events to a tier or use \u2191\u2193 keys to override.',
 };
 
 /**

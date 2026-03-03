@@ -486,6 +486,147 @@ export class BreakdownEditor extends LitElement {
       outline: 2px solid var(--sl-color-primary-500, #3b82f6);
       outline-offset: 2px;
     }
+
+    /* ---- Type selector ---- */
+    .type-selector {
+      display: flex;
+      gap: 0.375rem;
+      flex-wrap: wrap;
+    }
+
+    .type-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      border: 2px solid var(--sl-color-neutral-200, #e5e7eb);
+      background: #fff;
+      cursor: pointer;
+      font-size: var(--sl-font-size-small, 0.875rem);
+      font-weight: 600;
+      color: var(--sl-color-neutral-600, #4b5563);
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+      font-family: var(--sl-font-sans, system-ui, sans-serif);
+    }
+
+    .type-btn:hover {
+      border-color: var(--sl-color-primary-400, #60a5fa);
+      background: var(--sl-color-primary-50, #eff6ff);
+      color: var(--sl-color-primary-700, #1d4ed8);
+    }
+
+    .type-btn:focus-visible {
+      outline: 2px solid var(--sl-color-primary-500, #3b82f6);
+      outline-offset: 2px;
+    }
+
+    .type-btn.active {
+      background: var(--sl-color-primary-600, #2563eb);
+      border-color: var(--sl-color-primary-600, #2563eb);
+      color: #fff;
+    }
+
+    .type-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.0625rem 0.375rem;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      background: var(--sl-color-primary-100, #dbeafe);
+      color: var(--sl-color-primary-700, #1d4ed8);
+      border: 1px solid var(--sl-color-primary-200, #bfdbfe);
+    }
+
+    /* ---- INVEST section ---- */
+    .invest-section {
+      border-top: 1px solid var(--sl-color-neutral-100, #f3f4f6);
+      padding-top: 0.5rem;
+    }
+
+    .invest-section summary {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--sl-color-neutral-500, #6b7280);
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0;
+      user-select: none;
+    }
+
+    .invest-section summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .invest-section summary::before {
+      content: '▶';
+      font-size: 0.5rem;
+      transition: transform 0.15s ease;
+      color: var(--sl-color-neutral-400, #9ca3af);
+    }
+
+    .invest-section[open] summary::before {
+      transform: rotate(90deg);
+    }
+
+    .invest-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+      padding: 0.375rem 0 0;
+      list-style: none;
+      margin: 0;
+    }
+
+    .invest-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .invest-item label {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      cursor: pointer;
+      font-size: var(--sl-font-size-small, 0.875rem);
+      color: var(--sl-color-neutral-700, #374151);
+      line-height: 1.4;
+    }
+
+    .invest-item input[type="checkbox"] {
+      flex-shrink: 0;
+      margin-top: 0.125rem;
+      width: 1rem;
+      height: 1rem;
+      cursor: pointer;
+      accent-color: var(--sl-color-primary-600, #2563eb);
+    }
+
+    .invest-letter {
+      font-family: var(--sl-font-mono, monospace);
+      font-weight: 700;
+      font-size: var(--sl-font-size-small, 0.875rem);
+      color: var(--sl-color-neutral-800, #1f2937);
+      flex-shrink: 0;
+    }
+
+    .invest-criterion {
+      font-weight: 600;
+    }
+
+    .invest-hint {
+      color: var(--sl-color-neutral-500, #6b7280);
+      font-weight: 400;
+    }
   `;
 
   /** Work items currently in the breakdown. */
@@ -501,6 +642,8 @@ export class BreakdownEditor extends LitElement {
   @property({ attribute: false }) priorities: ReadonlyMap<string, PriorityTier> = new Map();
 
   @state() private _newCriterionByItem: Record<string, string> = {};
+  /** Local UI-only state for INVEST checkbox checks per work item. Key: `${itemId}:${letter}` */
+  @state() private _investChecked: Record<string, boolean> = {};
 
   // ---- Lifecycle ----
 
@@ -687,6 +830,76 @@ export class BreakdownEditor extends LitElement {
     `;
   }
 
+  private _renderTypeSelector(item: WorkItem) {
+    const types: Array<'story' | 'task' | 'spike'> = ['story', 'task', 'spike'];
+    return html`
+      <div>
+        <div class="field-label">Type</div>
+        <div class="type-selector" role="group" aria-label="Work item type">
+          ${types.map((type) => {
+            const isActive = item.type === type;
+            const label = t(`workItem.type.${type}`);
+            return html`
+              <button
+                class="type-btn ${isActive ? 'active' : ''}"
+                aria-label="${label}${isActive ? ' (selected)' : ''}"
+                aria-pressed="${isActive}"
+                title="${isActive ? `Deselect ${label}` : `Set type to ${label}`}"
+                @click=${() => this._updateField(item, 'type', isActive ? undefined : type)}
+              >${label}</button>
+            `;
+          })}
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderInvestSection(item: WorkItem) {
+    const criteria: Array<{ letter: string; key: string; hint: string }> = [
+      { letter: 'I', key: 'independent', hint: 'Can this be delivered without waiting for another story?' },
+      { letter: 'N', key: 'negotiable', hint: 'Is the scope flexible, not a fixed contract?' },
+      { letter: 'V', key: 'valuable', hint: 'Does this deliver value to a user or stakeholder?' },
+      { letter: 'E', key: 'estimable', hint: 'Is the effort understood well enough to size it?' },
+      { letter: 'S', key: 'small', hint: 'Can this fit in one sprint? If not, split it.' },
+      { letter: 'T', key: 'testable', hint: 'Are there clear criteria to verify it\'s done?' },
+    ];
+
+    return html`
+      <details class="invest-section">
+        <summary>${t('breakdownEditor.invest.title')}</summary>
+        <ul class="invest-list">
+          ${criteria.map(({ letter, key, hint }) => {
+            const checkKey = `${item.id}:${letter}`;
+            const isChecked = this._investChecked[checkKey] ?? false;
+            const criterionName = t(`breakdownEditor.invest.${key}`);
+            return html`
+              <li class="invest-item">
+                <label>
+                  <input
+                    type="checkbox"
+                    .checked=${isChecked}
+                    aria-label="${criterionName}: ${hint}"
+                    @change=${(e: Event) => {
+                      this._investChecked = {
+                        ...this._investChecked,
+                        [checkKey]: (e.target as HTMLInputElement).checked,
+                      };
+                    }}
+                  />
+                  <span class="invest-letter">${letter}</span>
+                  <span>
+                    <span class="invest-criterion">${criterionName}</span>
+                    <span class="invest-hint"> — ${hint}</span>
+                  </span>
+                </label>
+              </li>
+            `;
+          })}
+        </ul>
+      </details>
+    `;
+  }
+
   private _renderLinkedEvents(item: WorkItem) {
     return html`
       <div>
@@ -716,6 +929,7 @@ export class BreakdownEditor extends LitElement {
         <div class="card-header">
           <div class="card-title-row">
             <sl-badge variant="${COMPLEXITY_VARIANT[item.complexity]}" pill>${item.complexity}</sl-badge>
+            ${item.type ? html`<span class="type-badge">${t(`workItem.type.${item.type}`)}</span>` : nothing}
           </div>
           <sl-tooltip content="${t('breakdownEditor.deleteWorkItemAriaLabel', { title: item.title || 'work item' })}">
             <sl-icon-button
@@ -747,6 +961,9 @@ export class BreakdownEditor extends LitElement {
             @sl-change=${(e: Event) => this._updateField(item, 'description', (e.target as HTMLTextAreaElement).value)}
           ></sl-textarea>
 
+          <!-- Type -->
+          ${this._renderTypeSelector(item)}
+
           <!-- Complexity -->
           <div>
             <div class="field-label">${t('breakdownEditor.complexity')}</div>
@@ -755,6 +972,9 @@ export class BreakdownEditor extends LitElement {
 
           <!-- Acceptance Criteria -->
           ${this._renderCriteria(item)}
+
+          <!-- INVEST Quality Checklist -->
+          ${this._renderInvestSection(item)}
 
           <!-- Linked Events -->
           ${this._renderLinkedEvents(item)}
