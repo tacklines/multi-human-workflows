@@ -34,6 +34,8 @@ import { loadSessionConfig, saveSessionConfig } from '../../lib/session-config-p
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
 
+const API_BASE = 'http://localhost:3002';
+
 import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
 import '@shoelace-style/shoelace/dist/components/tab/tab.js';
 import '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js';
@@ -1183,6 +1185,29 @@ export class AppShell extends LitElement {
     };
     store.addFile(file);
     this._sparkCollapsed = true;
+
+    const sessionState = this.appState.sessionState;
+    if (sessionState) {
+      fetch(`${API_BASE}/api/sessions/${sessionState.code}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          participantId: sessionState.participantId,
+          fileName: file.filename,
+          data: candidateEvents,
+        }),
+      }).then(async (res) => {
+        if (!res.ok) {
+          const body = await res.text().catch(() => '');
+          const msg = body || `HTTP ${res.status}`;
+          console.error('spark-canvas session submit failed:', msg);
+          store.addError('spark-canvas.yaml', [msg]);
+        }
+      }).catch((err: Error) => {
+        console.error('spark-canvas session submit error:', err.message);
+        store.addError('spark-canvas.yaml', [err.message]);
+      });
+    }
   }
 
   private onTabChange(e: CustomEvent) {
