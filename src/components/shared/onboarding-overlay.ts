@@ -26,14 +26,20 @@ function markOnboardingSeen(): void {
 /**
  * Full-screen welcome overlay shown once per browser on first visit.
  *
- * The overlay presents a brief description of the app and three quick steps.
+ * The overlay presents a plain-language description of Seam and three
+ * concrete steps written for someone with no prior knowledge of the tool.
  * It is tracked via `localStorage` key `seam-onboarding-seen`. Once dismissed,
  * it never reappears.
+ *
+ * After dismissal a brief post-onboarding CTA banner appears at the bottom of
+ * the screen, pointing the user to their first action. It auto-hides after
+ * 6 seconds or when the user closes it.
  *
  * Accessibility:
  * - `aria-modal="true"` and focus trap keep keyboard users inside the dialog
  * - Escape and backdrop click both dismiss
  * - All animations respect `prefers-reduced-motion`
+ * - Post-dismissal CTA uses `aria-live="polite"` for screen reader announcement
  *
  * @fires onboarding-dismissed - Fired when the overlay is dismissed.
  *
@@ -66,7 +72,7 @@ export class OnboardingOverlay extends LitElement {
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
       padding: 2rem;
       width: 100%;
-      max-width: 28rem;
+      max-width: 30rem;
       outline: none;
     }
 
@@ -96,7 +102,7 @@ export class OnboardingOverlay extends LitElement {
 
     .step {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 0.875rem;
     }
 
@@ -111,12 +117,26 @@ export class OnboardingOverlay extends LitElement {
       align-items: center;
       justify-content: center;
       font-size: 1.125rem;
+      margin-top: 0.125rem;
+    }
+
+    .step-text {
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
     }
 
     .step-label {
       font-size: 0.9375rem;
       color: var(--sl-color-neutral-800, #1f2937);
       font-weight: var(--sl-font-weight-medium, 500);
+      line-height: 1.4;
+    }
+
+    .step-sub {
+      font-size: 0.8125rem;
+      color: var(--sl-color-neutral-500, #6b7280);
+      line-height: 1.5;
     }
 
     .actions {
@@ -157,6 +177,63 @@ export class OnboardingOverlay extends LitElement {
       min-height: 44px;
     }
 
+    /* Post-dismissal CTA banner */
+    .cta-banner {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 900;
+      background: var(--sl-color-neutral-900, #111827);
+      color: var(--sl-color-neutral-0, #fff);
+      border-radius: 0.625rem;
+      padding: 0.875rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+      max-width: min(26rem, calc(100vw - 2rem));
+      width: max-content;
+    }
+
+    .cta-icon {
+      font-size: 1.25rem;
+      flex-shrink: 0;
+      color: var(--sl-color-primary-400, #60a5fa);
+    }
+
+    .cta-text {
+      font-size: 0.875rem;
+      line-height: 1.5;
+      flex: 1;
+    }
+
+    .cta-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--sl-color-neutral-400, #9ca3af);
+      padding: 0.25rem;
+      border-radius: 0.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      min-height: 44px;
+      min-width: 44px;
+      transition: color 0.15s ease;
+    }
+
+    .cta-close:hover,
+    .cta-close:focus-visible {
+      color: var(--sl-color-neutral-0, #fff);
+    }
+
+    .cta-close:focus-visible {
+      outline: 2px solid var(--sl-color-primary-400, #60a5fa);
+      outline-offset: 2px;
+    }
+
     /* Entrance animation */
     @media (prefers-reduced-motion: no-preference) {
       .backdrop {
@@ -165,6 +242,10 @@ export class OnboardingOverlay extends LitElement {
 
       .card {
         animation: card-slide-in 0.25s ease forwards;
+      }
+
+      .cta-banner {
+        animation: cta-slide-up 0.3s ease forwards;
       }
 
       @keyframes overlay-fade-in {
@@ -176,6 +257,11 @@ export class OnboardingOverlay extends LitElement {
         from { opacity: 0; transform: translateY(1rem) scale(0.98); }
         to   { opacity: 1; transform: translateY(0) scale(1); }
       }
+
+      @keyframes cta-slide-up {
+        from { opacity: 0; transform: translateX(-50%) translateY(0.75rem); }
+        to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+      }
     }
   `;
 
@@ -186,11 +272,22 @@ export class OnboardingOverlay extends LitElement {
   @property({ type: Boolean, attribute: 'force-show' }) forceShow = false;
 
   @state() private _visible = false;
+  @state() private _showCta = false;
+
+  private _ctaTimer: ReturnType<typeof setTimeout> | null = null;
 
   override connectedCallback() {
     super.connectedCallback();
     if (this.forceShow || !hasSeenOnboarding()) {
       this._visible = true;
+    }
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._ctaTimer !== null) {
+      clearTimeout(this._ctaTimer);
+      this._ctaTimer = null;
     }
   }
 
@@ -216,6 +313,20 @@ export class OnboardingOverlay extends LitElement {
         composed: true,
       })
     );
+    // Show the post-dismissal CTA briefly to orient the user
+    this._showCta = true;
+    this._ctaTimer = setTimeout(() => {
+      this._showCta = false;
+      this._ctaTimer = null;
+    }, 6000);
+  }
+
+  private _dismissCta() {
+    if (this._ctaTimer !== null) {
+      clearTimeout(this._ctaTimer);
+      this._ctaTimer = null;
+    }
+    this._showCta = false;
   }
 
   private _handleBackdropClick(e: MouseEvent) {
@@ -257,63 +368,91 @@ export class OnboardingOverlay extends LitElement {
   }
 
   render() {
-    if (!this._visible) return nothing;
-
     return html`
-      <div
-        class="backdrop"
-        @click=${this._handleBackdropClick}
-        @keydown=${this._handleKeydown}
-      >
+      ${this._visible ? html`
         <div
-          class="card"
-          role="dialog"
-          aria-modal="true"
-          aria-label=${t('onboardingOverlay.ariaLabel')}
-          tabindex="-1"
+          class="backdrop"
+          @click=${this._handleBackdropClick}
+          @keydown=${this._handleKeydown}
         >
-          <h2 class="title">${t('onboardingOverlay.title')}</h2>
-          <p class="description">${t('onboardingOverlay.description')}</p>
-
-          <ol
-            class="steps"
-            aria-label=${t('onboardingOverlay.stepsAriaLabel')}
+          <div
+            class="card"
+            role="dialog"
+            aria-modal="true"
+            aria-label=${t('onboardingOverlay.ariaLabel')}
+            tabindex="-1"
           >
-            <li class="step">
-              <span class="step-icon" aria-hidden="true">
-                <sl-icon name="upload"></sl-icon>
-              </span>
-              <span class="step-label">${t('onboardingOverlay.step1.label')}</span>
-            </li>
-            <li class="step">
-              <span class="step-icon" aria-hidden="true">
-                <sl-icon name="diagram-3"></sl-icon>
-              </span>
-              <span class="step-label">${t('onboardingOverlay.step2.label')}</span>
-            </li>
-            <li class="step">
-              <span class="step-icon" aria-hidden="true">
-                <sl-icon name="people"></sl-icon>
-              </span>
-              <span class="step-label">${t('onboardingOverlay.step3.label')}</span>
-            </li>
-          </ol>
+            <h2 class="title">${t('onboardingOverlay.title')}</h2>
+            <p class="description">${t('onboardingOverlay.description')}</p>
 
-          <div class="actions">
-            <sl-button
-              variant="primary"
-              size="large"
-              style="width: 100%"
-              @click=${this._dismiss}
-            >${t('onboardingOverlay.getStarted')}</sl-button>
-            <button
-              class="skip-link"
-              @click=${this._dismiss}
-              aria-label=${t('onboardingOverlay.closeAriaLabel')}
-            >${t('onboardingOverlay.skip')}</button>
+            <ol
+              class="steps"
+              aria-label=${t('onboardingOverlay.stepsAriaLabel')}
+            >
+              <li class="step">
+                <span class="step-icon" aria-hidden="true">
+                  <sl-icon name="file-earmark-text"></sl-icon>
+                </span>
+                <span class="step-text">
+                  <span class="step-label">${t('onboardingOverlay.step1.label')}</span>
+                  <span class="step-sub">${t('onboardingOverlay.step1.sub')}</span>
+                </span>
+              </li>
+              <li class="step">
+                <span class="step-icon" aria-hidden="true">
+                  <sl-icon name="diagram-3"></sl-icon>
+                </span>
+                <span class="step-text">
+                  <span class="step-label">${t('onboardingOverlay.step2.label')}</span>
+                  <span class="step-sub">${t('onboardingOverlay.step2.sub')}</span>
+                </span>
+              </li>
+              <li class="step">
+                <span class="step-icon" aria-hidden="true">
+                  <sl-icon name="people"></sl-icon>
+                </span>
+                <span class="step-text">
+                  <span class="step-label">${t('onboardingOverlay.step3.label')}</span>
+                  <span class="step-sub">${t('onboardingOverlay.step3.sub')}</span>
+                </span>
+              </li>
+            </ol>
+
+            <div class="actions">
+              <sl-button
+                variant="primary"
+                size="large"
+                style="width: 100%"
+                @click=${this._dismiss}
+              >${t('onboardingOverlay.getStarted')}</sl-button>
+              <button
+                class="skip-link"
+                @click=${this._dismiss}
+                aria-label=${t('onboardingOverlay.closeAriaLabel')}
+              >${t('onboardingOverlay.skip')}</button>
+            </div>
           </div>
         </div>
-      </div>
+      ` : nothing}
+
+      ${this._showCta ? html`
+        <div
+          class="cta-banner"
+          role="status"
+          aria-live="polite"
+          aria-label=${t('onboardingOverlay.cta.title')}
+        >
+          <sl-icon class="cta-icon" name="arrow-up-circle" aria-hidden="true"></sl-icon>
+          <span class="cta-text">${t('onboardingOverlay.cta.hint')}</span>
+          <button
+            class="cta-close"
+            @click=${this._dismissCta}
+            aria-label="Dismiss tip"
+          >
+            <sl-icon name="x" aria-hidden="true"></sl-icon>
+          </button>
+        </div>
+      ` : nothing}
     `;
   }
 }

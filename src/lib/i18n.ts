@@ -843,16 +843,21 @@ export const messages: Record<string, string> = {
   // ---------------------------------------------------------------------------
   // onboarding-overlay
   // ---------------------------------------------------------------------------
-  'onboardingOverlay.title': 'Welcome to Seam',
-  'onboardingOverlay.description': 'The boundary negotiation platform where teams turn integration assumptions into verified contracts. Upload your perspectives, explore boundaries, and negotiate agreements.',
-  'onboardingOverlay.step1.label': 'Upload your YAML file',
-  'onboardingOverlay.step2.label': 'Explore the event flow',
-  'onboardingOverlay.step3.label': 'Collaborate with your team',
-  'onboardingOverlay.getStarted': 'Get Started',
+  'onboardingOverlay.title': 'Welcome — you\'re in the right place',
+  'onboardingOverlay.description': 'Your colleague shared this link so your team can figure out how your systems fit together. No technical setup needed — just describe what your piece does and Seam shows you where it connects (and clashes) with everyone else\'s.',
+  'onboardingOverlay.step1.label': 'Describe your piece',
+  'onboardingOverlay.step1.sub': 'Share what your system does — the things it handles and the data it produces',
+  'onboardingOverlay.step2.label': 'See the full picture',
+  'onboardingOverlay.step2.sub': 'Watch how everyone\'s pieces connect in real time — and where they clash',
+  'onboardingOverlay.step3.label': 'Agree together',
+  'onboardingOverlay.step3.sub': 'Spot mismatches early and lock in what the team has decided, before anyone writes a line of code',
+  'onboardingOverlay.getStarted': 'Let\'s go',
   'onboardingOverlay.skip': 'Skip intro',
-  'onboardingOverlay.ariaLabel': 'Welcome onboarding overlay',
-  'onboardingOverlay.closeAriaLabel': 'Close onboarding overlay',
-  'onboardingOverlay.stepsAriaLabel': 'Three steps to get started',
+  'onboardingOverlay.ariaLabel': 'Welcome — introduction to Seam',
+  'onboardingOverlay.closeAriaLabel': 'Close introduction and go to the app',
+  'onboardingOverlay.stepsAriaLabel': 'Three things you\'ll do in Seam',
+  'onboardingOverlay.cta.title': 'Ready to start',
+  'onboardingOverlay.cta.hint': 'To begin, drag in your file or click the button above — your work will appear here.',
 
   // ---------------------------------------------------------------------------
   // empty-state
