@@ -47,6 +47,7 @@ export interface DomainEvent {
   sources?: string[];
   confidence: Confidence;
   notes?: string;
+  sourceRequirements?: string[];
 }
 
 export interface BoundaryAssumption {
