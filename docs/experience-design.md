@@ -79,6 +79,72 @@ For power users: a toggle switch in the canvas header flips to a raw YAML editor
 
 For agents: `submit_artifact` via MCP produces the same result. The canvas and the MCP tool both emit `ArtifactSubmitted` domain events. A human typing in the canvas and an agent calling the tool are indistinguishable to every other participant.
 
+### Requirements Mode
+
+> **Scope:** Requirements Mode is a **new** entry mode for the Spark Canvas. The existing Events mode continues to work unchanged.
+
+The Spark Canvas header gains a new toggle: **Events | Requirements**. When switched to Requirements mode, the canvas transforms into a plain-text list — the lowest-friction entry point in the entire system.
+
+```
+┌─────────────────────────────────────────────────┐
+│  What does your system need to do?              │
+│                                                 │
+│  1. We need offline support                 [×] │
+│  2. Users should be able to share documents [×] │
+│  3. We need real-time notifications         [×] │
+│  4. _Type a new requirement..._                 │
+│                                                 │
+│  [Derive Events]                                │
+└─────────────────────────────────────────────────┘
+```
+
+Rules:
+- Each line is a plain English sentence — no structured fields, no domain jargon required
+- Press `Enter` to add a new line
+- Each requirement has an `[×]` button to remove it
+- The last line is always an empty placeholder with muted text
+- The "Derive Events" button triggers event suggestion from the requirement set
+
+Requirements mode passes the Technologically Inept Test: a product manager who has never heard of Event Storming can type "We need offline support" and produce useful output. The platform derives the technical rigor; the participant supplies the intent.
+
+For agents: `submit_requirement` via MCP produces the same result. A human typing in the canvas and an agent calling the tool both emit `RequirementSubmitted` domain events.
+
+### Derivation Review
+
+> **Scope:** The Derivation Review panel is a **new component** that bridges the Spark and Explore phases.
+
+When "Derive Events" is clicked (or `derive_events` is called via MCP), the platform analyzes each requirement and suggests domain events. The results appear in a review panel:
+
+```
+┌─────────────────────────────────────────────────┐
+│  "We need offline support"                      │
+│  ├── DataSyncRequested       [✓] [edit] [×]    │
+│  ├── OfflineCacheCreated     [✓] [edit] [×]    │
+│  ├── ConflictDetected        [✓] [edit] [×]    │
+│  └── SyncCompleted           [✓] [edit] [×]    │
+│                                                 │
+│  "Users should share documents"                 │
+│  ├── DocumentShared          [✓] [edit] [×]    │
+│  ├── SharePermissionGranted  [✓] [edit] [×]    │
+│  └── DocumentAccessRevoked   [✓] [edit] [×]    │
+│                                                 │
+│  [Accept All]  [Accept Selected]  [Edit More]   │
+└─────────────────────────────────────────────────┘
+```
+
+Suggested events are grouped by source requirement. Each event:
+- Is pre-checked (accepted by default)
+- Can be edited (opens the event editor with fields pre-filled)
+- Can be dismissed (unchecked)
+- Shows a confidence level as a subtle badge
+
+Bulk actions at the bottom:
+- **Accept All** — accepts every checked event and submits them to the session as a single artifact
+- **Accept Selected** — accepts only the checked events
+- **Edit More** — returns to Requirements mode for additional input
+
+Accepted events carry provenance: each event's `sourceRequirements` field links back to the requirement that spawned it. This enables end-to-end traceability from contract back to plain English.
+
 ### What agents can do
 
 | MCP Tool | What it does |
@@ -86,8 +152,12 @@ For agents: `submit_artifact` via MCP produces the same result. The canvas and t
 | `submit_artifact` (existing) | Submit a complete artifact |
 | `create_draft` (new) | Create a draft visible only to the author — a staging area before formal submission |
 | `suggest_events` (new) | Given a natural-language domain description, return structured candidate events |
+| `submit_requirement` (new) | Submit a plain-language requirement to the session |
+| `derive_events` (new) | Analyze requirements and return suggested domain events grouped by source requirement |
 
 The `suggest_events` tool is the "agent helps you brainstorm" primitive. A human describes their domain in a sentence, the agent returns structured events they can review, edit, and accept. In the UI, this surfaces as an "AI Assist" button in the canvas header that opens a chat-style input: "Describe what your system does."
+
+The `submit_requirement` and `derive_events` tools are the agent equivalent of Requirements mode. An agent can submit requirements one at a time, then call `derive_events` to get structured event suggestions — the same flow as a human typing in the canvas and clicking "Derive Events."
 
 ### Defaults and configuration
 
@@ -140,6 +210,16 @@ Patterns are suggestions, not requirements. Each has an "Add" button and a "Dism
 
 In the flow diagram, the exploration phase adds a subtle visual cue: dashed outlines where expected events are missing based on common patterns. Hovering over a dashed outline shows a tooltip explaining what might belong there.
 
+**Requirements Panel.** When requirements exist in the session, the sidebar gains a persistent **Requirements** panel below the Exploration Guide. The panel shows all requirements with coverage indicators:
+
+- Green checkmark: requirement has derived events that were accepted into the session
+- Amber dot: requirement has no derived events — needs derivation or manual event creation
+- Event count badge: "(4 events)" next to each fulfilled requirement
+
+Clicking a requirement highlights its derived events in the card-view and flow diagram. This provides traceability without leaving the current context — the user sees exactly which events exist because of "We need offline support."
+
+The panel header shows "Requirements (N)" where N is the total count. A "Derive more" link at the bottom returns to Requirements mode in the Spark Canvas.
+
 ### What agents can do
 
 | MCP Tool | What it does |
@@ -147,6 +227,7 @@ In the flow diagram, the exploration phase adds a subtle visual cue: dashed outl
 | `query_prep_status` (existing) | Return completeness analysis |
 | `suggest_improvements` (new) | Given an artifact, return specific suggestions: missing events, missing assumptions, confidence upgrades |
 | `update_artifact` (new) | Replace a submitted artifact with a revised version, preserving the original in version history |
+| `accept_derived_events` (new) | Accept specific derived events for a requirement, submitting them to the session |
 
 ### Defaults and configuration
 
@@ -420,6 +501,14 @@ This moment is the payoff for the entire pipeline. Make it feel earned.
 
 ---
 
+## Future Work: Change Sets
+
+A **Change Set** groups related requirements into a named collection — for example, "Mobile Experience v2" containing "We need offline support," "Push notifications for key events," and "Responsive layouts for all views." Change sets enable batch derivation, scope tracking ("how much of this change set is covered by events and contracts?"), and release planning ("which change set ships in v2.1?").
+
+Change sets are explicitly deferred. The requirements primitive must land and prove its value before introducing the grouping layer. The data model is designed to support change sets without migration — a future `changeSetId` field on `Requirement` is all that's needed.
+
+---
+
 ## The Settings Philosophy
 
 Settings should feel like a conversation with a thoughtful host: "Here's what I set up for you. If you want to change anything, everything is within arm's reach."
@@ -556,16 +645,16 @@ This means:
 
 | Phase | Existing Tools | New Tools |
 |-------|---------------|-----------|
-| I. Spark | `create_session`, `join_session`, `submit_artifact` | `create_draft`, `suggest_events` |
-| II. Explore | `query_prep_status`, `load_prep_artifact` | `suggest_improvements`, `update_artifact` |
+| I. Spark | `create_session`, `join_session`, `submit_artifact` | `create_draft`, `suggest_events`, `submit_requirement`, `derive_events` |
+| II. Explore | `query_prep_status`, `load_prep_artifact` | `suggest_improvements`, `update_artifact`, `accept_derived_events` |
 | III. Rank | — | `set_priority`, `cast_vote`, `get_priorities`, `suggest_priorities` |
 | IV. Slice | — | `create_work_items`, `get_decomposition`, `suggest_decomposition`, `set_dependency` |
 | V. Agree | `compare_artifacts`, `start_jam`, `record_resolution`, `assign_ownership`, `flag_unresolved`, `export_jam_artifacts` | `suggest_resolution` |
 | VI. Build | `load_contracts`, `diff_contracts`, `check_compliance` | `validate_against_contract`, `report_progress` |
 | VII. Ship | `load_integration_report`, `query_integration_status`, `query_workflow_phase`, `poll_workflow_phase` | `run_integration_check`, `get_go_no_go` |
-| Cross-cutting | `send_message`, `get_messages` | `configure_session`, `get_session_config` |
+| Cross-cutting | `send_message`, `get_messages` | `configure_session`, `get_session_config`, `list_requirements`, `get_requirement_coverage` |
 
-**Total: 22 existing + 17 new = 39 MCP tools.** (Existing count includes scoped-mode variants like `my_session`, `my_submit`, `check_messages`.)
+**Total: 22 existing + 22 new = 44 MCP tools.** (Existing count includes scoped-mode variants like `my_session`, `my_submit`, `check_messages`.)
 
 ### Scoped Mode
 
@@ -629,7 +718,7 @@ The platform's job is to make that synchronous hour as productive as possible by
 
 ## Appendix: New MCP Tool Schemas
 
-Minimal input/output contracts for the 17 new tools. These are design intent — final schemas will be defined during implementation.
+Minimal input/output contracts for the 22 new tools. These are design intent — final schemas will be defined during implementation.
 
 ### Phase I: Spark
 
@@ -644,6 +733,21 @@ suggest_events(input: {
   description: string;       // Natural-language domain description
   existingEvents?: string[]; // Event names already defined, to avoid duplicates
 }) → { events: CandidateEvent[] }
+
+submit_requirement(input: {
+  sessionCode: string;
+  participantId: string;
+  statement: string;         // Plain-language requirement ("We need offline support")
+  tags?: string[];           // Optional labels for grouping
+}) → { requirementId: string }
+
+derive_events(input: {
+  sessionCode: string;
+  requirementIds: string[];  // Which requirements to derive events from
+}) → { suggestions: Array<{
+  requirementId: string;
+  events: CandidateEvent[];  // Suggested events with confidence levels
+}> }
 ```
 
 ### Phase II: Explore
@@ -665,6 +769,13 @@ update_artifact(input: {
   content: CandidateEventsFile;
   changeNote?: string;       // Human-readable description of what changed
 }) → { version: number }
+
+accept_derived_events(input: {
+  sessionCode: string;
+  participantId: string;
+  requirementId: string;
+  eventNames: string[];      // Which derived events to accept
+}) → { submittedCount: number }
 ```
 
 ### Phase III: Rank
@@ -774,6 +885,27 @@ configure_session(input: {
 get_session_config(input: {
   sessionCode: string;
 }) → SessionConfig
+
+list_requirements(input: {
+  sessionCode: string;
+}) → { requirements: Array<{
+  id: string;
+  statement: string;
+  authorId: string;
+  status: 'draft' | 'active' | 'fulfilled' | 'deferred';
+  derivedEvents: string[];
+  tags?: string[];
+}> }
+
+get_requirement_coverage(input: {
+  sessionCode: string;
+  requirementId?: string;    // Optional — omit to get coverage for all requirements
+}) → { coverage: Array<{
+  requirementId: string;
+  statement: string;
+  eventCount: number;
+  fulfilled: boolean;
+}> }
 
 // SessionConfig shape:
 interface SessionConfig {
