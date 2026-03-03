@@ -3,6 +3,20 @@ import { deriveContractEntries, deriveContractsData, deriveProvenanceChain } fro
 import type { LoadedFile, DomainEvent, Requirement } from '../schema/types.js';
 import type { Overlap } from './comparison.js';
 
+function makeReq(overrides: Partial<Requirement> & { id: string; statement: string }): Requirement {
+  return {
+    authorId: 'p1',
+    status: 'draft',
+    priority: 0,
+    tags: [],
+    derivedEvents: [],
+    derivedAssumptions: [],
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
 function makeFile(role: string, events: Partial<DomainEvent>[] = []): LoadedFile {
   return {
     filename: `${role}.yaml`,
@@ -150,8 +164,8 @@ describe('deriveProvenanceChain', () => {
   describe('Given events with sourceRequirements and a requirements map', () => {
     it('includes requirement steps at the top of the chain', () => {
       const requirements: Requirement[] = [
-        { id: 'REQ-1', statement: 'Users must be able to place orders', source: 'product-backlog' },
-        { id: 'REQ-2', statement: 'Inventory must update on order', source: 'ops-team' },
+        makeReq({ id: 'REQ-1', statement: 'Users must be able to place orders', authorId: 'product-backlog' }),
+        makeReq({ id: 'REQ-2', statement: 'Inventory must update on order', authorId: 'ops-team' }),
       ];
       const files = [
         makeFile('role-a', [{ name: 'OrderPlaced', aggregate: 'Order', sourceRequirements: ['REQ-1'] }]),
@@ -161,14 +175,14 @@ describe('deriveProvenanceChain', () => {
       const reqSteps = chain.filter((s) => s.kind === 'requirement');
       expect(reqSteps).toHaveLength(2);
       expect(reqSteps[0].label).toBe('Users must be able to place orders');
-      expect(reqSteps[0].detail).toBe('Source: product-backlog');
+      expect(reqSteps[0].detail).toBe('Author: product-backlog');
       expect(reqSteps[1].label).toBe('Inventory must update on order');
-      expect(reqSteps[1].detail).toBe('Source: ops-team');
+      expect(reqSteps[1].detail).toBe('Author: ops-team');
     });
 
     it('deduplicates requirements referenced by multiple events', () => {
       const requirements: Requirement[] = [
-        { id: 'REQ-1', statement: 'Shared requirement' },
+        makeReq({ id: 'REQ-1', statement: 'Shared requirement' }),
       ];
       const files = [
         makeFile('role-a', [{ name: 'EventA', aggregate: 'AggA', sourceRequirements: ['REQ-1'] }]),
@@ -194,7 +208,7 @@ describe('deriveProvenanceChain', () => {
 
     it('produces no requirement steps when no sourceRequirements exist', () => {
       const requirements: Requirement[] = [
-        { id: 'REQ-1', statement: 'Unused requirement' },
+        makeReq({ id: 'REQ-1', statement: 'Unused requirement' }),
       ];
       const files = [
         makeFile('role-a', [{ name: 'EventA', aggregate: 'AggA' }]),

@@ -2,6 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { computePrepStatus, computeSessionStatus, computeRequirementCoverage } from './prep-completeness.js';
 import type { CandidateEventsFile, DomainEvent, BoundaryAssumption, LoadedFile, Requirement } from '../schema/types.js';
 
+function makeRequirement(overrides: Partial<Requirement> & { id: string; derivedEvents: string[] }): Requirement {
+  return {
+    statement: overrides.id,
+    authorId: 'p1',
+    status: 'draft',
+    priority: 0,
+    tags: [],
+    derivedAssumptions: [],
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
 // Helper to build a minimal valid CandidateEventsFile
 function makeFile(
   overrides: {
@@ -414,7 +428,7 @@ describe('computeRequirementCoverage', () => {
 
   it('should mark a requirement as fulfilled when a derived event exists', () => {
     const requirements: Requirement[] = [
-      { id: 'R-1', description: 'Must handle order placement', derivedEvents: ['OrderPlaced'] },
+      makeRequirement({ id: 'R-1', derivedEvents: ['OrderPlaced'] }),
     ];
     const files: LoadedFile[] = [
       makeLoadedFile('backend', {
@@ -431,7 +445,7 @@ describe('computeRequirementCoverage', () => {
 
   it('should mark a requirement as unfulfilled when no derived event exists', () => {
     const requirements: Requirement[] = [
-      { id: 'R-1', description: 'Must handle refunds', derivedEvents: ['RefundIssued'] },
+      makeRequirement({ id: 'R-1', derivedEvents: ['RefundIssued'] }),
     ];
     const files: LoadedFile[] = [
       makeLoadedFile('backend', {
@@ -449,9 +463,9 @@ describe('computeRequirementCoverage', () => {
 
   it('should handle mixed fulfilled and unfulfilled requirements', () => {
     const requirements: Requirement[] = [
-      { id: 'R-1', description: 'Must handle orders', derivedEvents: ['OrderPlaced'] },
-      { id: 'R-2', description: 'Must handle refunds', derivedEvents: ['RefundIssued'] },
-      { id: 'R-3', description: 'Must handle payments', derivedEvents: ['PaymentProcessed', 'PaymentFailed'] },
+      makeRequirement({ id: 'R-1', derivedEvents: ['OrderPlaced'] }),
+      makeRequirement({ id: 'R-2', derivedEvents: ['RefundIssued'] }),
+      makeRequirement({ id: 'R-3', derivedEvents: ['PaymentProcessed', 'PaymentFailed'] }),
     ];
     const files: LoadedFile[] = [
       makeLoadedFile('backend', {
@@ -472,8 +486,8 @@ describe('computeRequirementCoverage', () => {
 
   it('should check events across multiple files', () => {
     const requirements: Requirement[] = [
-      { id: 'R-1', description: 'Must handle orders', derivedEvents: ['OrderPlaced'] },
-      { id: 'R-2', description: 'Must handle payments', derivedEvents: ['PaymentProcessed'] },
+      makeRequirement({ id: 'R-1', derivedEvents: ['OrderPlaced'] }),
+      makeRequirement({ id: 'R-2', derivedEvents: ['PaymentProcessed'] }),
     ];
     const files: LoadedFile[] = [
       makeLoadedFile('frontend', {
@@ -493,7 +507,7 @@ describe('computeRequirementCoverage', () => {
 
   it('should treat requirements with no derivedEvents as unfulfilled', () => {
     const requirements: Requirement[] = [
-      { id: 'R-1', description: 'Vague requirement', derivedEvents: [] },
+      makeRequirement({ id: 'R-1', derivedEvents: [] }),
     ];
     const files: LoadedFile[] = [
       makeLoadedFile('backend', {

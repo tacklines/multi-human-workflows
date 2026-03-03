@@ -19,10 +19,13 @@ function makeRequirement(overrides: Partial<Requirement> = {}): Requirement {
     id: 'req-1',
     statement: 'We need offline support',
     authorId: 'user-1',
-    createdAt: '2026-01-01T00:00:00Z',
+    status: 'draft',
+    priority: 0,
+    tags: [],
     derivedEvents: [],
     derivedAssumptions: [],
-    status: 'draft',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
   };
 }

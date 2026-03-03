@@ -182,7 +182,7 @@ export function deriveProvenanceChain(
     chain.push({
       kind: 'requirement',
       label: req ? req.statement : reqId,
-      detail: req?.source ? `Source: ${req.source}` : `Requirement ${reqId}`,
+      detail: req ? `Author: ${req.authorId}` : `Requirement ${reqId}`,
     });
   }
 
