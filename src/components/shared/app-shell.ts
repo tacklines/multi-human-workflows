@@ -622,6 +622,7 @@ export class AppShell extends LitElement {
 
   private renderAppLayout() {
     const { files, activeView, filters, errors, sidebarCollapsed, selectedAggregate } = this.appState;
+    const hasRankableArtifact = files.some(f => f.data.domain_events.length >= 5);
     this._comparisonCtrl.setFiles(files);
     const conflictCount = this._comparisonCtrl.conflictCount;
     const participantName = this.appState.sessionState
@@ -787,12 +788,14 @@ export class AppShell extends LitElement {
               <settings-gear sectionName="comparison"></settings-gear>
             </sl-tab>
             <sl-tab slot="nav" panel="priority" ?active=${activeView === 'priority'}
-              ?disabled=${files.length < 2}>
+              ?disabled=${!hasRankableArtifact}
+              title=${!hasRankableArtifact ? t('shell.tab.priority.locked') : ''}>
               ${t('shell.tab.priority')}
               <settings-gear sectionName="priority"></settings-gear>
             </sl-tab>
             <sl-tab slot="nav" panel="breakdown" ?active=${activeView === 'breakdown'}
-              ?disabled=${files.length < 2}>
+              ?disabled=${files.length < 1}
+              title=${files.length < 1 ? t('shell.tab.breakdown.locked') : ''}>
               ${t('shell.tab.breakdown')}
             </sl-tab>
             <sl-tab slot="nav" panel="agreements" ?active=${activeView === 'agreements'}
