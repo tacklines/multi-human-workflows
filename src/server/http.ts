@@ -10,6 +10,7 @@ import { compareFiles } from '../lib/comparison.js';
 import { suggestResolutionHeuristic } from '../lib/integration-heuristics.js';
 import { deriveFromRequirements } from '../lib/requirement-derivation.js';
 import type { Requirement } from '../schema/types.js';
+import { PrioritizationService } from '../contexts/prioritization/prioritization-service.js';
 
 const PORT = Number(process.env.PORT ?? 3002);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
@@ -428,6 +429,111 @@ const server = http.createServer(async (req, res) => {
         status: existing.status === 'draft' ? 'active' : existing.status,
       });
       sendJson(res, 200, { requirement });
+      return;
+    }
+
+    // POST /api/sessions/:code/priorities — Set a priority tier for a domain event
+    const prioritiesPostMatch = url.match(/^\/api\/sessions\/([^/]+)\/priorities$/);
+    if (method === 'POST' && prioritiesPostMatch) {
+      const code = prioritiesPostMatch[1];
+      const body = await parseBody(req) as {
+        participantId?: string;
+        eventName?: string;
+        tier?: string;
+      };
+      if (
+        typeof body.participantId !== 'string' ||
+        typeof body.eventName !== 'string' ||
+        typeof body.tier !== 'string'
+      ) {
+        sendJson(res, 400, { error: 'participantId, eventName, and tier are required' });
+        return;
+      }
+      if (body.tier !== 'must_have' && body.tier !== 'should_have' && body.tier !== 'could_have') {
+        sendJson(res, 400, { error: 'tier must be must_have, should_have, or could_have' });
+        return;
+      }
+      const service = new PrioritizationService((c) => store.getSession(c));
+      const priority = service.setPriority(code, {
+        participantId: body.participantId,
+        eventName: body.eventName,
+        tier: body.tier,
+      });
+      if (!priority) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      sendJson(res, 200, { priority });
+      return;
+    }
+
+    // POST /api/sessions/:code/votes — Cast a vote on a domain event
+    const votesPostMatch = url.match(/^\/api\/sessions\/([^/]+)\/votes$/);
+    if (method === 'POST' && votesPostMatch) {
+      const code = votesPostMatch[1];
+      const body = await parseBody(req) as {
+        participantId?: string;
+        eventName?: string;
+        direction?: string;
+      };
+      if (
+        typeof body.participantId !== 'string' ||
+        typeof body.eventName !== 'string' ||
+        typeof body.direction !== 'string'
+      ) {
+        sendJson(res, 400, { error: 'participantId, eventName, and direction are required' });
+        return;
+      }
+      if (body.direction !== 'up' && body.direction !== 'down') {
+        sendJson(res, 400, { error: 'direction must be up or down' });
+        return;
+      }
+      const service = new PrioritizationService((c) => store.getSession(c));
+      const vote = service.castVote(code, {
+        participantId: body.participantId,
+        eventName: body.eventName,
+        direction: body.direction,
+      });
+      if (!vote) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      const session = store.getSession(code);
+      const eventVotes = session?.votes.filter((v) => v.eventName === body.eventName) ?? [];
+      const upvotes = eventVotes.filter((v) => v.direction === 'up').length;
+      const downvotes = eventVotes.filter((v) => v.direction === 'down').length;
+      const netCount = upvotes - downvotes;
+      sendJson(res, 200, { vote, netCount });
+      return;
+    }
+
+    // GET /api/sessions/:code/priorities — Get composite priority scores
+    const prioritiesGetMatch = url.match(/^\/api\/sessions\/([^/]+)\/priorities$/);
+    if (method === 'GET' && prioritiesGetMatch) {
+      const code = prioritiesGetMatch[1];
+      const service = new PrioritizationService((c) => store.getSession(c));
+      const scores = service.computeCompositeScores(code);
+      if (!scores) {
+        sendJson(res, 404, { error: 'Session not found' });
+        return;
+      }
+      const events = scores.map((s) => {
+        const upvotes = s.votes.filter((v) => v.direction === 'up').length;
+        const downvotes = s.votes.filter((v) => v.direction === 'down').length;
+        const tierCounts: Record<string, number> = {};
+        for (const p of s.priorities) {
+          tierCounts[p.tier] = (tierCounts[p.tier] ?? 0) + 1;
+        }
+        const topTier =
+          Object.entries(tierCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'could_have';
+        return {
+          name: s.eventName,
+          tier: topTier,
+          score: s.compositeScore,
+          votes: upvotes - downvotes,
+        };
+      });
+      sendJson(res, 200, { events });
       return;
     }
 
