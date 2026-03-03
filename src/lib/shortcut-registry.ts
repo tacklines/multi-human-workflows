@@ -2,7 +2,7 @@
  * Keyboard shortcut registry for Seam.
  *
  * Framework-agnostic: takes KeyboardEvents and calls registered handlers.
- * Customizations are stored in localStorage under `mhw-keyboard-shortcuts`.
+ * Customizations are stored in localStorage under `seam-keyboard-shortcuts`.
  *
  * Usage:
  *   import { registry } from '@/lib/shortcut-registry';
@@ -22,7 +22,7 @@ export interface Shortcut {
 
 export type ShortcutCustomization = Pick<Shortcut, 'key' | 'ctrl' | 'shift' | 'alt' | 'meta'>;
 
-const STORAGE_KEY = 'mhw-keyboard-shortcuts';
+const STORAGE_KEY = 'seam-keyboard-shortcuts';
 
 /** Elements that should suppress global keyboard shortcuts when focused. */
 const INPUT_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);

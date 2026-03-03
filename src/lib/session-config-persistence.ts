@@ -6,13 +6,13 @@
  * a page refresh without needing a round-trip to the server.
  *
  * Storage keys:
- *   solo mode:    `mhw-session-config`
- *   session mode: `mhw-session-config-${sessionCode}`
+ *   solo mode:    `seam-session-config`
+ *   session mode: `seam-session-config-${sessionCode}`
  */
 
 import { type SessionConfig, DEFAULT_SESSION_CONFIG } from '../schema/types.js';
 
-const BASE_STORAGE_KEY = 'mhw-session-config';
+const BASE_STORAGE_KEY = 'seam-session-config';
 
 function storageKey(sessionCode?: string): string {
   return sessionCode ? `${BASE_STORAGE_KEY}-${sessionCode}` : BASE_STORAGE_KEY;

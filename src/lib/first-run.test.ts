@@ -91,7 +91,7 @@ describe('markTipSeen', () => {
   it('persists a tip key to localStorage', () => {
     markTipSeen('comparison-view');
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'mhw-help-tips-seen',
+      'seam-help-tips-seen',
       expect.stringContaining('comparison-view')
     );
   });
@@ -135,7 +135,7 @@ describe('resetAllTips', () => {
   it('calls localStorage.removeItem with the storage key', () => {
     resetAllTips();
     expect(localStorageMock.removeItem).toHaveBeenCalledWith(
-      'mhw-help-tips-seen'
+      'seam-help-tips-seen'
     );
   });
 

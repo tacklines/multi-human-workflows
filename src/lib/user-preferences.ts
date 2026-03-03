@@ -4,7 +4,7 @@
  * Unlike session config (which is server-side and shared across all participants),
  * user preferences are client-local and scoped to the individual browser.
  *
- * Storage key: `mhw-preferences`
+ * Storage key: `seam-preferences`
  */
 
 export interface UserPreferences {
@@ -22,7 +22,7 @@ const DEFAULT_USER_PREFERENCES: UserPreferences = {
   compactMode: false,
 };
 
-const STORAGE_KEY = 'mhw-preferences';
+const STORAGE_KEY = 'seam-preferences';
 
 function readPreferences(): UserPreferences {
   try {

@@ -70,12 +70,12 @@ describe('loadSessionConfig', () => {
 
   it('uses generic key when no session code provided', () => {
     loadSessionConfig();
-    expect(localStorageMock.getItem).toHaveBeenCalledWith('mhw-session-config');
+    expect(localStorageMock.getItem).toHaveBeenCalledWith('seam-session-config');
   });
 
   it('uses session-code-specific key when session code provided', () => {
     loadSessionConfig('XYZ789');
-    expect(localStorageMock.getItem).toHaveBeenCalledWith('mhw-session-config-XYZ789');
+    expect(localStorageMock.getItem).toHaveBeenCalledWith('seam-session-config-XYZ789');
   });
 });
 
@@ -83,7 +83,7 @@ describe('saveSessionConfig', () => {
   it('writes config to localStorage', () => {
     saveSessionConfig({ ...DEFAULT_SESSION_CONFIG });
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'mhw-session-config',
+      'seam-session-config',
       expect.any(String)
     );
   });
@@ -98,7 +98,7 @@ describe('saveSessionConfig', () => {
   it('uses session-code-specific key when session code provided', () => {
     saveSessionConfig({ ...DEFAULT_SESSION_CONFIG }, 'ABC123');
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'mhw-session-config-ABC123',
+      'seam-session-config-ABC123',
       expect.any(String)
     );
   });
@@ -106,7 +106,7 @@ describe('saveSessionConfig', () => {
   it('uses generic key when no session code provided', () => {
     saveSessionConfig({ ...DEFAULT_SESSION_CONFIG });
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'mhw-session-config',
+      'seam-session-config',
       expect.any(String)
     );
   });
