@@ -336,7 +336,7 @@ describe('ShortcutRegistry', () => {
       reg.customize('action.r', { key: 'x' });
 
       expect(localStorageMock.setItem).toHaveBeenCalledWith(
-        'mhw-keyboard-shortcuts',
+        'seam-keyboard-shortcuts',
         expect.stringContaining('"key":"x"'),
       );
     });
@@ -347,11 +347,11 @@ describe('ShortcutRegistry', () => {
       reg.customize('action.r', { key: 'x' });
 
       // Simulate storage with the customization present
-      localStorageMock._store['mhw-keyboard-shortcuts'] = JSON.stringify({ 'action.r': { key: 'x' } });
+      localStorageMock._store['seam-keyboard-shortcuts'] = JSON.stringify({ 'action.r': { key: 'x' } });
 
       reg.resetDefaults();
 
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith('mhw-keyboard-shortcuts');
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith('seam-keyboard-shortcuts');
     });
 
     it('applies loaded customizations to already-registered shortcuts', () => {
@@ -359,7 +359,7 @@ describe('ShortcutRegistry', () => {
       reg.register({ id: 'action.r', key: 'r', description: 'Resolve', category: 'Actions' }, handler);
 
       // Seed storage after registration
-      localStorageMock._store['mhw-keyboard-shortcuts'] = JSON.stringify({ 'action.r': { key: 'z' } });
+      localStorageMock._store['seam-keyboard-shortcuts'] = JSON.stringify({ 'action.r': { key: 'z' } });
       reg.loadFromStorage();
 
       expect(reg.handleKeydown(makeEvent('z'))).toBe(true);
@@ -367,7 +367,7 @@ describe('ShortcutRegistry', () => {
 
     it('applies customizations at register time if loadFromStorage was called first', () => {
       // Pre-seed localStorage
-      localStorageMock._store['mhw-keyboard-shortcuts'] = JSON.stringify({ 'action.r': { key: 'z' } });
+      localStorageMock._store['seam-keyboard-shortcuts'] = JSON.stringify({ 'action.r': { key: 'z' } });
 
       // Load before registering (cold-start scenario)
       reg.loadFromStorage();
@@ -378,7 +378,7 @@ describe('ShortcutRegistry', () => {
     });
 
     it('handles corrupted localStorage gracefully', () => {
-      localStorageMock._store['mhw-keyboard-shortcuts'] = '{invalid json}';
+      localStorageMock._store['seam-keyboard-shortcuts'] = '{invalid json}';
       expect(() => reg.loadFromStorage()).not.toThrow();
     });
   });

@@ -69,7 +69,7 @@ describe('setUserPreference', () => {
   it('persists a theme preference to localStorage', () => {
     setUserPreference('theme', 'dark');
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'mhw-preferences',
+      'seam-preferences',
       expect.stringContaining('"theme":"dark"')
     );
   });

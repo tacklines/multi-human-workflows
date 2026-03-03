@@ -4,7 +4,7 @@
  * Tracks which help tips have been shown to this user via localStorage.
  * Each tip is shown once per browser (not once per session).
  *
- * Storage key: `mhw-help-tips-seen` — JSON array of HelpTipKey strings.
+ * Storage key: `seam-help-tips-seen` — JSON array of HelpTipKey strings.
  */
 
 export type HelpTipKey =
@@ -24,7 +24,7 @@ const ALL_TIP_KEYS: HelpTipKey[] = [
   'file-drop',
 ];
 
-const STORAGE_KEY = 'mhw-help-tips-seen';
+const STORAGE_KEY = 'seam-help-tips-seen';
 
 function readSeenTips(): HelpTipKey[] {
   try {

@@ -5,7 +5,7 @@ import { t } from '../../lib/i18n.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 
-const ONBOARDING_KEY = 'mhw-onboarding-seen';
+const ONBOARDING_KEY = 'seam-onboarding-seen';
 
 function hasSeenOnboarding(): boolean {
   try {
@@ -27,7 +27,7 @@ function markOnboardingSeen(): void {
  * Full-screen welcome overlay shown once per browser on first visit.
  *
  * The overlay presents a brief description of the app and three quick steps.
- * It is tracked via `localStorage` key `mhw-onboarding-seen`. Once dismissed,
+ * It is tracked via `localStorage` key `seam-onboarding-seen`. Once dismissed,
  * it never reappears.
  *
  * Accessibility:
