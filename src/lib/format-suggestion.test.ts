@@ -16,6 +16,7 @@ function makeInventory(overrides: Partial<ArtifactInventory> = {}): ArtifactInve
     contractCount: 0,
     hasIntegrationReport: false,
     integrationStatus: null,
+    allWorkItemsComplete: false,
     ...overrides,
   };
 }
@@ -187,16 +188,37 @@ describe('formatSuggestion — jam phase', () => {
 // ─── Formalize phase ──────────────────────────────────────────────────────────
 
 describe('formatSuggestion — formalize phase', () => {
-  it('prompts to run an integration check when contracts are loaded', () => {
-    const status = makeStatus('formalize', { hasContracts: true });
+  it('shows building message when work items are not all complete', () => {
+    const status = makeStatus('formalize', { hasContracts: true, allWorkItemsComplete: false });
     const result = formatSuggestion(status, defaultContext);
+    expect(result.text).toMatch(/building against contracts/i);
     expect(result.text).toMatch(/integration check/i);
   });
 
-  it('mentions building against contracts', () => {
-    const status = makeStatus('formalize', { hasContracts: true });
+  it('mentions contracts in building state', () => {
+    const status = makeStatus('formalize', { hasContracts: true, allWorkItemsComplete: false });
     const result = formatSuggestion(status, defaultContext);
     expect(result.text).toMatch(/contracts/i);
+  });
+
+  it('shows ready message when all work items are at 100% progress', () => {
+    const status = makeStatus('formalize', { hasContracts: true, allWorkItemsComplete: true });
+    const result = formatSuggestion(status, defaultContext);
+    expect(result.text).toMatch(/ready for integration check/i);
+  });
+
+  it('ready message mentions 100% progress', () => {
+    const status = makeStatus('formalize', { hasContracts: true, allWorkItemsComplete: true });
+    const result = formatSuggestion(status, defaultContext);
+    expect(result.text).toMatch(/100%/i);
+  });
+
+  it('building message is different from ready message', () => {
+    const building = makeStatus('formalize', { hasContracts: true, allWorkItemsComplete: false });
+    const ready = makeStatus('formalize', { hasContracts: true, allWorkItemsComplete: true });
+    const buildingResult = formatSuggestion(building, defaultContext);
+    const readyResult = formatSuggestion(ready, defaultContext);
+    expect(buildingResult.text).not.toBe(readyResult.text);
   });
 });
 

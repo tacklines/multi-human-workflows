@@ -21,6 +21,7 @@ function makeInventory(overrides: Partial<ArtifactInventory> = {}): ArtifactInve
     contractCount: 0,
     hasIntegrationReport: false,
     integrationStatus: null,
+    allWorkItemsComplete: false,
     ...overrides,
   };
 }

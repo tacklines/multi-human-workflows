@@ -101,6 +101,9 @@ export class ContractsTab extends LitElement {
   /** Number of work items — used to determine if the integration CTA should show */
   @property({ type: Number }) workItemCount = 0;
 
+  /** Whether all work items have reported 100% progress — required for the integration CTA */
+  @property({ type: Boolean }) workItemsAllComplete = false;
+
   /** Previous bundle snapshot for diff display; managed internally */
   @state() private _previousContractBundle: ContractBundle | null = null;
 
@@ -121,6 +124,7 @@ export class ContractsTab extends LitElement {
   render() {
     const showIntegrationCta =
       this.workItemCount > 0 &&
+      this.workItemsAllComplete &&
       this.compliance.status === 'pass' &&
       this.bundle.eventContracts.length > 0;
 

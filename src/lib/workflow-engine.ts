@@ -27,6 +27,8 @@ export interface ArtifactInventory {
   contractCount: number;
   hasIntegrationReport: boolean;
   integrationStatus: string | null;
+  /** True when all work items have reported 100% progress. Defaults to false when no work items exist. */
+  allWorkItemsComplete: boolean;
 }
 
 export interface SessionData {
@@ -35,6 +37,10 @@ export interface SessionData {
   jam: JamArtifacts | null;
   contracts: ContractBundle | null;
   integrationReport: IntegrationReport | null;
+  /** Work item progress by ID (0–100). Absent when no progress has been reported. */
+  workItemProgress?: Record<string, number>;
+  /** Total number of work items across all aggregates */
+  workItemCount?: number;
 }
 
 const PHASE_METADATA: Record<WorkflowPhase, { label: string; description: string }> = {
@@ -89,7 +95,14 @@ const PHASE_ORDER: WorkflowPhase[] = [
 ];
 
 export function buildArtifactInventory(session: SessionData): ArtifactInventory {
-  const { participantCount, submissionCount, jam, contracts, integrationReport } = session;
+  const { participantCount, submissionCount, jam, contracts, integrationReport, workItemProgress, workItemCount } = session;
+
+  const totalItems = workItemCount ?? 0;
+  const allWorkItemsComplete =
+    totalItems > 0 &&
+    !!workItemProgress &&
+    Object.keys(workItemProgress).length === totalItems &&
+    Object.values(workItemProgress).every((pct) => pct >= 100);
 
   return {
     participantCount,
@@ -102,6 +115,7 @@ export function buildArtifactInventory(session: SessionData): ArtifactInventory 
     contractCount: contracts?.eventContracts.length ?? 0,
     hasIntegrationReport: integrationReport !== null,
     integrationStatus: integrationReport?.overallStatus ?? null,
+    allWorkItemsComplete,
   };
 }
 

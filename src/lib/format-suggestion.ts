@@ -45,6 +45,7 @@ export function formatSuggestion(status: WorkflowStatus, context: SuggestionCont
     unresolvedCount,
     hasIntegrationReport,
     integrationStatus,
+    allWorkItemsComplete,
   } = artifactInventory;
 
   switch (currentPhase) {
@@ -89,11 +90,10 @@ export function formatSuggestion(status: WorkflowStatus, context: SuggestionCont
     }
 
     case 'formalize': {
-      if (!hasIntegrationReport) {
-        return { text: `Building against contracts. Run an integration check when ready` };
+      if (allWorkItemsComplete) {
+        return { text: `Ready for integration check. All work items are at 100% — run the check to confirm alignment` };
       }
-      // Integration report exists but we're still in formalize (shouldn't normally occur)
-      return { text: `Building against contracts. Run an integration check when ready` };
+      return { text: `Building against contracts. Run an integration check when all work items are complete` };
     }
 
     case 'integrate': {

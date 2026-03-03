@@ -51,6 +51,8 @@ function makeSession(overrides: {
   jam?: JamArtifacts | null;
   contracts?: ContractBundle | null;
   integrationReport?: IntegrationReport | null;
+  workItemCount?: number;
+  workItemProgress?: Record<string, number>;
 }) {
   return {
     participantCount: overrides.participantCount ?? 1,
@@ -58,6 +60,8 @@ function makeSession(overrides: {
     jam: overrides.jam ?? null,
     contracts: overrides.contracts ?? null,
     integrationReport: overrides.integrationReport ?? null,
+    workItemCount: overrides.workItemCount,
+    workItemProgress: overrides.workItemProgress,
   };
 }
 
@@ -77,6 +81,7 @@ describe('buildArtifactInventory', () => {
       contractCount: 0,
       hasIntegrationReport: false,
       integrationStatus: null,
+      allWorkItemsComplete: false,
     });
   });
 
@@ -147,6 +152,32 @@ describe('buildArtifactInventory', () => {
     );
     expect(inventoryWarn.integrationStatus).toBe('warn');
   });
+
+  it('sets allWorkItemsComplete to false when no work items exist', () => {
+    const inventory = buildArtifactInventory(makeSession({}));
+    expect(inventory.allWorkItemsComplete).toBe(false);
+  });
+
+  it('sets allWorkItemsComplete to false when progress is missing for some work items', () => {
+    const inventory = buildArtifactInventory(
+      makeSession({ workItemCount: 2, workItemProgress: { 'wi-1': 100 } })
+    );
+    expect(inventory.allWorkItemsComplete).toBe(false);
+  });
+
+  it('sets allWorkItemsComplete to false when any work item is below 100%', () => {
+    const inventory = buildArtifactInventory(
+      makeSession({ workItemCount: 2, workItemProgress: { 'wi-1': 100, 'wi-2': 80 } })
+    );
+    expect(inventory.allWorkItemsComplete).toBe(false);
+  });
+
+  it('sets allWorkItemsComplete to true when all work items are at 100%', () => {
+    const inventory = buildArtifactInventory(
+      makeSession({ workItemCount: 2, workItemProgress: { 'wi-1': 100, 'wi-2': 100 } })
+    );
+    expect(inventory.allWorkItemsComplete).toBe(true);
+  });
 });
 
 // ─── inferPhase ───────────────────────────────────────────────────────────
@@ -164,6 +195,7 @@ describe('inferPhase', () => {
       contractCount: 0,
       hasIntegrationReport: false,
       integrationStatus: null,
+      allWorkItemsComplete: false,
       ...overrides,
     };
   }
