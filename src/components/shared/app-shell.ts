@@ -31,6 +31,8 @@ import { suggestPriorities } from '../../lib/priority-heuristics.js';
 import type { WorkItem, ContractBundle, UnresolvedItem, PendingApproval, Draft, BoundaryAssumption, DelegationLevel, ConflictResolution, EventPriority, SessionConfig } from '../../schema/types.js';
 import { DEFAULT_SESSION_CONFIG } from '../../schema/types.js';
 import { loadSessionConfig, saveSessionConfig } from '../../lib/session-config-persistence.js';
+import { loadSessionIdentity } from '../../lib/session-identity-persistence.js';
+import { connectSession } from '../../state/session-connection.js';
 import { detectMilestones } from '../../lib/milestone-detector.js';
 import type { MilestoneKey, MilestoneState } from '../../lib/milestone-detector.js';
 import { resetAllTips } from '../../lib/first-run.js';
@@ -365,6 +367,13 @@ export class AppShell extends LitElement {
     this._boundPasteHandler = (e: ClipboardEvent) => this._onGlobalPaste(e);
     document.addEventListener('paste', this._boundPasteHandler);
 
+    // Reconnect WebSocket session after page refresh.
+    // If localStorage has session identity but the store has no active session
+    // (store resets on page load), fetch the session from the server and reconnect.
+    if (!this.appState.sessionState) {
+      void this._maybeReconnectSession();
+    }
+
     // Hydrate session config from localStorage (survives page refresh)
     this._sessionConfig = loadSessionConfig(this.appState.sessionState?.code);
 
@@ -404,6 +413,40 @@ export class AppShell extends LitElement {
   private _onRegistryReset = () => {
     this._registerShortcuts();
   };
+
+  /**
+   * After a page refresh the in-memory store is empty, but localStorage may
+   * still hold session identity from a previous tab visit. Fetch the session
+   * snapshot from the server, restore store state, and reopen the WebSocket.
+   *
+   * This is intentionally best-effort: if the server is unreachable or the
+   * session has expired, we silently skip reconnection (the user will see the
+   * landing / lobby screen instead).
+   */
+  private async _maybeReconnectSession(): Promise<void> {
+    const persisted = loadSessionIdentity();
+    if (!persisted) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/sessions/${persisted.code}`);
+      if (!res.ok) return; // session expired or server unavailable — stay on landing
+
+      const body = (await res.json()) as {
+        session: import('../../state/app-state.js').ActiveSession;
+      };
+
+      // Verify the participant still exists in the session
+      const participant = body.session.participants.find(
+        (p) => p.id === persisted.participantId
+      );
+      if (!participant) return; // participant was removed — don't reconnect
+
+      store.setSession(persisted.code, persisted.participantId, body.session);
+      connectSession(persisted.code);
+    } catch {
+      // Network error or malformed response — silently skip reconnection.
+    }
+  }
 
   override updated(_changedProperties: Map<string, unknown>) {
     const current: MilestoneState = {

@@ -10,6 +10,7 @@ import type {
   ConflictResolution,
 } from '../schema/types.js';
 import type { Confidence, Direction } from '../schema/types.js';
+import { saveSessionIdentity, clearSessionIdentity } from '../lib/session-identity-persistence.js';
 
 export type ViewMode = 'cards' | 'flow' | 'comparison' | 'priority' | 'breakdown' | 'agreements' | 'contracts' | 'integration';
 
@@ -189,6 +190,7 @@ class Store {
 
   setSession(code: string, participantId: string, session: ActiveSession) {
     this.state = { ...this.state, sessionState: { code, participantId, session } };
+    saveSessionIdentity(code, participantId);
     this.notify({ type: 'session-connected', code, participantId });
   }
 
@@ -203,6 +205,7 @@ class Store {
 
   clearSession() {
     this.state = { ...this.state, sessionState: null };
+    clearSessionIdentity();
     this.notify({ type: 'session-disconnected' });
   }
 }
