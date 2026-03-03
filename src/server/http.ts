@@ -27,8 +27,19 @@ const decompositionSvc = new DecompositionService(
   eventStore
 );
 
+// Map response objects to their request origin for dynamic CORS reflection
+const reqOrigins = new WeakMap<ServerResponse, string>();
+
+function resolveCorsOrigin(res: ServerResponse): string {
+  const requestOrigin = reqOrigins.get(res);
+  if (requestOrigin && /^https?:\/\/localhost(:\d+)?$/.test(requestOrigin)) {
+    return requestOrigin;
+  }
+  return CORS_ORIGIN;
+}
+
 function addCorsHeaders(res: ServerResponse): void {
-  res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);
+  res.setHeader('Access-Control-Allow-Origin', resolveCorsOrigin(res));
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
@@ -37,7 +48,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const json = JSON.stringify(body);
   res.writeHead(status, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': CORS_ORIGIN,
+    'Access-Control-Allow-Origin': resolveCorsOrigin(res),
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   });
@@ -65,6 +76,9 @@ function parseBody(req: http.IncomingMessage): Promise<unknown> {
 const server = http.createServer(async (req, res) => {
   const url = req.url ?? '/';
   const method = req.method ?? 'GET';
+
+  // Store request origin for dynamic CORS reflection in sendJson/addCorsHeaders
+  reqOrigins.set(res, req.headers.origin ?? '');
 
   // Handle CORS preflight
   if (method === 'OPTIONS') {
