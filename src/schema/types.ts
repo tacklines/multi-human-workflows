@@ -45,10 +45,26 @@ export interface DomainEvent {
   state_change?: string;
   integration: Integration;
   sources?: string[];
+  /** IDs of requirements that led to this event being defined */
+  sourceRequirements?: string[];
   confidence: Confidence;
   notes?: string;
   /** IDs of requirements that drove the creation of this event */
   sourceRequirements?: string[];
+}
+
+/**
+ * A requirement that traces to one or more domain events.
+ * Requirements provide the "why" behind domain events — linking
+ * business needs to the events they produce.
+ */
+export interface Requirement {
+  /** Unique identifier for the requirement */
+  id: string;
+  /** Human-readable statement describing the requirement */
+  statement: string;
+  /** Optional source or origin of the requirement */
+  source?: string;
 }
 
 export interface BoundaryAssumption {

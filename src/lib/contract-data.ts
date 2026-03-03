@@ -1,7 +1,7 @@
 import type { AppState } from '../state/app-state.js';
 import type { Overlap } from './comparison.js';
 import type { ContractEntry } from '../components/artifact/contract-sidebar.js';
-import type { ContractBundle, EventContract, BoundaryContract } from '../schema/types.js';
+import type { ContractBundle, EventContract, BoundaryContract, Requirement } from '../schema/types.js';
 import type { ProvenanceStep } from '../components/contract/provenance-explorer.js';
 
 export type { ContractEntry, ProvenanceStep };
@@ -141,16 +141,50 @@ export function deriveContractsData(
 
 /**
  * Derive a provenance chain for the contracts tab, tracing the lineage of
- * contract data back through participants, conflicts, and shared events.
+ * contract data back through requirements, participants, conflicts, and shared events.
+ * When requirements are provided and events reference them via sourceRequirements,
+ * requirement steps are added at the beginning of the chain showing the business
+ * need that led to each event.
  * Pure derivation — no side effects.
  */
 export function deriveProvenanceChain(
   files: AppState['files'],
   conflicts: Overlap[],
   sharedEvents: Overlap[],
+  requirements?: Requirement[],
 ): ProvenanceStep[] {
   if (files.length < 2) return [];
   const chain: ProvenanceStep[] = [];
+
+  // Build a lookup map from requirement ID to requirement
+  const reqMap = new Map<string, Requirement>();
+  if (requirements) {
+    for (const req of requirements) {
+      reqMap.set(req.id, req);
+    }
+  }
+
+  // Collect all sourceRequirement IDs referenced by events across all files
+  const referencedReqIds = new Set<string>();
+  for (const file of files) {
+    for (const ev of file.data.domain_events) {
+      if (ev.sourceRequirements) {
+        for (const reqId of ev.sourceRequirements) {
+          referencedReqIds.add(reqId);
+        }
+      }
+    }
+  }
+
+  // Add requirement steps at the top of the chain (most upstream)
+  for (const reqId of referencedReqIds) {
+    const req = reqMap.get(reqId);
+    chain.push({
+      kind: 'requirement',
+      label: req ? req.statement : reqId,
+      detail: req?.source ? `Source: ${req.source}` : `Requirement ${reqId}`,
+    });
+  }
 
   // Add participant steps (base of the chain)
   for (const file of files) {
