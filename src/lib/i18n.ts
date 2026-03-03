@@ -1035,6 +1035,20 @@ export const messages: Record<string, string> = {
   'presence.viewingMultiple': '{{names}} are viewing',
 
   // ---------------------------------------------------------------------------
+  // derivation-review-panel
+  // ---------------------------------------------------------------------------
+  'derivationReview.heading': 'Review Suggested Events',
+  'derivationReview.acceptAll': 'Accept All',
+  'derivationReview.acceptSelected': 'Accept Selected',
+  'derivationReview.editLabel': 'Edit {{name}}',
+  'derivationReview.dismissLabel': 'Dismiss {{name}}',
+  'derivationReview.confidence.confirmed': 'Confirmed',
+  'derivationReview.confidence.likely': 'Likely',
+  'derivationReview.confidence.possible': 'Possible',
+  'derivationReview.eventListLabel': 'Suggested events for {{requirement}}',
+  'derivationReview.allDismissed': 'All suggestions dismissed.',
+
+  // ---------------------------------------------------------------------------
   // glossary — plain-language definitions for DDD / boundary negotiation terms
   // ---------------------------------------------------------------------------
   'glossary.aggregate': 'A cluster of related things that change together. Think of it as a "unit of work" — like an Order with its line items.',
