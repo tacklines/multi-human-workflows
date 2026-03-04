@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
+import { store } from '../../state/app-state.js';
 import { fetchTasks, createTask, updateTask, deleteTask } from '../../state/task-api.js';
 import {
   type TaskView, type TaskType, type TaskStatus,
@@ -195,9 +196,22 @@ export class TaskBoard extends LitElement {
   @state() private _createParentId = '';
   @state() private _createLoading = false;
 
+  private _storeUnsub: (() => void) | null = null;
+
   connectedCallback() {
     super.connectedCallback();
     this._loadTasks();
+    this._storeUnsub = store.subscribe((event) => {
+      if (event.type === 'tasks-changed') {
+        this._loadTasks();
+      }
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._storeUnsub?.();
+    this._storeUnsub = null;
   }
 
   updated(changed: Map<string, unknown>) {

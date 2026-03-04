@@ -28,7 +28,8 @@ export interface AppState {
 export type AppStateEvent =
   | { type: 'session-connected'; code: string; participantId: string }
   | { type: 'session-updated' }
-  | { type: 'session-disconnected' };
+  | { type: 'session-disconnected' }
+  | { type: 'tasks-changed' };
 
 type Listener = (event: AppStateEvent) => void;
 
@@ -72,6 +73,10 @@ class Store {
   clearSession() {
     this.state = { ...this.state, sessionState: null };
     this.notify({ type: 'session-disconnected' });
+  }
+
+  notifyTasksChanged() {
+    this.notify({ type: 'tasks-changed' });
   }
 }
 
