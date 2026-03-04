@@ -313,6 +313,28 @@ impl SeamMcp {
 
         match q.fetch_all(&self.db).await {
             Ok(tasks) => {
+                let task_ids: Vec<Uuid> = tasks.iter().map(|t| t.id).collect();
+
+                // Batch child counts
+                let child_counts: Vec<(Uuid, i64)> = sqlx::query_as(
+                    "SELECT parent_id, COUNT(*) FROM tasks WHERE parent_id = ANY($1) GROUP BY parent_id"
+                )
+                .bind(&task_ids)
+                .fetch_all(&self.db)
+                .await
+                .unwrap_or_default();
+                let child_map: std::collections::HashMap<Uuid, i64> = child_counts.into_iter().collect();
+
+                // Batch comment counts
+                let comment_counts: Vec<(Uuid, i64)> = sqlx::query_as(
+                    "SELECT task_id, COUNT(*) FROM task_comments WHERE task_id = ANY($1) GROUP BY task_id"
+                )
+                .bind(&task_ids)
+                .fetch_all(&self.db)
+                .await
+                .unwrap_or_default();
+                let comment_map: std::collections::HashMap<Uuid, i64> = comment_counts.into_iter().collect();
+
                 let summary: Vec<serde_json::Value> = tasks.iter().map(|t| {
                     serde_json::json!({
                         "id": t.id,
@@ -322,6 +344,8 @@ impl SeamMcp {
                         "parent_id": t.parent_id,
                         "assigned_to": t.assigned_to,
                         "created_at": t.created_at,
+                        "child_count": child_map.get(&t.id).unwrap_or(&0),
+                        "comment_count": comment_map.get(&t.id).unwrap_or(&0),
                     })
                 }).collect();
                 Ok(CallToolResult::success(vec![Content::text(
