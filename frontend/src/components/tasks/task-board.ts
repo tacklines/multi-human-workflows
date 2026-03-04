@@ -200,6 +200,16 @@ export class TaskBoard extends LitElement {
   @state() private _createLoading = false;
 
   private _storeUnsub: (() => void) | null = null;
+  private _keyHandler = (e: KeyboardEvent) => {
+    // Don't intercept when typing in inputs
+    const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+    if (tag === 'sl-input' || tag === 'sl-textarea' || tag === 'input' || tag === 'textarea') return;
+
+    if (e.key === 'Escape' && this._selectedTaskId) {
+      this._selectedTaskId = null;
+      this._loadTasks();
+    }
+  };
 
   connectedCallback() {
     super.connectedCallback();
@@ -209,12 +219,14 @@ export class TaskBoard extends LitElement {
         this._loadTasks();
       }
     });
+    document.addEventListener('keydown', this._keyHandler);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._storeUnsub?.();
     this._storeUnsub = null;
+    document.removeEventListener('keydown', this._keyHandler);
   }
 
   updated(changed: Map<string, unknown>) {
@@ -310,7 +322,12 @@ export class TaskBoard extends LitElement {
 
     return html`
       <div class="board-header">
-        <h2 class="board-title">${this.sessionName || 'Tasks'}</h2>
+        <h2 class="board-title">
+          ${this.sessionName || 'Tasks'}
+          ${this._tasks.length > 0
+            ? html`<sl-badge variant="neutral" pill style="margin-left: 0.5rem; vertical-align: middle;">${this._tasks.length}</sl-badge>`
+            : nothing}
+        </h2>
         <div class="board-actions">
           <sl-tooltip content="Refresh">
             <sl-icon-button name="arrow-clockwise" @click=${() => this._loadTasks()}></sl-icon-button>
