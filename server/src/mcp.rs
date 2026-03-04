@@ -75,6 +75,8 @@ struct ListTasksParams {
     parent_id: Option<String>,
     /// Filter by assigned participant ID
     assigned_to: Option<String>,
+    /// Search text (searches title and description, case-insensitive)
+    search: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -300,7 +302,14 @@ impl SeamMcp {
         if let Some(ref at) = params.assigned_to {
             query.push_str(&format!(" AND assigned_to = ${param_idx}"));
             bind_values.push(at.clone());
-            let _ = param_idx; // suppress unused warning
+            param_idx += 1;
+        }
+        if let Some(ref search) = params.search {
+            query.push_str(&format!(
+                " AND (title ILIKE ${param_idx} OR description ILIKE ${param_idx})"
+            ));
+            bind_values.push(format!("%{search}%"));
+            let _ = param_idx;
         }
 
         query.push_str(" ORDER BY created_at");
