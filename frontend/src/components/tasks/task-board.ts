@@ -91,7 +91,7 @@ export class TaskBoard extends LitElement {
 
     .task-card {
       display: grid;
-      grid-template-columns: auto 1fr auto auto;
+      grid-template-columns: auto auto 1fr auto auto;
       align-items: center;
       gap: 0.75rem;
       padding: 0.75rem 1rem;
@@ -109,6 +109,40 @@ export class TaskBoard extends LitElement {
 
     .task-card.child {
       margin-left: 2rem;
+    }
+
+    .task-card.selected {
+      border-color: var(--sl-color-primary-500);
+      background: color-mix(in srgb, var(--sl-color-primary-500) 8%, var(--surface-card));
+    }
+
+    .select-checkbox {
+      display: flex;
+      align-items: center;
+    }
+
+    .batch-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 1rem;
+      background: var(--surface-card);
+      border: 1px solid var(--sl-color-primary-500);
+      border-radius: 8px;
+      margin-bottom: 0.75rem;
+    }
+
+    .batch-bar .batch-count {
+      font-weight: 600;
+      color: var(--sl-color-primary-400);
+      font-size: 0.875rem;
+    }
+
+    .batch-bar .batch-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin-left: auto;
     }
 
     .task-type-icon {
@@ -456,6 +490,8 @@ export class TaskBoard extends LitElement {
   @state() private _showCreateDialog = false;
   @state() private _showShortcuts = false;
   @state() private _selectedTaskId: string | null = null;
+  @state() private _selectedIds: Set<string> = new Set();
+  @state() private _batchLoading = false;
 
   // Create form state
   @state() private _createType: TaskType = 'task';
@@ -473,7 +509,9 @@ export class TaskBoard extends LitElement {
     const isInput = tag === 'sl-input' || tag === 'sl-textarea' || tag === 'input' || tag === 'textarea';
 
     if (e.key === 'Escape') {
-      if (this._selectedTaskId) {
+      if (this._selectedIds.size > 0) {
+        this._clearSelection();
+      } else if (this._selectedTaskId) {
         this._selectedTaskId = null;
         this._loadTasks();
       }
@@ -586,6 +624,54 @@ export class TaskBoard extends LitElement {
       await this._loadTasks();
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to update';
+    }
+  }
+
+  private _toggleSelect(taskId: string) {
+    const next = new Set(this._selectedIds);
+    if (next.has(taskId)) {
+      next.delete(taskId);
+    } else {
+      next.add(taskId);
+    }
+    this._selectedIds = next;
+  }
+
+  private _clearSelection() {
+    this._selectedIds = new Set();
+  }
+
+  private async _batchSetStatus(status: TaskStatus) {
+    if (this._selectedIds.size === 0) return;
+    this._batchLoading = true;
+    try {
+      await Promise.all(
+        [...this._selectedIds].map(id => updateTask(this.sessionCode, id, { status }))
+      );
+      this._showToast(`${this._selectedIds.size} task(s) → ${STATUS_LABELS[status]}`);
+      this._selectedIds = new Set();
+      await this._loadTasks();
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Batch update failed';
+    } finally {
+      this._batchLoading = false;
+    }
+  }
+
+  private async _batchDelete() {
+    if (this._selectedIds.size === 0) return;
+    this._batchLoading = true;
+    try {
+      await Promise.all(
+        [...this._selectedIds].map(id => deleteTask(this.sessionCode, id))
+      );
+      this._showToast(`${this._selectedIds.size} task(s) deleted`);
+      this._selectedIds = new Set();
+      await this._loadTasks();
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Batch delete failed';
+    } finally {
+      this._batchLoading = false;
     }
   }
 
@@ -828,12 +914,30 @@ export class TaskBoard extends LitElement {
     `;
   }
 
+  private _renderBatchBar() {
+    if (this._selectedIds.size === 0) return nothing;
+    return html`
+      <div class="batch-bar">
+        <span class="batch-count">${this._selectedIds.size} selected</span>
+        <sl-button size="small" variant="text" @click=${() => this._clearSelection()}>Clear</sl-button>
+        <div class="batch-actions">
+          <sl-button size="small" @click=${() => this._batchSetStatus('in_progress')} ?loading=${this._batchLoading}>Start</sl-button>
+          <sl-button size="small" @click=${() => this._batchSetStatus('done')} ?loading=${this._batchLoading}>Done</sl-button>
+          <sl-button size="small" @click=${() => this._batchSetStatus('closed')} ?loading=${this._batchLoading}>Close</sl-button>
+          <sl-button size="small" @click=${() => this._batchSetStatus('open')} ?loading=${this._batchLoading}>Reopen</sl-button>
+          <sl-button size="small" variant="danger" @click=${() => this._batchDelete()} ?loading=${this._batchLoading}>Delete</sl-button>
+        </div>
+      </div>
+    `;
+  }
+
   private _renderTaskList() {
     const tasks = this._filteredTasks;
     const topLevel = tasks.filter(t => !t.parent_id);
     const childrenOf = (id: string) => tasks.filter(t => t.parent_id === id);
 
     return html`
+      ${this._renderBatchBar()}
       <div class="task-list">
         ${topLevel.map(task => html`
           ${this._renderTaskCard(task, false)}
@@ -846,9 +950,13 @@ export class TaskBoard extends LitElement {
   private _renderTaskCard(task: TaskView, isChild: boolean) {
     const typeColor = TASK_TYPE_COLORS[task.task_type];
     const assignee = this._getParticipantName(task.assigned_to);
+    const isSelected = this._selectedIds.has(task.id);
 
     return html`
-      <div class="task-card ${isChild ? 'child' : ''}" @click=${() => { this._selectedTaskId = task.id; }}>
+      <div class="task-card ${isChild ? 'child' : ''} ${isSelected ? 'selected' : ''}" @click=${() => { this._selectedTaskId = task.id; }}>
+        <div class="select-checkbox" @click=${(e: Event) => { e.stopPropagation(); this._toggleSelect(task.id); }}>
+          <sl-icon name=${isSelected ? 'check-square-fill' : 'square'} style="font-size: 1rem; color: ${isSelected ? 'var(--sl-color-primary-500)' : 'var(--text-tertiary)'}; cursor: pointer;"></sl-icon>
+        </div>
         <div class="task-type-icon">
           <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${typeColor}"></sl-icon>
         </div>
@@ -1107,7 +1215,7 @@ export class TaskBoard extends LitElement {
           <h3>Keyboard Shortcuts</h3>
           <div class="shortcut-row"><span>New task</span><span class="shortcut-key">N</span></div>
           <div class="shortcut-row"><span>Search</span><span class="shortcut-key">/</span></div>
-          <div class="shortcut-row"><span>Go back</span><span class="shortcut-key">Esc</span></div>
+          <div class="shortcut-row"><span>Go back / Clear selection</span><span class="shortcut-key">Esc</span></div>
           <div class="shortcut-row"><span>This help</span><span class="shortcut-key">?</span></div>
         </div>
       </div>
