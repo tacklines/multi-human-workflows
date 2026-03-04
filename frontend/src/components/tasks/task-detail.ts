@@ -412,10 +412,19 @@ export class TaskDetail extends LitElement {
         <span class="meta-label">Created</span>
         <span class="meta-value">${this._formatDate(task.created_at)}</span>
 
-        ${task.commit_sha ? html`
-          <span class="meta-label">Commit</span>
-          <span class="meta-value"><code class="commit-sha">${task.commit_sha}</code></span>
-        ` : nothing}
+        <span class="meta-label">Commit</span>
+        <span class="meta-value">
+          <sl-input
+            size="small"
+            placeholder="Link a commit SHA"
+            value=${task.commit_sha ?? ''}
+            style="max-width: 280px; font-family: var(--sl-font-mono); font-size: 0.8rem;"
+            @sl-change=${(e: Event) => {
+              const val = (e.target as HTMLInputElement).value.trim();
+              this._updateField({ commit_sha: val || null });
+            }}
+          ></sl-input>
+        </span>
 
         ${task.closed_at ? html`
           <span class="meta-label">Closed</span>
