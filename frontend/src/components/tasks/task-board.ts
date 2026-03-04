@@ -25,6 +25,7 @@ import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import '@shoelace-style/shoelace/dist/components/dropdown/dropdown.js';
 import '@shoelace-style/shoelace/dist/components/menu/menu.js';
 import '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js';
+import '@shoelace-style/shoelace/dist/components/tag/tag.js';
 
 import './task-detail.js';
 
@@ -333,6 +334,80 @@ export class TaskBoard extends LitElement {
       align-items: center;
       gap: 0.5rem;
     }
+
+    /* ── Shortcuts overlay ── */
+    .shortcuts-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .shortcuts-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1.5rem;
+      max-width: 340px;
+      width: 90%;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .shortcuts-card h3 {
+      margin: 0 0 1rem;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .shortcut-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.35rem 0;
+    }
+
+    .shortcut-row span {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+
+    .shortcut-key {
+      display: inline-block;
+      padding: 0.15rem 0.45rem;
+      background: var(--surface-card);
+      border: 1px solid var(--border-medium);
+      border-radius: 4px;
+      font-family: var(--sl-font-mono);
+      font-size: 0.75rem;
+      color: var(--text-primary);
+      min-width: 1.5rem;
+      text-align: center;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: var(--sl-color-success-600);
+      color: white;
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      box-shadow: var(--shadow-lg);
+      z-index: 1001;
+      animation: toast-in 0.2s ease-out;
+    }
+
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   `;
 
   @property({ type: String, attribute: 'session-code' })
@@ -353,6 +428,7 @@ export class TaskBoard extends LitElement {
   @state() private _searchQuery = '';
   private _dragTaskId: string | null = null;
   @state() private _showCreateDialog = false;
+  @state() private _showShortcuts = false;
   @state() private _selectedTaskId: string | null = null;
 
   // Create form state
@@ -363,6 +439,7 @@ export class TaskBoard extends LitElement {
   @state() private _createAssignee = '';
   @state() private _createStatus: TaskStatus | '' = '';
   @state() private _createLoading = false;
+  @state() private _toastMessage = '';
 
   private _storeUnsub: (() => void) | null = null;
   private _keyHandler = (e: KeyboardEvent) => {
@@ -386,6 +463,9 @@ export class TaskBoard extends LitElement {
       e.preventDefault();
       const input = this.shadowRoot?.querySelector('.filters sl-input') as HTMLElement | null;
       input?.focus();
+    } else if (e.key === '?' && !this._selectedTaskId) {
+      e.preventDefault();
+      this._showShortcuts = !this._showShortcuts;
     }
   };
 
@@ -438,6 +518,11 @@ export class TaskBoard extends LitElement {
     );
   }
 
+  private _showToast(message: string) {
+    this._toastMessage = message;
+    setTimeout(() => { this._toastMessage = ''; }, 2500);
+  }
+
   private _getParticipantName(id: string | null): string {
     if (!id) return '';
     const p = this.participants.find(p => p.id === id);
@@ -447,6 +532,7 @@ export class TaskBoard extends LitElement {
   private async _handleStatusChange(task: TaskView, newStatus: TaskStatus) {
     try {
       await updateTask(this.sessionCode, task.id, { status: newStatus });
+      this._showToast(`Moved to ${STATUS_LABELS[newStatus]}`);
       await this._loadTasks();
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to update';
@@ -457,6 +543,7 @@ export class TaskBoard extends LitElement {
     try {
       await deleteTask(this.sessionCode, taskId);
       if (this._selectedTaskId === taskId) this._selectedTaskId = null;
+      this._showToast('Task deleted');
       await this._loadTasks();
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to delete';
@@ -484,6 +571,7 @@ export class TaskBoard extends LitElement {
       this._createParentId = '';
       this._createAssignee = '';
       this._createStatus = '';
+      this._showToast('Task created');
       await this._loadTasks();
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to create task';
@@ -619,6 +707,8 @@ export class TaskBoard extends LitElement {
             : this._renderTaskList()}
 
       ${this._renderCreateDialog()}
+      ${this._renderShortcuts()}
+      ${this._toastMessage ? html`<div class="toast">${this._toastMessage}</div>` : nothing}
     `;
   }
 
@@ -826,6 +916,10 @@ export class TaskBoard extends LitElement {
         label="New Task"
         ?open=${this._showCreateDialog}
         @sl-request-close=${() => { this._showCreateDialog = false; }}
+        @sl-after-show=${() => {
+          const input = this.shadowRoot?.querySelector('.create-form sl-input') as HTMLElement | null;
+          input?.focus();
+        }}
       >
         <div class="create-form">
           <sl-select
@@ -899,6 +993,21 @@ export class TaskBoard extends LitElement {
           @click=${() => this._handleCreate()}
         >Create</sl-button>
       </sl-dialog>
+    `;
+  }
+
+  private _renderShortcuts() {
+    if (!this._showShortcuts) return nothing;
+    return html`
+      <div class="shortcuts-overlay" @click=${() => { this._showShortcuts = false; }}>
+        <div class="shortcuts-card" @click=${(e: Event) => e.stopPropagation()}>
+          <h3>Keyboard Shortcuts</h3>
+          <div class="shortcut-row"><span>New task</span><span class="shortcut-key">N</span></div>
+          <div class="shortcut-row"><span>Search</span><span class="shortcut-key">/</span></div>
+          <div class="shortcut-row"><span>Go back</span><span class="shortcut-key">Esc</span></div>
+          <div class="shortcut-row"><span>This help</span><span class="shortcut-key">?</span></div>
+        </div>
+      </div>
     `;
   }
 }
