@@ -22,7 +22,7 @@ dev: infra-up
     echo "✓ Keycloak ready"
 
     echo "🚀 Starting backend + frontend..."
-    cd server && cargo run 2>&1 | sed 's/^/[server] /' &
+    cd server && cargo run --bin seam-server 2>&1 | sed 's/^/[server] /' &
     sleep 2
     cd frontend && npx vite 2>&1 | sed 's/^/[frontend] /' &
     wait
@@ -32,14 +32,14 @@ dev-no-infra:
     #!/usr/bin/env bash
     set -e
     trap 'kill 0' EXIT
-    cd server && cargo run 2>&1 | sed 's/^/[server] /' &
+    cd server && cargo run --bin seam-server 2>&1 | sed 's/^/[server] /' &
     sleep 2
     cd frontend && npx vite 2>&1 | sed 's/^/[frontend] /' &
     wait
 
 # Backend only
 server:
-    cd server && cargo run
+    cd server && cargo run --bin seam-server
 
 # Frontend only
 frontend:

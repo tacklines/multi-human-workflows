@@ -122,6 +122,55 @@ pub struct AgentJoinCode {
     pub created_at: DateTime<Utc>,
 }
 
+// --- Tasks ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum TaskType {
+    Epic,
+    Story,
+    Task,
+    Subtask,
+    Bug,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum TaskStatus {
+    Open,
+    InProgress,
+    Done,
+    Closed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Task {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub parent_id: Option<Uuid>,
+    pub task_type: TaskType,
+    pub title: String,
+    pub description: Option<String>,
+    pub status: TaskStatus,
+    pub assigned_to: Option<Uuid>,
+    pub created_by: Uuid,
+    pub commit_sha: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub closed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct TaskComment {
+    pub id: Uuid,
+    pub task_id: Uuid,
+    pub author_id: Uuid,
+    pub content: String,
+    pub created_at: DateTime<Utc>,
+}
+
 // --- API DTOs ---
 
 #[derive(Debug, Deserialize)]
