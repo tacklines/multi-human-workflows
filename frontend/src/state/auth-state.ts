@@ -126,9 +126,11 @@ class AuthStore {
       this.setUser(user);
       window.history.replaceState({}, '', '/');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Authentication callback failed';
-      this.state = { ...this.state, error: message, isLoading: false };
-      this.notify({ type: 'auth-error', error: message });
+      // Stale OIDC state (e.g. authority changed) — clear and restart
+      await this.userManager.removeUser();
+      await this.userManager.clearStaleState();
+      this.clearUser();
+      window.history.replaceState({}, '', '/');
     }
   }
 
@@ -140,10 +142,10 @@ class AuthStore {
       if (user && !user.expired) {
         this.setUser(user);
       } else {
-        this.state = { ...this.state, isLoading: false };
+        this.clearUser();
       }
     } catch {
-      this.state = { ...this.state, isLoading: false };
+      this.clearUser();
     }
   }
 
