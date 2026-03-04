@@ -4,7 +4,7 @@ mod models;
 mod routes;
 mod ws;
 
-use axum::{Router, routing::{get, post}};
+use axum::{Router, routing::{delete, get, patch, post}};
 use tower_http::cors::{CorsLayer, Any};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -61,6 +61,13 @@ async fn main() {
         .route("/api/sessions", post(routes::sessions::create_session))
         .route("/api/sessions/{code}", get(routes::sessions::get_session))
         .route("/api/sessions/{code}/join", post(routes::sessions::join_session))
+        // Tasks
+        .route("/api/sessions/{code}/tasks", post(routes::tasks::create_task))
+        .route("/api/sessions/{code}/tasks", get(routes::tasks::list_tasks))
+        .route("/api/sessions/{code}/tasks/{task_id}", get(routes::tasks::get_task))
+        .route("/api/sessions/{code}/tasks/{task_id}", patch(routes::tasks::update_task))
+        .route("/api/sessions/{code}/tasks/{task_id}", delete(routes::tasks::delete_task))
+        .route("/api/sessions/{code}/tasks/{task_id}/comments", post(routes::tasks::add_comment))
         // Agent API
         .route("/api/agent/join", post(routes::agent::agent_join))
         // WebSocket
