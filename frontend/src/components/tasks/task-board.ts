@@ -53,6 +53,23 @@ export class TaskBoard extends LitElement {
       gap: 0.5rem;
     }
 
+    .view-toggle {
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .view-toggle sl-icon-button {
+      border-radius: 0;
+    }
+
+    .view-toggle sl-icon-button.active {
+      background: var(--surface-active);
+      color: var(--sl-color-primary-500);
+    }
+
     .filters {
       display: flex;
       align-items: center;
@@ -64,6 +81,7 @@ export class TaskBoard extends LitElement {
       min-width: 120px;
     }
 
+    /* ── List view ── */
     .task-list {
       display: flex;
       flex-direction: column;
@@ -127,6 +145,111 @@ export class TaskBoard extends LitElement {
       gap: 0.25rem;
     }
 
+    /* ── Kanban view ── */
+    .kanban {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      min-height: 400px;
+    }
+
+    .kanban-column {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      min-width: 0;
+    }
+
+    .kanban-column-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-secondary);
+      background: var(--surface-2);
+      border-bottom: 2px solid var(--border-subtle);
+      position: sticky;
+      top: 0;
+    }
+
+    .kanban-column-header.status-open { border-bottom-color: var(--sl-color-neutral-500); }
+    .kanban-column-header.status-in_progress { border-bottom-color: var(--sl-color-primary-500); }
+    .kanban-column-header.status-done { border-bottom-color: var(--sl-color-success-500); }
+    .kanban-column-header.status-closed { border-bottom-color: var(--sl-color-neutral-600); }
+
+    .kanban-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      flex: 1;
+      min-height: 60px;
+    }
+
+    .kanban-card {
+      padding: 0.65rem 0.75rem;
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    }
+
+    .kanban-card:hover {
+      background: var(--surface-card-hover);
+      border-color: var(--border-medium);
+      transform: translateY(-1px);
+    }
+
+    .kanban-card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .kanban-card-header sl-icon {
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+
+    .kanban-card-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .kanban-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.35rem;
+      font-size: 0.7rem;
+      color: var(--text-tertiary);
+    }
+
+    .kanban-card-assignee {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    @media (max-width: 900px) {
+      .kanban {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ── Common ── */
     .empty-state {
       display: flex;
       flex-direction: column;
@@ -187,6 +310,7 @@ export class TaskBoard extends LitElement {
   @state() private _tasks: TaskView[] = [];
   @state() private _loading = true;
   @state() private _error = '';
+  @state() private _viewMode: 'list' | 'board' = 'board';
   @state() private _filterType: TaskType | '' = '';
   @state() private _filterStatus: TaskStatus | '' = '';
   @state() private _showCreateDialog = false;
@@ -329,6 +453,22 @@ export class TaskBoard extends LitElement {
             : nothing}
         </h2>
         <div class="board-actions">
+          <div class="view-toggle">
+            <sl-tooltip content="List view">
+              <sl-icon-button
+                name="list-ul"
+                class=${this._viewMode === 'list' ? 'active' : ''}
+                @click=${() => { this._viewMode = 'list'; }}
+              ></sl-icon-button>
+            </sl-tooltip>
+            <sl-tooltip content="Board view">
+              <sl-icon-button
+                name="kanban"
+                class=${this._viewMode === 'board' ? 'active' : ''}
+                @click=${() => { this._viewMode = 'board'; }}
+              ></sl-icon-button>
+            </sl-tooltip>
+          </div>
           <sl-tooltip content="Refresh">
             <sl-icon-button name="arrow-clockwise" @click=${() => this._loadTasks()}></sl-icon-button>
           </sl-tooltip>
@@ -358,20 +498,22 @@ export class TaskBoard extends LitElement {
           `)}
         </sl-select>
 
-        <sl-select
-          placeholder="All Statuses"
-          size="small"
-          clearable
-          value=${this._filterStatus}
-          @sl-change=${(e: Event) => {
-            this._filterStatus = (e.target as HTMLSelectElement).value as TaskStatus | '';
-            this._loadTasks();
-          }}
-        >
-          ${(['open', 'in_progress', 'done', 'closed'] as TaskStatus[]).map(s => html`
-            <sl-option value=${s}>${STATUS_LABELS[s]}</sl-option>
-          `)}
-        </sl-select>
+        ${this._viewMode === 'list' ? html`
+          <sl-select
+            placeholder="All Statuses"
+            size="small"
+            clearable
+            value=${this._filterStatus}
+            @sl-change=${(e: Event) => {
+              this._filterStatus = (e.target as HTMLSelectElement).value as TaskStatus | '';
+              this._loadTasks();
+            }}
+          >
+            ${(['open', 'in_progress', 'done', 'closed'] as TaskStatus[]).map(s => html`
+              <sl-option value=${s}>${STATUS_LABELS[s]}</sl-option>
+            `)}
+          </sl-select>
+        ` : nothing}
       </div>
 
       ${this._error ? html`
@@ -384,7 +526,9 @@ export class TaskBoard extends LitElement {
         ? html`<div class="loading"><sl-spinner style="font-size: 2rem;"></sl-spinner></div>`
         : this._tasks.length === 0
           ? this._renderEmpty()
-          : this._renderTaskList()
+          : this._viewMode === 'board'
+            ? this._renderKanban()
+            : this._renderTaskList()
       }
 
       ${this._renderCreateDialog()}
@@ -477,6 +621,51 @@ export class TaskBoard extends LitElement {
               </sl-menu-item>
             </sl-menu>
           </sl-dropdown>
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderKanban() {
+    const statuses: TaskStatus[] = ['open', 'in_progress', 'done', 'closed'];
+    const tasksByStatus = (status: TaskStatus) =>
+      this._tasks.filter(t => t.status === status);
+
+    return html`
+      <div class="kanban">
+        ${statuses.map(status => html`
+          <div class="kanban-column">
+            <div class="kanban-column-header status-${status}">
+              <span>${STATUS_LABELS[status]}</span>
+              <sl-badge variant="neutral" pill>${tasksByStatus(status).length}</sl-badge>
+            </div>
+            <div class="kanban-cards">
+              ${tasksByStatus(status).map(task => this._renderKanbanCard(task))}
+            </div>
+          </div>
+        `)}
+      </div>
+    `;
+  }
+
+  private _renderKanbanCard(task: TaskView) {
+    const typeColor = TASK_TYPE_COLORS[task.task_type];
+    const assignee = this._getParticipantName(task.assigned_to);
+
+    return html`
+      <div class="kanban-card" @click=${() => { this._selectedTaskId = task.id; }}>
+        <div class="kanban-card-header">
+          <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${typeColor}"></sl-icon>
+          <span class="kanban-card-title">${task.title}</span>
+        </div>
+        <div class="kanban-card-footer">
+          <span>${TASK_TYPE_LABELS[task.task_type]}</span>
+          ${assignee ? html`
+            <span class="kanban-card-assignee">
+              <sl-icon name="person-fill" style="font-size: 0.7rem;"></sl-icon>
+              ${assignee}
+            </span>
+          ` : nothing}
         </div>
       </div>
     `;
