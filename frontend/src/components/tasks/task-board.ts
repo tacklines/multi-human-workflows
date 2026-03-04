@@ -323,6 +323,7 @@ export class TaskBoard extends LitElement {
   @state() private _viewMode: 'list' | 'board' = 'board';
   @state() private _filterType: TaskType | '' = '';
   @state() private _filterStatus: TaskStatus | '' = '';
+  @state() private _searchQuery = '';
   private _dragTaskId: string | null = null;
   @state() private _showCreateDialog = false;
   @state() private _selectedTaskId: string | null = null;
@@ -336,13 +337,26 @@ export class TaskBoard extends LitElement {
 
   private _storeUnsub: (() => void) | null = null;
   private _keyHandler = (e: KeyboardEvent) => {
-    // Don't intercept when typing in inputs
     const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-    if (tag === 'sl-input' || tag === 'sl-textarea' || tag === 'input' || tag === 'textarea') return;
+    const isInput = tag === 'sl-input' || tag === 'sl-textarea' || tag === 'input' || tag === 'textarea';
 
-    if (e.key === 'Escape' && this._selectedTaskId) {
-      this._selectedTaskId = null;
-      this._loadTasks();
+    if (e.key === 'Escape') {
+      if (this._selectedTaskId) {
+        this._selectedTaskId = null;
+        this._loadTasks();
+      }
+      return;
+    }
+
+    if (isInput) return;
+
+    if (e.key === 'n' && !this._selectedTaskId) {
+      e.preventDefault();
+      this._openCreateDialog();
+    } else if (e.key === '/' && !this._selectedTaskId) {
+      e.preventDefault();
+      const input = this.shadowRoot?.querySelector('.filters sl-input') as HTMLElement | null;
+      input?.focus();
     }
   };
 
@@ -384,6 +398,15 @@ export class TaskBoard extends LitElement {
     } finally {
       this._loading = false;
     }
+  }
+
+  private get _filteredTasks(): TaskView[] {
+    if (!this._searchQuery.trim()) return this._tasks;
+    const q = this._searchQuery.toLowerCase();
+    return this._tasks.filter(t =>
+      t.title.toLowerCase().includes(q) ||
+      (t.description?.toLowerCase().includes(q))
+    );
   }
 
   private _getParticipantName(id: string | null): string {
@@ -459,8 +482,8 @@ export class TaskBoard extends LitElement {
       <div class="board-header">
         <h2 class="board-title">
           ${this.sessionName || 'Tasks'}
-          ${this._tasks.length > 0
-            ? html`<sl-badge variant="neutral" pill style="margin-left: 0.5rem; vertical-align: middle;">${this._tasks.length}</sl-badge>`
+          ${this._filteredTasks.length > 0
+            ? html`<sl-badge variant="neutral" pill style="margin-left: 0.5rem; vertical-align: middle;">${this._filteredTasks.length}</sl-badge>`
             : nothing}
         </h2>
         <div class="board-actions">
@@ -491,6 +514,17 @@ export class TaskBoard extends LitElement {
       </div>
 
       <div class="filters">
+        <sl-input
+          placeholder="Search tasks..."
+          size="small"
+          clearable
+          value=${this._searchQuery}
+          @sl-input=${(e: Event) => { this._searchQuery = (e.target as HTMLInputElement).value; }}
+          @sl-clear=${() => { this._searchQuery = ''; }}
+          style="max-width: 220px;"
+        >
+          <sl-icon slot="prefix" name="search"></sl-icon>
+        </sl-input>
         <sl-select
           placeholder="All Types"
           size="small"
@@ -539,8 +573,7 @@ export class TaskBoard extends LitElement {
           ? this._renderEmpty()
           : this._viewMode === 'board'
             ? this._renderKanban()
-            : this._renderTaskList()
-      }
+            : this._renderTaskList()}
 
       ${this._renderCreateDialog()}
     `;
@@ -560,9 +593,9 @@ export class TaskBoard extends LitElement {
   }
 
   private _renderTaskList() {
-    // Group: top-level tasks, then children indented under parents
-    const topLevel = this._tasks.filter(t => !t.parent_id);
-    const childrenOf = (id: string) => this._tasks.filter(t => t.parent_id === id);
+    const tasks = this._filteredTasks;
+    const topLevel = tasks.filter(t => !t.parent_id);
+    const childrenOf = (id: string) => tasks.filter(t => t.parent_id === id);
 
     return html`
       <div class="task-list">
@@ -639,8 +672,9 @@ export class TaskBoard extends LitElement {
 
   private _renderKanban() {
     const statuses: TaskStatus[] = ['open', 'in_progress', 'done', 'closed'];
+    const tasks = this._filteredTasks;
     const tasksByStatus = (status: TaskStatus) =>
-      this._tasks.filter(t => t.status === status);
+      tasks.filter(t => t.status === status);
 
     return html`
       <div class="kanban">
