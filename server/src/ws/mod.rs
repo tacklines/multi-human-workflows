@@ -5,9 +5,16 @@ use tokio::sync::mpsc;
 
 type Tx = mpsc::UnboundedSender<String>;
 
+#[derive(Clone)]
+pub struct ConnInfo {
+    pub conn_id: String,
+    pub participant_id: Option<String>,
+    pub tx: Tx,
+}
+
 pub struct ConnectionManager {
-    /// session_code -> list of senders
-    sessions: DashMap<String, Vec<(String, Tx)>>,
+    /// session_code -> list of connections
+    sessions: DashMap<String, Vec<ConnInfo>>,
 }
 
 impl ConnectionManager {
@@ -21,24 +28,41 @@ impl ConnectionManager {
         self.sessions
             .entry(session_code.to_string())
             .or_default()
-            .push((conn_id.to_string(), tx));
+            .push(ConnInfo {
+                conn_id: conn_id.to_string(),
+                participant_id: None,
+                tx,
+            });
     }
 
-    pub fn remove_connection(&self, session_code: &str, conn_id: &str) {
+    pub fn set_participant_id(&self, session_code: &str, conn_id: &str, participant_id: &str) {
         if let Some(mut conns) = self.sessions.get_mut(session_code) {
-            conns.retain(|(id, _)| id != conn_id);
+            if let Some(conn) = conns.iter_mut().find(|c| c.conn_id == conn_id) {
+                conn.participant_id = Some(participant_id.to_string());
+            }
+        }
+    }
+
+    pub fn remove_connection(&self, session_code: &str, conn_id: &str) -> Option<String> {
+        let mut removed_participant_id = None;
+        if let Some(mut conns) = self.sessions.get_mut(session_code) {
+            if let Some(conn) = conns.iter().find(|c| c.conn_id == conn_id) {
+                removed_participant_id = conn.participant_id.clone();
+            }
+            conns.retain(|c| c.conn_id != conn_id);
             if conns.is_empty() {
                 drop(conns);
                 self.sessions.remove(session_code);
             }
         }
+        removed_participant_id
     }
 
     pub async fn broadcast_to_session(&self, session_code: &str, msg: &serde_json::Value) {
         let text = serde_json::to_string(msg).unwrap_or_default();
         if let Some(conns) = self.sessions.get(session_code) {
-            for (_, tx) in conns.iter() {
-                let _ = tx.send(text.clone());
+            for conn in conns.iter() {
+                let _ = conn.tx.send(text.clone());
             }
         }
     }

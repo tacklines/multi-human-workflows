@@ -49,6 +49,11 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                 session_code = Some(code.to_string());
                                 state.connections.add_connection(code, &conn_id, tx.clone());
 
+                                // Track participant identity for disconnect notifications
+                                if let Some(pid) = parsed.get("participantId").and_then(|p| p.as_str()) {
+                                    state.connections.set_participant_id(code, &conn_id, pid);
+                                }
+
                                 let _ = tx.send(serde_json::json!({
                                     "type": "joined",
                                     "sessionCode": code,
@@ -67,9 +72,14 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
-    // Clean up
+    // Clean up — notify others if participant was identified
     if let Some(ref code) = session_code {
-        state.connections.remove_connection(code, &conn_id);
+        if let Some(participant_id) = state.connections.remove_connection(code, &conn_id) {
+            state.connections.broadcast_to_session(code, &serde_json::json!({
+                "type": "participant_disconnected",
+                "participantId": participant_id,
+            })).await;
+        }
     }
     send_task.abort();
 }

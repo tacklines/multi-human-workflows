@@ -137,6 +137,16 @@ export class TaskDetail extends LitElement {
       font-size: 0.875rem;
     }
 
+    .child-item {
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .child-item:hover {
+      background: var(--surface-card-hover);
+      border-color: var(--border-medium);
+    }
+
     .child-item .child-title {
       flex: 1;
       color: var(--text-primary);
@@ -444,7 +454,7 @@ export class TaskDetail extends LitElement {
           <div class="section-heading">Children (${task.children.length})</div>
           <div class="child-list">
             ${task.children.map(child => html`
-              <div class="child-item">
+              <div class="child-item" @click=${() => this.dispatchEvent(new CustomEvent('navigate-task', { detail: child.id }))}>
                 <sl-icon name=${TASK_TYPE_ICONS[child.task_type]} style="color: ${TASK_TYPE_COLORS[child.task_type]}"></sl-icon>
                 <span class="child-title">${child.title}</span>
                 <sl-badge variant=${STATUS_VARIANTS[child.status] as any} pill size="small">

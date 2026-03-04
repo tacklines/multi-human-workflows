@@ -300,6 +300,7 @@ export class TaskBoard extends LitElement {
           .participants=${this.participants}
           @back=${() => { this._selectedTaskId = null; this._loadTasks(); }}
           @deleted=${() => { this._selectedTaskId = null; this._loadTasks(); }}
+          @navigate-task=${(e: CustomEvent) => { this._selectedTaskId = e.detail; }}
         ></task-detail>
       `;
     }

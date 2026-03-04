@@ -43,7 +43,13 @@ function openSocket(code: string): void {
   ws.addEventListener('open', () => {
     backoffMs = INITIAL_BACKOFF_MS;
     const token = authStore.getAccessToken();
-    ws.send(JSON.stringify({ type: 'join', sessionCode: code, ...(token && { token }) }));
+    const participantId = store.get().sessionState?.participantId;
+    ws.send(JSON.stringify({
+      type: 'join',
+      sessionCode: code,
+      ...(token && { token }),
+      ...(participantId && { participantId }),
+    }));
   });
 
   ws.addEventListener('message', (e: MessageEvent) => {
@@ -52,6 +58,7 @@ function openSocket(code: string): void {
         type: string;
         sessionCode?: string;
         participant?: SessionParticipant;
+        participantId?: string;
         message?: string;
       };
 
@@ -65,6 +72,15 @@ function openSocket(code: string): void {
             participants: [...current.session.participants, msg.participant],
           });
         }
+      }
+
+      if (msg.type === 'participant_disconnected' && msg.participantId) {
+        const current = store.get().sessionState;
+        if (!current) return;
+        store.updateSession({
+          ...current.session,
+          participants: current.session.participants.filter((p) => p.id !== msg.participantId),
+        });
       }
 
       // Task events — notify task board to refresh
