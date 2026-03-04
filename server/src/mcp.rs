@@ -559,6 +559,52 @@ impl SeamMcp {
         }
     }
 
+    #[tool(description = "Get a summary of task counts by status and type for the current session. Useful for orientation.")]
+    async fn task_summary(&self) -> Result<CallToolResult, McpError> {
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let by_status: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT status::text, COUNT(*) FROM tasks WHERE session_id = $1 GROUP BY status"
+        )
+        .bind(session_id)
+        .fetch_all(&self.db)
+        .await
+        .unwrap_or_default();
+
+        let by_type: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT task_type::text, COUNT(*) FROM tasks WHERE session_id = $1 GROUP BY task_type"
+        )
+        .bind(session_id)
+        .fetch_all(&self.db)
+        .await
+        .unwrap_or_default();
+
+        let total: i64 = by_status.iter().map(|(_, c)| c).sum();
+
+        let status_map: serde_json::Map<String, serde_json::Value> = by_status
+            .into_iter()
+            .map(|(s, c)| (s, serde_json::Value::Number(c.into())))
+            .collect();
+
+        let type_map: serde_json::Map<String, serde_json::Value> = by_type
+            .into_iter()
+            .map(|(t, c)| (t, serde_json::Value::Number(c.into())))
+            .collect();
+
+        let summary = serde_json::json!({
+            "total": total,
+            "by_status": status_map,
+            "by_type": type_map,
+        });
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&summary).unwrap(),
+        )]))
+    }
+
     #[tool(description = "Delete a task and all its children. Use with caution — this is irreversible.")]
     async fn delete_task(
         &self,
