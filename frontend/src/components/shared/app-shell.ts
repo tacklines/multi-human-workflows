@@ -314,6 +314,7 @@ export class AppShell extends LitElement {
     return html`
       <div class="sidebar-section">
         <div class="sidebar-section-label">Session</div>
+        ${s.name ? html`<div style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">${s.name}</div>` : nothing}
         <sl-tooltip content="Click to copy">
           <div class="session-code-display" @click=${() => this._copyToClipboard(s.code)}>
             ${s.code}

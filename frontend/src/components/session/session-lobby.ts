@@ -408,6 +408,7 @@ export class SessionLobby extends LitElement {
       <div class="session-workspace">
         <task-board
           session-code=${session.code}
+          session-name=${session.name ?? ''}
           .participants=${session.participants}
         ></task-board>
       </div>

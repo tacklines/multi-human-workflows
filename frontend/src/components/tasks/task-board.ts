@@ -178,6 +178,9 @@ export class TaskBoard extends LitElement {
   @property({ type: String, attribute: 'session-code' })
   sessionCode = '';
 
+  @property({ type: String, attribute: 'session-name' })
+  sessionName = '';
+
   @property({ type: Array })
   participants: SessionParticipant[] = [];
 
@@ -307,7 +310,7 @@ export class TaskBoard extends LitElement {
 
     return html`
       <div class="board-header">
-        <h2 class="board-title">Tasks</h2>
+        <h2 class="board-title">${this.sessionName || 'Tasks'}</h2>
         <div class="board-actions">
           <sl-tooltip content="Refresh">
             <sl-icon-button name="arrow-clockwise" @click=${() => this._loadTasks()}></sl-icon-button>
