@@ -11,6 +11,11 @@ import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
+import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
+import '@shoelace-style/shoelace/dist/components/tab/tab.js';
+import '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js';
+
+import '../tasks/task-board.js';
 
 const API_BASE = '';  // proxied via vite
 
@@ -19,14 +24,14 @@ type LobbyState = 'landing' | 'creating' | 'joining' | 'in-session';
 @customElement('session-lobby')
 export class SessionLobby extends LitElement {
   static styles = css`
-    :host { display: block; }
+    :host { display: block; flex: 1; }
 
     .landing {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: calc(100vh - 45px);
+      min-height: 100%;
       padding: 2rem;
       background:
         repeating-radial-gradient(circle at 20% 50%, transparent 0, transparent 40px, var(--color-primary-glow) 41px, transparent 42px),
@@ -109,7 +114,7 @@ export class SessionLobby extends LitElement {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: calc(100vh - 45px);
+      min-height: 100%;
       padding: 2rem;
       background: var(--surface-1, #111320);
     }
@@ -195,100 +200,17 @@ export class SessionLobby extends LitElement {
       line-height: 1.5;
     }
 
-    .session-layout {
+    .session-workspace {
       display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: calc(100vh - 45px);
-      padding: 2rem;
-      background: var(--surface-1, #111320);
+      flex: 1;
+      min-height: 100%;
     }
 
-    .session-card { width: 100%; max-width: 32rem; }
-
-    .session-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1.5rem;
-    }
-
-    .session-title {
-      margin: 0;
-      font-size: var(--sl-font-size-x-large);
-      font-weight: var(--sl-font-weight-bold);
-      color: var(--sl-color-neutral-800);
-    }
-
-    .session-code-chip {
-      font-family: var(--sl-font-mono);
-      font-size: var(--sl-font-size-large);
-      font-weight: 700;
-      color: var(--sl-color-primary-700);
-      background: var(--sl-color-primary-50);
-      border: 1px solid var(--sl-color-primary-200);
-      border-radius: var(--sl-border-radius-pill);
-      padding: 0.2rem 0.75rem;
-      letter-spacing: 0.1em;
-      cursor: pointer;
-    }
-
-    .section-label {
-      font-size: var(--sl-font-size-small);
-      font-weight: var(--sl-font-weight-semibold);
-      color: var(--sl-color-neutral-500);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin: 0 0 0.75rem;
-    }
-
-    .participant-list {
-      list-style: none;
-      margin: 0 0 1.5rem;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .participant-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.6rem 0.75rem;
-      background: var(--sl-color-neutral-50);
-      border-radius: var(--sl-border-radius-medium);
-    }
-
-    .participant-name {
-      font-weight: var(--sl-font-weight-semibold);
-      color: var(--sl-color-neutral-700);
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-    }
-
-    .you-label {
-      font-size: var(--sl-font-size-x-small);
-      color: var(--sl-color-neutral-400);
-      font-weight: normal;
-    }
-
-    .sponsor-label {
-      font-size: var(--sl-font-size-x-small);
-      color: var(--sl-color-neutral-400);
-      font-weight: normal;
+    .session-workspace task-board {
+      flex: 1;
     }
 
     .error-msg { margin-bottom: 0.75rem; }
-
-    .session-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      margin-top: 0.5rem;
-    }
   `;
 
   @state() private _lobbyState: LobbyState = 'landing';
@@ -472,76 +394,11 @@ export class SessionLobby extends LitElement {
     const { session, participantId, agentCode } = this._sessionState;
 
     return html`
-      <div class="session-layout">
-        <div class="session-card">
-          <div class="session-header">
-            <h2 class="session-title">Session</h2>
-            <span class="session-code-chip" title="Click to copy"
-                  @click=${() => void this._copyCode(session.code)}>${session.code}</span>
-          </div>
-
-          ${this._codeCopied ? html`
-            <sl-alert variant="success" open duration="1000" closable style="margin-bottom: 0.75rem;">
-              <sl-icon slot="icon" name="clipboard-check"></sl-icon>
-              Copied!
-            </sl-alert>
-          ` : nothing}
-
-          <div class="join-code-box">
-            <div class="join-code-label">Share this code</div>
-            <div class="join-code-value">${session.code}</div>
-            <sl-button size="small" variant="neutral" @click=${() => void this._copyCode(session.code)}>
-              <sl-icon slot="prefix" name="clipboard"></sl-icon>
-              Copy Code
-            </sl-button>
-          </div>
-
-          ${agentCode ? html`
-            <div class="agent-code-box">
-              <div class="join-code-label">Your Agent Code</div>
-              <div class="agent-code-value">${agentCode}</div>
-              <sl-button size="small" variant="neutral" @click=${() => void this._copyCode(agentCode)}>
-                <sl-icon slot="prefix" name="clipboard"></sl-icon>
-                Copy
-              </sl-button>
-              <p class="agent-code-hint">Give this code to your AI agents so they can join the session on your behalf.</p>
-            </div>
-          ` : nothing}
-
-          <p class="section-label">
-            Participants
-            <sl-badge variant="neutral" pill style="margin-left: 0.4rem;">${session.participants.length}</sl-badge>
-          </p>
-          <ul class="participant-list" aria-live="polite">
-            ${session.participants.map((p) => {
-              const isMe = p.id === participantId;
-              const isAgent = p.participant_type === 'agent';
-              const sponsor = isAgent && p.sponsor_id
-                ? session.participants.find((s) => s.id === p.sponsor_id)
-                : null;
-              return html`
-                <li class="participant-item">
-                  <span class="participant-name">
-                    <sl-icon name=${isAgent ? 'robot' : 'person-fill'}></sl-icon>
-                    ${p.display_name}
-                    ${isMe ? html`<span class="you-label">(you)</span>` : nothing}
-                    ${sponsor ? html`<span class="sponsor-label">agent of ${sponsor.display_name}</span>` : nothing}
-                  </span>
-                  <sl-badge variant=${isAgent ? 'neutral' : 'primary'} pill>${p.participant_type}</sl-badge>
-                </li>
-              `;
-            })}
-          </ul>
-
-          <sl-divider></sl-divider>
-
-          <div class="session-actions">
-            <sl-button variant="danger" outline @click=${this._leaveSession}>
-              <sl-icon slot="prefix" name="box-arrow-left"></sl-icon>
-              Leave Session
-            </sl-button>
-          </div>
-        </div>
+      <div class="session-workspace">
+        <task-board
+          session-code=${session.code}
+          .participants=${session.participants}
+        ></task-board>
       </div>
     `;
   }
