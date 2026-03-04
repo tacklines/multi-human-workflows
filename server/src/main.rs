@@ -54,6 +54,17 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    // Spawn PG LISTEN task for real-time notifications from DB triggers
+    {
+        let state = Arc::clone(&state);
+        let database_url = database_url.clone();
+        tokio::spawn(async move {
+            if let Err(e) = run_pg_listener(&database_url, &state).await {
+                tracing::error!("PG listener failed: {e}");
+            }
+        });
+    }
+
     let app = Router::new()
         // Health
         .route("/health", get(|| async { "ok" }))
@@ -82,4 +93,31 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<(), sqlx::Error> {
+    let mut listener = sqlx::postgres::PgListener::connect(database_url).await?;
+    listener.listen("task_changes").await?;
+    tracing::info!("PG LISTEN on 'task_changes' channel active");
+
+    loop {
+        let notification = listener.recv().await?;
+        let payload = notification.payload();
+
+        match serde_json::from_str::<serde_json::Value>(payload) {
+            Ok(msg) => {
+                let event_type = msg["type"].as_str().unwrap_or("unknown");
+                let session_code = msg["session_code"].as_str().unwrap_or("");
+
+                if !session_code.is_empty() {
+                    state.connections.broadcast_to_session(session_code, &serde_json::json!({
+                        "type": event_type,
+                    })).await;
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Bad NOTIFY payload: {e}");
+            }
+        }
+    }
 }

@@ -194,11 +194,7 @@ pub async fn create_task(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let view: TaskView = task.into();
-    state.connections.broadcast_to_session(&session_code, &serde_json::json!({
-        "type": "task_created",
-        "task": &view,
-    })).await;
-
+    // WebSocket broadcast handled by PG trigger → NOTIFY → listener
     Ok(Json(view))
 }
 
@@ -299,7 +295,7 @@ pub async fn get_task(
 
 pub async fn update_task(
     State(state): State<Arc<AppState>>,
-    Path((session_code, task_id)): Path<(String, Uuid)>,
+    Path((_session_code, task_id)): Path<(String, Uuid)>,
     AuthUser(_claims): AuthUser,
     Json(req): Json<UpdateTaskRequest>,
 ) -> Result<Json<TaskView>, StatusCode> {
@@ -359,17 +355,13 @@ pub async fn update_task(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let view: TaskView = updated.into();
-    state.connections.broadcast_to_session(&session_code, &serde_json::json!({
-        "type": "task_updated",
-        "task": &view,
-    })).await;
-
+    // WebSocket broadcast handled by PG trigger → NOTIFY → listener
     Ok(Json(view))
 }
 
 pub async fn delete_task(
     State(state): State<Arc<AppState>>,
-    Path((session_code, task_id)): Path<(String, Uuid)>,
+    Path((_session_code, task_id)): Path<(String, Uuid)>,
     AuthUser(_claims): AuthUser,
 ) -> Result<StatusCode, StatusCode> {
     let result = sqlx::query("DELETE FROM tasks WHERE id = $1")
@@ -381,17 +373,14 @@ pub async fn delete_task(
     if result.rows_affected() == 0 {
         Err(StatusCode::NOT_FOUND)
     } else {
-        state.connections.broadcast_to_session(&session_code, &serde_json::json!({
-            "type": "task_deleted",
-            "task_id": task_id,
-        })).await;
+        // WebSocket broadcast handled by PG trigger → NOTIFY → listener
         Ok(StatusCode::NO_CONTENT)
     }
 }
 
 pub async fn add_comment(
     State(state): State<Arc<AppState>>,
-    Path((session_code, task_id)): Path<(String, Uuid)>,
+    Path((_session_code, task_id)): Path<(String, Uuid)>,
     AuthUser(claims): AuthUser,
     Json(req): Json<AddCommentRequest>,
 ) -> Result<Json<CommentView>, StatusCode> {
@@ -432,11 +421,6 @@ pub async fn add_comment(
         created_at: now,
     };
 
-    state.connections.broadcast_to_session(&session_code, &serde_json::json!({
-        "type": "comment_added",
-        "task_id": task_id,
-        "comment": &view,
-    })).await;
-
+    // WebSocket broadcast handled by PG trigger → NOTIFY → listener
     Ok(Json(view))
 }
