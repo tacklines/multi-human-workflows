@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { fetchTask, updateTask, deleteTask, addComment } from '../../state/task-api.js';
 import {
   type TaskDetailView, type TaskStatus,
@@ -100,13 +101,45 @@ export class TaskDetail extends LitElement {
     .description-content {
       color: var(--text-secondary);
       line-height: 1.6;
-      white-space: pre-wrap;
       font-size: 0.9rem;
       padding: 0.75rem;
       background: var(--surface-card);
       border-radius: 6px;
       border: 1px solid var(--border-subtle);
       cursor: text;
+    }
+
+    .description-content code {
+      background: var(--surface-bg);
+      padding: 0.15em 0.35em;
+      border-radius: 3px;
+      font-size: 0.85em;
+      font-family: monospace;
+    }
+
+    .description-content pre {
+      background: var(--surface-bg);
+      padding: 0.75rem;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 0.5rem 0;
+    }
+
+    .description-content pre code {
+      background: none;
+      padding: 0;
+    }
+
+    .description-content a {
+      color: var(--sl-color-primary-400);
+    }
+
+    .description-content p {
+      margin: 0 0 0.5rem 0;
+    }
+
+    .description-content p:last-child {
+      margin-bottom: 0;
     }
 
     .no-description {
@@ -194,7 +227,35 @@ export class TaskDetail extends LitElement {
       color: var(--text-primary);
       font-size: 0.875rem;
       line-height: 1.5;
-      white-space: pre-wrap;
+    }
+
+    .comment-content code {
+      background: var(--surface-bg);
+      padding: 0.1em 0.3em;
+      border-radius: 3px;
+      font-size: 0.85em;
+      font-family: monospace;
+    }
+
+    .comment-content pre {
+      background: var(--surface-bg);
+      padding: 0.5rem;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 0.35rem 0;
+    }
+
+    .comment-content pre code {
+      background: none;
+      padding: 0;
+    }
+
+    .comment-content p {
+      margin: 0 0 0.35rem 0;
+    }
+
+    .comment-content p:last-child {
+      margin-bottom: 0;
     }
 
     .add-comment {
@@ -316,6 +377,49 @@ export class TaskDetail extends LitElement {
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days}d ago`;
     return this._formatDate(iso);
+  }
+
+  private _renderMarkdown(text: string) {
+    // Lightweight markdown: code blocks, inline code, bold, italic, links, line breaks
+    let escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Code blocks (```...```)
+    escaped = escaped.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _lang, code) =>
+      `<pre><code>${code.trimEnd()}</code></pre>`
+    );
+
+    // Inline code
+    escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Bold
+    escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+    // Italic
+    escaped = escaped.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+    // Links [text](url)
+    escaped = escaped.replace(
+      /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener">$1</a>'
+    );
+
+    // Bare URLs
+    escaped = escaped.replace(
+      /(?<!")(https?:\/\/[^\s<]+)/g,
+      '<a href="$1" target="_blank" rel="noopener">$1</a>'
+    );
+
+    // Paragraphs (double newline)
+    escaped = escaped
+      .split(/\n{2,}/)
+      .filter(p => p.trim())
+      .map(p => p.includes('<pre>') ? p : `<p>${p.replace(/\n/g, '<br>')}</p>`)
+      .join('');
+
+    return unsafeHTML(escaped);
   }
 
   private async _updateField(fields: Record<string, unknown>) {
@@ -532,7 +636,7 @@ export class TaskDetail extends LitElement {
               </div>
             </div>`
           : task.description
-            ? html`<div class="description-content" @dblclick=${() => { this._editingDescription = true; }}>${task.description}</div>`
+            ? html`<div class="description-content" @dblclick=${() => { this._editingDescription = true; }}>${this._renderMarkdown(task.description)}</div>`
             : html`<span class="no-description" @click=${() => { this._editingDescription = true; }}>No description — click to add</span>`
         }
       </div>
@@ -577,7 +681,7 @@ export class TaskDetail extends LitElement {
                     <span class="comment-time">${this._relativeTime(c.created_at)}</span>
                   </sl-tooltip>
                 </div>
-                <div class="comment-content">${c.content}</div>
+                <div class="comment-content">${this._renderMarkdown(c.content)}</div>
               </div>
             `)}
           </div>

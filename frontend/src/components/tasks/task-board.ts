@@ -1009,9 +1009,9 @@ export class TaskBoard extends LitElement {
   }
 
   private _renderCreateDialog() {
-    // Compute available parent tasks (epics and stories for hierarchy)
+    // Compute available parent tasks (epics, stories, and tasks can have children)
     const parentCandidates = this._tasks.filter(t =>
-      t.task_type === 'epic' || t.task_type === 'story'
+      t.task_type === 'epic' || t.task_type === 'story' || t.task_type === 'task'
     );
 
     return html`
