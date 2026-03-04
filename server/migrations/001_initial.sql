@@ -3,6 +3,7 @@ CREATE TABLE users (
     id UUID PRIMARY KEY,
     external_id TEXT NOT NULL UNIQUE,  -- Keycloak sub claim
     username TEXT NOT NULL,
+    display_name TEXT NOT NULL DEFAULT '',
     email TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

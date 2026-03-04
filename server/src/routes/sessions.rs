@@ -7,6 +7,8 @@ use rand::Rng;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::auth::AuthUser;
+use crate::db;
 use crate::models::*;
 use crate::AppState;
 
@@ -23,11 +25,28 @@ fn generate_code(len: usize) -> String {
 
 pub async fn create_session(
     State(state): State<Arc<AppState>>,
+    AuthUser(claims): AuthUser,
     Json(req): Json<CreateSessionRequest>,
 ) -> Result<Json<CreateSessionResponse>, StatusCode> {
+    // Upsert user from JWT claims
+    let user = db::upsert_user(&state.db, &claims).await
+        .map_err(|e| {
+            tracing::error!("Failed to upsert user: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // Resolve project_id: use provided or auto-bootstrap default
+    let project_id = match req.project_id {
+        Some(pid) => pid,
+        None => db::ensure_default_project(&state.db, user.id).await
+            .map_err(|e| {
+                tracing::error!("Failed to ensure default project: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?,
+    };
+
     let session_id = Uuid::new_v4();
     let session_code = generate_code(6);
-    let creator_id = Uuid::new_v4(); // TODO: extract from auth token
 
     // Create session
     sqlx::query(
@@ -35,10 +54,10 @@ pub async fn create_session(
          VALUES ($1, $2, $3, $4, $5, NOW())"
     )
     .bind(session_id)
-    .bind(req.project_id)
+    .bind(project_id)
     .bind(&session_code)
     .bind(&req.name)
-    .bind(creator_id)
+    .bind(user.id)
     .execute(&state.db)
     .await
     .map_err(|e| {
@@ -46,7 +65,7 @@ pub async fn create_session(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    // Create human join code (same as session code for now)
+    // Create human join code
     let join_code_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO session_join_codes (id, session_id, code, created_at)
@@ -67,8 +86,8 @@ pub async fn create_session(
     )
     .bind(participant_id)
     .bind(session_id)
-    .bind(creator_id)
-    .bind("Host") // TODO: use actual username from auth
+    .bind(user.id)
+    .bind(&user.display_name)
     .execute(&state.db)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -82,7 +101,7 @@ pub async fn create_session(
     )
     .bind(agent_code_id)
     .bind(session_id)
-    .bind(creator_id)
+    .bind(user.id)
     .bind(&agent_code)
     .execute(&state.db)
     .await
@@ -96,7 +115,7 @@ pub async fn create_session(
             created_at: chrono::Utc::now(),
             participants: vec![ParticipantView {
                 id: participant_id,
-                display_name: "Host".to_string(),
+                display_name: user.display_name,
                 participant_type: ParticipantType::Human,
                 sponsor_id: None,
                 joined_at: chrono::Utc::now(),
@@ -146,8 +165,16 @@ pub async fn get_session(
 pub async fn join_session(
     State(state): State<Arc<AppState>>,
     Path(code): Path<String>,
+    AuthUser(claims): AuthUser,
     Json(req): Json<JoinSessionRequest>,
 ) -> Result<Json<JoinSessionResponse>, StatusCode> {
+    // Upsert user from JWT claims
+    let user = db::upsert_user(&state.db, &claims).await
+        .map_err(|e| {
+            tracing::error!("Failed to upsert user: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
     let session: Session = sqlx::query_as(
         "SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL"
     )
@@ -157,50 +184,76 @@ pub async fn join_session(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .ok_or(StatusCode::NOT_FOUND)?;
 
-    let user_id = Uuid::new_v4(); // TODO: extract from auth token
-    let participant_id = Uuid::new_v4();
-    let display_name = req.display_name.unwrap_or_else(|| "Participant".to_string());
-
-    sqlx::query(
-        "INSERT INTO participants (id, session_id, user_id, display_name, participant_type, joined_at)
-         VALUES ($1, $2, $3, $4, 'human', NOW())"
+    // Check if user is already a participant
+    let existing: Option<Participant> = sqlx::query_as(
+        "SELECT * FROM participants WHERE session_id = $1 AND user_id = $2"
     )
-    .bind(participant_id)
     .bind(session.id)
-    .bind(user_id)
-    .bind(&display_name)
-    .execute(&state.db)
+    .bind(user.id)
+    .fetch_optional(&state.db)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Create agent join code for this user
-    let agent_code = generate_code(8);
-    let agent_code_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO agent_join_codes (id, session_id, user_id, code, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
-    )
-    .bind(agent_code_id)
-    .bind(session.id)
-    .bind(user_id)
-    .bind(&agent_code)
-    .execute(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (participant_id, agent_code) = if let Some(existing) = existing {
+        // Already in the session — fetch their agent code
+        let ac: (String,) = sqlx::query_as(
+            "SELECT code FROM agent_join_codes WHERE session_id = $1 AND user_id = $2"
+        )
+        .bind(session.id)
+        .bind(user.id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Broadcast participant joined
-    state.connections.broadcast_to_session(
-        &session.code,
-        &serde_json::json!({
-            "type": "participant_joined",
-            "participant": {
-                "id": participant_id,
-                "display_name": display_name,
-                "participant_type": "human",
-                "joined_at": chrono::Utc::now(),
-            }
-        }),
-    ).await;
+        (existing.id, ac.0)
+    } else {
+        let display_name = req.display_name
+            .unwrap_or_else(|| user.display_name.clone());
+        let participant_id = Uuid::new_v4();
+
+        sqlx::query(
+            "INSERT INTO participants (id, session_id, user_id, display_name, participant_type, joined_at)
+             VALUES ($1, $2, $3, $4, 'human', NOW())"
+        )
+        .bind(participant_id)
+        .bind(session.id)
+        .bind(user.id)
+        .bind(&display_name)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        // Create agent join code for this user
+        let agent_code = generate_code(8);
+        let agent_code_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO agent_join_codes (id, session_id, user_id, code, created_at)
+             VALUES ($1, $2, $3, $4, NOW())"
+        )
+        .bind(agent_code_id)
+        .bind(session.id)
+        .bind(user.id)
+        .bind(&agent_code)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        // Broadcast participant joined
+        state.connections.broadcast_to_session(
+            &session.code,
+            &serde_json::json!({
+                "type": "participant_joined",
+                "participant": {
+                    "id": participant_id,
+                    "display_name": display_name,
+                    "participant_type": "human",
+                    "joined_at": chrono::Utc::now(),
+                }
+            }),
+        ).await;
+
+        (participant_id, agent_code)
+    };
 
     // Fetch all participants for the response
     let participants: Vec<Participant> = sqlx::query_as(

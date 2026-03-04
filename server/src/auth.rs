@@ -1,5 +1,5 @@
 use axum::{
-    extract::{FromRequestParts, State},
+    extract::FromRequestParts,
     http::{request::Parts, StatusCode},
 };
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
@@ -12,6 +12,7 @@ pub struct Claims {
     pub sub: String,
     pub preferred_username: Option<String>,
     pub email: Option<String>,
+    pub name: Option<String>,
     pub exp: u64,
     pub iat: u64,
     pub iss: String,
@@ -44,7 +45,6 @@ impl JwksCache {
     }
 
     pub async fn validate_token(&self, token: &str) -> Result<Claims, AuthError> {
-        // Get the kid from the token header
         let header = jsonwebtoken::decode_header(token)
             .map_err(|_| AuthError::InvalidToken)?;
         let kid = header.kid.ok_or(AuthError::InvalidToken)?;
@@ -112,16 +112,13 @@ impl From<AuthError> for StatusCode {
 /// Extractor that validates the Bearer token and provides Claims
 pub struct AuthUser(pub Claims);
 
-impl<S> FromRequestParts<S> for AuthUser
-where
-    S: Send + Sync,
-    Arc<crate::AppState>: FromRef<S>,
-{
+impl FromRequestParts<Arc<crate::AppState>> for AuthUser {
     type Rejection = StatusCode;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let app_state = Arc::<crate::AppState>::from_ref(state);
-
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<crate::AppState>,
+    ) -> Result<Self, Self::Rejection> {
         let auth_header = parts.headers
             .get("authorization")
             .and_then(|v| v.to_str().ok())
@@ -131,23 +128,10 @@ where
             .strip_prefix("Bearer ")
             .ok_or(StatusCode::UNAUTHORIZED)?;
 
-        let claims = app_state.jwks.validate_token(token)
+        let claims = state.jwks.validate_token(token)
             .await
             .map_err(StatusCode::from)?;
 
         Ok(AuthUser(claims))
-    }
-}
-
-// Helper trait for FromRef pattern
-use std::convert::From;
-
-trait FromRef<T> {
-    fn from_ref(input: &T) -> Self;
-}
-
-impl FromRef<Arc<crate::AppState>> for Arc<crate::AppState> {
-    fn from_ref(input: &Arc<crate::AppState>) -> Self {
-        input.clone()
     }
 }

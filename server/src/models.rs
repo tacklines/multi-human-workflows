@@ -63,6 +63,7 @@ pub struct User {
     /// Keycloak subject ID
     pub external_id: String,
     pub username: String,
+    pub display_name: String,
     pub email: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -124,7 +125,7 @@ pub struct AgentJoinCode {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateSessionRequest {
-    pub project_id: Uuid,
+    pub project_id: Option<Uuid>,
     pub name: Option<String>,
 }
 
