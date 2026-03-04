@@ -1,4 +1,4 @@
-const KEYCLOAK_URL = (import.meta as any).env?.VITE_KEYCLOAK_URL ?? 'http://localhost:8080';
+const KEYCLOAK_URL = (import.meta as any).env?.VITE_KEYCLOAK_URL ?? 'http://localhost:8081';
 const APP_URL = (import.meta as any).env?.VITE_APP_URL ?? 'http://localhost:5173';
 
 export const AUTH_CONFIG = {

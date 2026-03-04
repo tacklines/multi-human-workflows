@@ -27,7 +27,7 @@ async fn main() {
         .init();
 
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://seam:seam@localhost:5432/seam".to_string());
+        .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
 
     let db = sqlx::PgPool::connect(&database_url)
         .await
@@ -39,7 +39,7 @@ async fn main() {
         .expect("Failed to run migrations");
 
     let keycloak_url = std::env::var("KEYCLOAK_URL")
-        .unwrap_or_else(|_| "http://localhost:8080".to_string());
+        .unwrap_or_else(|_| "http://localhost:8081".to_string());
     let realm = std::env::var("KEYCLOAK_REALM")
         .unwrap_or_else(|_| "seam".to_string());
 
