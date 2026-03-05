@@ -3,6 +3,7 @@ pub mod agent;
 pub mod agents;
 pub mod events;
 pub mod integrations;
+pub mod messages;
 pub mod notes;
 pub mod plans;
 pub mod projects;

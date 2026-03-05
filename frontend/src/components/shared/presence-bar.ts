@@ -224,16 +224,18 @@ export class PresenceBar extends LitElement {
             <div class="avatar-slot" role="listitem">
               ${isYou
                 ? html`<sl-tooltip content="${tooltipContent}" placement="bottom">${avatarButton}</sl-tooltip>`
-                : html`
-                  <sl-dropdown>
-                    <sl-tooltip content="${tooltipContent}" placement="bottom" slot="trigger">
-                      ${avatarButton}
-                    </sl-tooltip>
-                    <sl-menu @sl-select=${() => this._onRemove(p)}>
-                      <sl-menu-item>Remove from session</sl-menu-item>
-                    </sl-menu>
-                  </sl-dropdown>
-                `}
+                : isAgent
+                  ? html`<sl-tooltip content="${tooltipContent} · Click to open console" placement="bottom">${avatarButton}</sl-tooltip>`
+                  : html`
+                    <sl-dropdown>
+                      <sl-tooltip content="${tooltipContent}" placement="bottom" slot="trigger">
+                        ${avatarButton}
+                      </sl-tooltip>
+                      <sl-menu @sl-select=${() => this._onRemove(p)}>
+                        <sl-menu-item>Remove from session</sl-menu-item>
+                      </sl-menu>
+                    </sl-dropdown>
+                  `}
             </div>
           `;
         })}

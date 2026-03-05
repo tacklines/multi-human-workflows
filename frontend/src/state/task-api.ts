@@ -162,11 +162,12 @@ export interface ActivityEvent {
 
 export async function fetchActivity(
   sessionCode: string,
-  opts?: { limit?: number; target_id?: string },
+  opts?: { limit?: number; target_id?: string; actor_id?: string },
 ): Promise<ActivityEvent[]> {
   const params = new URLSearchParams();
   if (opts?.limit) params.set('limit', String(opts.limit));
   if (opts?.target_id) params.set('target_id', opts.target_id);
+  if (opts?.actor_id) params.set('actor_id', opts.actor_id);
   const qs = params.toString();
   const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/activity${qs ? `?${qs}` : ''}`, {
     headers: authHeaders(),

@@ -174,6 +174,22 @@ struct ListQuestionsParams {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct CheckMessagesParams {
+    /// Maximum number of messages to return (default 20, max 100)
+    limit: Option<i64>,
+    /// If true, only return unread messages (default: true)
+    unread_only: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SendMessageParams {
+    /// Recipient participant ID
+    recipient_id: String,
+    /// Message content
+    content: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct AddDependencyParams {
     /// The task ID that blocks another task (the blocker)
     blocker_id: String,
@@ -1985,6 +2001,126 @@ impl SeamMcp {
             }
             Ok(_) => Ok(CallToolResult::success(vec![Content::text("Task unlinked from requirement")])),
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
+        }
+    }
+
+    #[tool(description = "Check for directed messages sent to you by humans in the session. Returns messages in chronological order.")]
+    async fn check_messages(
+        &self,
+        Parameters(params): Parameters<CheckMessagesParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let limit = params.limit.unwrap_or(20).min(100);
+        let unread_only = params.unread_only.unwrap_or(true);
+
+        let query = if unread_only {
+            "SELECT m.id, m.sender_id, p.display_name, m.content, m.created_at
+             FROM messages m
+             JOIN participants p ON p.id = m.sender_id
+             WHERE m.session_id = $1 AND m.recipient_id = $2 AND m.read_at IS NULL
+             ORDER BY m.created_at ASC
+             LIMIT $3"
+        } else {
+            "SELECT m.id, m.sender_id, p.display_name, m.content, m.created_at
+             FROM messages m
+             JOIN participants p ON p.id = m.sender_id
+             WHERE m.session_id = $1 AND m.recipient_id = $2
+             ORDER BY m.created_at DESC
+             LIMIT $3"
+        };
+
+        let rows: Vec<(Uuid, Uuid, String, String, chrono::DateTime<Utc>)> = match sqlx::query_as(query)
+            .bind(session_id)
+            .bind(participant_id)
+            .bind(limit)
+            .fetch_all(&self.db)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
+        };
+
+        if rows.is_empty() {
+            return Ok(CallToolResult::success(vec![Content::text("No messages.")]));
+        }
+
+        // Mark messages as read
+        let msg_ids: Vec<Uuid> = rows.iter().map(|r| r.0).collect();
+        let _ = sqlx::query(
+            "UPDATE messages SET read_at = now() WHERE id = ANY($1)"
+        )
+        .bind(&msg_ids)
+        .execute(&self.db)
+        .await;
+
+        let items: Vec<serde_json::Value> = rows.into_iter().map(|(id, sender_id, sender_name, content, created_at)| {
+            serde_json::json!({
+                "id": id,
+                "from_id": sender_id,
+                "from": sender_name,
+                "content": content,
+                "created_at": created_at.to_rfc3339(),
+            })
+        }).collect();
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&items).unwrap(),
+        )]))
+    }
+
+    #[tool(description = "Send a message to another participant in the session (human or agent).")]
+    async fn send_message_to(
+        &self,
+        Parameters(params): Parameters<SendMessageParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let recipient_id = match Uuid::parse_str(&params.recipient_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid recipient_id")])),
+        };
+
+        if params.content.trim().is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text("Message content cannot be empty")]));
+        }
+
+        match sqlx::query_as::<_, (Uuid, chrono::DateTime<Utc>)>(
+            "INSERT INTO messages (session_id, sender_id, recipient_id, content)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id, created_at"
+        )
+        .bind(session_id)
+        .bind(participant_id)
+        .bind(recipient_id)
+        .bind(&params.content)
+        .fetch_one(&self.db)
+        .await
+        {
+            Ok((id, created_at)) => {
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "id": id,
+                        "status": "sent",
+                        "created_at": created_at.to_rfc3339(),
+                    })).unwrap(),
+                )]))
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed to send: {e}"))])),
         }
     }
 }

@@ -135,6 +135,11 @@ function openSocket(code: string): void {
         }
       }
 
+      // Direct message events — notify activity feed + message listeners
+      if (msg.type === 'message_received' || msg.type === 'message_sent') {
+        store.notifyActivityChanged();
+      }
+
       // Activity events — notify activity feed to refresh
       if (msg.type === 'activity') {
         store.notifyActivityChanged();

@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, query } from 'lit/decorators.js';
 import { authStore, type AuthState } from '../../state/auth-state.js';
-import { store, type AppState, type SessionState } from '../../state/app-state.js';
+import { store, type AppState, type SessionState, type SessionParticipant } from '../../state/app-state.js';
 import { disconnectSession } from '../../state/session-connection.js';
 import { fetchUnreadMentions, clearUnreadMentions, type UnreadMentionView } from '../../state/task-api.js';
 import { initRouter, navigateTo } from '../../router.js';
@@ -17,6 +17,7 @@ import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 import './presence-bar.js';
 import './activity-feed.js';
 import './question-panel.js';
+import '../session/agent-console.js';
 
 
 @customElement('app-shell')
@@ -239,6 +240,15 @@ export class AppShell extends LitElement {
       color: var(--text-tertiary);
     }
 
+    .sidebar-participant.clickable {
+      cursor: pointer;
+      border-radius: 6px;
+    }
+
+    .sidebar-participant.clickable:hover {
+      background: var(--surface-active);
+    }
+
     .leave-btn {
       margin-top: 0.5rem;
     }
@@ -285,6 +295,7 @@ export class AppShell extends LitElement {
   @state() private _sidebarCollapsed = false;
   @state() private _unreadMentions: UnreadMentionView[] = [];
   @state() private _routerReady = false;
+  @state() private _agentConsoleParticipant: SessionParticipant | null = null;
 
   @query('#outlet') private _outlet!: HTMLElement;
 
@@ -359,6 +370,18 @@ export class AppShell extends LitElement {
     } catch { /* silent */ }
   }
 
+  private _onParticipantClicked(e: CustomEvent<{ id: string }>) {
+    const participants = this._appState.sessionState?.session.participants ?? [];
+    const p = participants.find(p => p.id === e.detail.id);
+    if (p?.participant_type === 'agent') {
+      this._agentConsoleParticipant = p;
+    }
+  }
+
+  private _closeAgentConsole() {
+    this._agentConsoleParticipant = null;
+  }
+
   private async _clearMentions() {
     const code = this._appState.sessionState?.code;
     if (!code || this._unreadMentions.length === 0) return;
@@ -410,10 +433,14 @@ export class AppShell extends LitElement {
             const isMe = p.id === currentId;
             const isAgent = p.participant_type === 'agent';
             return html`
-              <li class="sidebar-participant ${isMe ? 'is-me' : ''}">
+              <li
+                class="sidebar-participant ${isMe ? 'is-me' : ''} ${isAgent ? 'clickable' : ''}"
+                @click=${isAgent ? () => { this._agentConsoleParticipant = p; } : nothing}
+              >
                 <sl-icon name=${isAgent ? 'robot' : 'person-fill'}></sl-icon>
                 <span class="name">${p.display_name}</span>
                 ${isMe ? html`<span class="you-tag">you</span>` : nothing}
+                ${isAgent ? html`<sl-icon name="terminal" style="font-size: 0.7rem; opacity: 0.5;"></sl-icon>` : nothing}
               </li>
             `;
           })}
@@ -492,6 +519,7 @@ export class AppShell extends LitElement {
             <presence-bar
               .participants=${participants}
               current-id="${currentId}"
+              @participant-clicked=${this._onParticipantClicked}
             ></presence-bar>
           </div>
 
@@ -523,6 +551,15 @@ export class AppShell extends LitElement {
           ${this._renderMain()}
         </main>
       </div>
+
+      ${session && this._agentConsoleParticipant ? html`
+        <agent-console
+          session-code=${session.code}
+          .participant=${this._agentConsoleParticipant}
+          ?open=${!!this._agentConsoleParticipant}
+          @close=${this._closeAgentConsole}
+        ></agent-console>
+      ` : nothing}
     `;
   }
 }

@@ -14,6 +14,7 @@ pub struct ListActivityQuery {
     pub limit: Option<i64>,
     pub before: Option<String>,
     pub target_id: Option<Uuid>,
+    pub actor_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize)]
@@ -54,6 +55,10 @@ pub async fn list_activity(
         sql.push_str(&format!(" AND ae.target_id = ${param_idx}"));
         param_idx += 1;
     }
+    if query.actor_id.is_some() {
+        sql.push_str(&format!(" AND ae.actor_id = ${param_idx}"));
+        param_idx += 1;
+    }
     sql.push_str(&format!(" ORDER BY ae.created_at DESC LIMIT ${param_idx}"));
 
     let mut q = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, Uuid, String, serde_json::Value, chrono::DateTime<chrono::Utc>)>(&sql)
@@ -67,6 +72,9 @@ pub async fn list_activity(
     }
     if let Some(target_id) = query.target_id {
         q = q.bind(target_id);
+    }
+    if let Some(actor_id) = query.actor_id {
+        q = q.bind(actor_id);
     }
     q = q.bind(limit);
 
