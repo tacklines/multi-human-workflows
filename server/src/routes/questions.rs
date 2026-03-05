@@ -67,6 +67,14 @@ pub async fn list_questions(
 ) -> Result<Json<Vec<QuestionView>>, StatusCode> {
     let session = resolve_session_pub(&state.db, &session_code).await?;
 
+    // Lazy expiry: mark overdue pending questions as expired
+    let _ = sqlx::query(
+        "UPDATE questions SET status = 'expired' WHERE session_id = $1 AND status = 'pending' AND expires_at IS NOT NULL AND expires_at < NOW()"
+    )
+    .bind(session.id)
+    .execute(&state.db)
+    .await;
+
     let status_filter = query.status.as_deref().unwrap_or("pending");
 
     let rows: Vec<(Uuid, String, QuestionStatus, Uuid, Option<Uuid>, Option<serde_json::Value>, Option<String>, Option<Uuid>, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = if status_filter == "all" {

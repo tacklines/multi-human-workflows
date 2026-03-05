@@ -151,6 +151,14 @@ struct AskQuestionParams {
     directed_to: Option<String>,
     /// Optional context JSON (e.g. {"task_id": "...", "topic": "..."})
     context: Option<String>,
+    /// Optional TTL in seconds (question expires after this duration, max 3600)
+    expires_in_seconds: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct CancelQuestionParams {
+    /// Question ID to cancel
+    id: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -1051,10 +1059,15 @@ impl SeamMcp {
             None => None,
         };
 
+        let expires_at = params.expires_in_seconds.map(|secs| {
+            let secs = secs.min(3600).max(10);
+            Utc::now() + chrono::Duration::seconds(secs)
+        });
+
         let question_id = Uuid::new_v4();
         match sqlx::query(
-            "INSERT INTO questions (id, session_id, project_id, asked_by, directed_to, question_text, context, status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')"
+            "INSERT INTO questions (id, session_id, project_id, asked_by, directed_to, question_text, context, status, expires_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)"
         )
         .bind(question_id)
         .bind(session_id)
@@ -1063,6 +1076,7 @@ impl SeamMcp {
         .bind(directed_to)
         .bind(&params.question)
         .bind(&context_json)
+        .bind(expires_at)
         .execute(&self.db)
         .await
         {
@@ -1095,6 +1109,11 @@ impl SeamMcp {
             Ok(id) => id,
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid question ID")])),
         };
+
+        // Lazy expiry
+        let _ = sqlx::query(
+            "UPDATE questions SET status = 'expired' WHERE id = $1 AND status = 'pending' AND expires_at IS NOT NULL AND expires_at < NOW()"
+        ).bind(question_id).execute(&self.db).await;
 
         let row: Option<(Uuid, String, String, Option<String>, Option<Uuid>, chrono::DateTime<Utc>, Option<chrono::DateTime<Utc>>)> = match sqlx::query_as(
             "SELECT q.id, q.question_text, q.status, q.answer_text, q.answered_by, q.created_at, q.answered_at
@@ -1211,6 +1230,38 @@ impl SeamMcp {
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&result).unwrap(),
         )]))
+    }
+
+    #[tool(description = "Cancel one of your own pending questions. The question will no longer appear as pending for humans.")]
+    async fn cancel_question(
+        &self,
+        Parameters(params): Parameters<CancelQuestionParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let question_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid question ID")])),
+        };
+
+        let result = sqlx::query(
+            "UPDATE questions SET status = 'cancelled' WHERE id = $1 AND asked_by = $2 AND status = 'pending'"
+        )
+        .bind(question_id)
+        .bind(participant_id)
+        .execute(&self.db)
+        .await;
+
+        match result {
+            Ok(r) if r.rows_affected() > 0 => {
+                Ok(CallToolResult::success(vec![Content::text("Question cancelled")]))
+            }
+            Ok(_) => Ok(CallToolResult::error(vec![Content::text("Question not found, not yours, or not pending")])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
+        }
     }
 
     #[tool(description = "Delete a task and all its children. Use with caution — this is irreversible.")]
