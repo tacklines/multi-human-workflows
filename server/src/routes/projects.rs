@@ -42,6 +42,8 @@ pub async fn list_projects(
         slug: p.slug,
         ticket_prefix: p.ticket_prefix,
         created_at: p.created_at,
+        repo_url: p.repo_url,
+        default_branch: Some(p.default_branch),
     }).collect()))
 }
 
@@ -79,6 +81,8 @@ pub async fn get_project(
         slug: project.slug,
         ticket_prefix: project.ticket_prefix,
         created_at: project.created_at,
+        repo_url: project.repo_url,
+        default_branch: Some(project.default_branch),
     }))
 }
 
@@ -115,17 +119,20 @@ pub async fn create_project(
 
     let slug = req.slug.unwrap_or_else(|| slugify(&req.name));
     let ticket_prefix = req.ticket_prefix.unwrap_or_else(|| "TASK".to_string());
+    let default_branch = req.default_branch.unwrap_or_else(|| "main".to_string());
     let project_id = Uuid::new_v4();
 
     sqlx::query(
-        "INSERT INTO projects (id, org_id, name, slug, ticket_prefix, created_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())"
+        "INSERT INTO projects (id, org_id, name, slug, ticket_prefix, repo_url, default_branch, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())"
     )
     .bind(project_id)
     .bind(org_id)
     .bind(&req.name)
     .bind(&slug)
     .bind(&ticket_prefix)
+    .bind(&req.repo_url)
+    .bind(&default_branch)
     .execute(&state.db)
     .await
     .map_err(|e| {
@@ -153,6 +160,8 @@ pub async fn create_project(
         slug,
         ticket_prefix,
         created_at: chrono::Utc::now(),
+        repo_url: req.repo_url,
+        default_branch: Some(default_branch),
     })))
 }
 
@@ -189,7 +198,9 @@ pub async fn update_project(
     }
 
     // Build dynamic update
-    let project = if req.name.is_some() || req.ticket_prefix.is_some() {
+    let has_updates = req.name.is_some() || req.ticket_prefix.is_some()
+        || req.repo_url.is_some() || req.default_branch.is_some();
+    let project = if has_updates {
         let mut set_clauses = Vec::new();
         let mut i = 2; // $1 is project_id
 
@@ -199,6 +210,15 @@ pub async fn update_project(
         }
         if req.ticket_prefix.is_some() {
             set_clauses.push(format!("ticket_prefix = ${i}"));
+            i += 1;
+        }
+        if req.repo_url.is_some() {
+            set_clauses.push(format!("repo_url = ${i}"));
+            i += 1;
+        }
+        if req.default_branch.is_some() {
+            set_clauses.push(format!("default_branch = ${i}"));
+            let _ = i; // suppress unused warning
         }
 
         let query = format!(
@@ -212,6 +232,12 @@ pub async fn update_project(
         }
         if let Some(ref prefix) = req.ticket_prefix {
             q = q.bind(prefix);
+        }
+        if let Some(ref repo_url) = req.repo_url {
+            q = q.bind(repo_url);
+        }
+        if let Some(ref default_branch) = req.default_branch {
+            q = q.bind(default_branch);
         }
 
         q.fetch_one(&state.db).await.map_err(|e| {
@@ -236,6 +262,8 @@ pub async fn update_project(
         slug: project.slug,
         ticket_prefix: project.ticket_prefix,
         created_at: project.created_at,
+        repo_url: project.repo_url,
+        default_branch: Some(project.default_branch),
     }))
 }
 

@@ -86,6 +86,47 @@ export class ProjectWorkspace extends LitElement {
       flex-shrink: 0;
     }
 
+    /* ── Repo info ── */
+    .repo-info {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+      padding: 0.75rem 1rem;
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--sl-border-radius-medium);
+      font-size: 0.85rem;
+    }
+
+    .repo-info sl-icon {
+      font-size: 1rem;
+      color: var(--text-tertiary);
+      flex-shrink: 0;
+    }
+
+    .repo-link {
+      color: var(--sl-color-primary-400);
+      text-decoration: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .repo-link:hover {
+      text-decoration: underline;
+    }
+
+    .branch-badge {
+      font-family: var(--sl-font-mono);
+      font-size: 0.75rem;
+      background: var(--surface-active);
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
     /* ── Section headers ── */
     .section {
       margin-bottom: 2rem;
@@ -464,6 +505,7 @@ export class ProjectWorkspace extends LitElement {
       <div class="container">
         <div class="inner">
           ${this._renderHeader()}
+          ${this._renderRepo()}
           ${this._error ? html`<sl-alert variant="danger" open style="margin-bottom: 1rem;">${this._error}</sl-alert>` : nothing}
           ${this._renderSessions()}
           ${this._renderTasks()}
@@ -499,6 +541,18 @@ export class ProjectWorkspace extends LitElement {
         </span>
         <h1>${p.name}</h1>
         <span class="prefix-badge">${p.ticket_prefix}</span>
+      </div>
+    `;
+  }
+
+  private _renderRepo() {
+    const p = this._project!;
+    if (!p.repo_url) return nothing;
+    return html`
+      <div class="repo-info">
+        <sl-icon name="github"></sl-icon>
+        <a class="repo-link" href=${p.repo_url} target="_blank" rel="noopener noreferrer">${p.repo_url}</a>
+        ${p.default_branch ? html`<span class="branch-badge">${p.default_branch}</span>` : nothing}
       </div>
     `;
   }

@@ -25,6 +25,8 @@ export interface ProjectView {
   slug: string;
   ticket_prefix: string;
   created_at: string;
+  repo_url: string | null;
+  default_branch: string | null;
 }
 
 export async function fetchProjects(): Promise<ProjectView[]> {
@@ -46,7 +48,7 @@ export async function createProject(name: string, ticketPrefix?: string): Promis
   return handleResponse(res);
 }
 
-export async function updateProject(projectId: string, updates: { name?: string; ticket_prefix?: string }): Promise<ProjectView> {
+export async function updateProject(projectId: string, updates: { name?: string; ticket_prefix?: string; repo_url?: string; default_branch?: string }): Promise<ProjectView> {
   const res = await fetch(`${API_BASE}/api/projects/${projectId}`, {
     method: 'PATCH',
     headers: authHeaders(),

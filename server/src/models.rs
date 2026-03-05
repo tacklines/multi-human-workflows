@@ -39,6 +39,8 @@ pub struct Project {
     pub ticket_prefix: String,
     pub next_ticket_number: i32,
     pub created_at: DateTime<Utc>,
+    pub repo_url: Option<String>,
+    pub default_branch: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
@@ -223,6 +225,8 @@ pub struct ProjectView {
     pub slug: String,
     pub ticket_prefix: String,
     pub created_at: DateTime<Utc>,
+    pub repo_url: Option<String>,
+    pub default_branch: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -230,12 +234,16 @@ pub struct CreateProjectRequest {
     pub name: String,
     pub slug: Option<String>,
     pub ticket_prefix: Option<String>,
+    pub repo_url: Option<String>,
+    pub default_branch: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateProjectRequest {
     pub name: Option<String>,
     pub ticket_prefix: Option<String>,
+    pub repo_url: Option<String>,
+    pub default_branch: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
