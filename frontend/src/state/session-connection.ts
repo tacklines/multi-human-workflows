@@ -1,5 +1,6 @@
 import { store, type SessionParticipant } from './app-state.js';
 import { authStore } from './auth-state.js';
+import { fetchQuestions } from './task-api.js';
 
 const WS_BASE = (import.meta as any).env?.VITE_WS_URL ?? 'ws://localhost:5173/ws';
 
@@ -107,18 +108,11 @@ function openSocket(code: string): void {
         store.notifyActivityChanged();
       }
 
-      // Desktop notification for new questions directed at this user
-      if (msg.type === 'question_asked' && (msg as any).question_text) {
-        const myId = store.get().sessionState?.participantId;
-        const askerName = (msg as any).asked_by_name ?? 'Someone';
-        const text = (msg as any).question_text ?? '';
-        // Only notify if tab is not focused
-        if (document.hidden && Notification.permission === 'granted') {
-          const n = new Notification(`${askerName} asked a question`, {
-            body: text.length > 120 ? text.slice(0, 120) + '…' : text,
-            tag: 'seam-question',
-          });
-          n.onclick = () => { window.focus(); n.close(); };
+      // Desktop notification for new questions
+      if (msg.type === 'question_asked' && document.hidden && Notification.permission === 'granted') {
+        const session = store.get().sessionState;
+        if (session) {
+          showQuestionNotification(session.code);
         }
       }
 
@@ -148,6 +142,23 @@ function openSocket(code: string): void {
   ws.addEventListener('error', () => {
     // error is always followed by close
   });
+}
+
+async function showQuestionNotification(sessionCode: string) {
+  try {
+    const questions = await fetchQuestions(sessionCode, 'pending');
+    const latest = questions[0];
+    if (!latest) return;
+    const n = new Notification(`${latest.asked_by_name} asked a question`, {
+      body: latest.question_text.length > 120
+        ? latest.question_text.slice(0, 120) + '…'
+        : latest.question_text,
+      tag: `seam-question-${latest.id}`,
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch {
+    // Non-critical — silently ignore
+  }
 }
 
 function scheduleReconnect(code: string): void {
