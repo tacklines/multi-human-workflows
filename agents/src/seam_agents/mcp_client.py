@@ -20,7 +20,7 @@ class SeamMCPClient:
     agent_code: str
     agent_name: str = "seam-agent"
     _session: ClientSession | None = field(default=None, repr=False)
-    _cm: Any = field(default=None, repr=False)
+    _stdio_cm: Any = field(default=None, repr=False)
 
     async def connect(self) -> "SeamMCPClient":
         server_params = StdioServerParameters(
@@ -31,7 +31,8 @@ class SeamMCPClient:
                 "--database-url", settings.database_url,
             ],
         )
-        self._read, self._write = await stdio_client(server_params).__aenter__()
+        self._stdio_cm = stdio_client(server_params)
+        self._read, self._write = await self._stdio_cm.__aenter__()
         self._session = ClientSession(self._read, self._write)
         await self._session.__aenter__()
         await self._session.initialize()
@@ -40,10 +41,19 @@ class SeamMCPClient:
     async def disconnect(self):
         if self._session:
             await self._session.__aexit__(None, None, None)
+            self._session = None
+        if self._stdio_cm:
+            await self._stdio_cm.__aexit__(None, None, None)
+            self._stdio_cm = None
+
+    def _require_session(self) -> ClientSession:
+        if self._session is None:
+            raise RuntimeError("Not connected — call connect() first")
+        return self._session
 
     async def list_tools(self) -> list[dict]:
         """List available MCP tools."""
-        result = await self._session.list_tools()
+        result = await self._require_session().list_tools()
         return [
             {
                 "name": tool.name,
@@ -55,7 +65,7 @@ class SeamMCPClient:
 
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> str:
         """Call an MCP tool and return the text result."""
-        result = await self._session.call_tool(name, arguments or {})
+        result = await self._require_session().call_tool(name, arguments or {})
         parts = []
         for content in result.content:
             if hasattr(content, "text"):

@@ -48,6 +48,7 @@ def main():
     args = parser.parse_args()
 
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     client = SeamMCPClient(agent_code=args.agent_code, agent_name=args.name)
     cli_requirement = _parse_requirement(args)
 

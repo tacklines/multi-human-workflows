@@ -23,7 +23,7 @@ You are running **Seam-Plan** — the planning skill that takes a goal, explores
 
 - The backlog is already populated with well-defined tasks — just run `/seam-drive`
 - The goal is a single task that doesn't need decomposition — use `/seam create task <title>`
-- You need deep research before planning — run `/blossom` or `/gather` first, then pipe findings into `/seam-plan`
+- You need deep research before planning — run `/gather` first, then pipe findings into `/seam-plan`
 
 ## Overview
 

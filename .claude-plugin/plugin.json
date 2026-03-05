@@ -19,5 +19,5 @@
     "triage",
     "review"
   ],
-  "mcpServers": "./.mcp.json"
+  "mcpServers": "../.mcp.json"
 }

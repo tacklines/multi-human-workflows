@@ -144,10 +144,9 @@ def run_agent(
         config=config,
     )
 
-    # Return the last AI message content
+    # Return the last AI message that isn't a tool call
     for msg in reversed(result["messages"]):
-        if hasattr(msg, "content") and msg.content and not hasattr(msg, "tool_calls"):
-            return msg.content
-        if hasattr(msg, "content") and msg.content and hasattr(msg, "tool_calls") and not msg.tool_calls:
-            return msg.content
+        if hasattr(msg, "content") and msg.content:
+            if not getattr(msg, "tool_calls", None):
+                return msg.content
     return "(no response)"

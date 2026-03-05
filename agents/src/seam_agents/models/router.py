@@ -100,7 +100,12 @@ class ModelRouter:
             candidates = [m for m in candidates if _BUDGET_RANK[m.budget] >= min_rank]
 
         if not candidates:
-            # Relax filters and return best available with a warning
+            import logging
+            logging.getLogger(__name__).warning(
+                "All models filtered out by budget/context constraints — "
+                "relaxing filters to full available set: %s",
+                [m.name for m in available],
+            )
             candidates = list(available)
 
         # Step 4: Score and rank

@@ -134,7 +134,7 @@ Parse `$ARGUMENTS` to determine the mode. Support these patterns:
    - No directed_to by default (open question to any human).
    - Set a reasonable TTL (900 seconds / 15 minutes) unless the user specifies otherwise.
 3. Report the question ID.
-4. Tell the user: "Question posted. I'll check for an answer when needed. You can also run `/seam check <question-id>` to check manually."
+4. Tell the user: "Question posted. I'll check for an answer when needed. You can also run `/seam status` to see pending questions."
 
 ### Mode: note
 

@@ -22,7 +22,7 @@ You are running **Seam-Drive** — a sustained autonomous implementation loop wh
 ## Don't Use When
 
 - The session has no tasks yet — run `/seam-plan` first
-- You need to explore or research before implementing — use `/seam` or `/blossom`
+- You need to explore or research before implementing — use `/seam` or `/gather`
 - The tasks require human design decisions that haven't been made — too many questions will stall the loop
 
 ## Overview

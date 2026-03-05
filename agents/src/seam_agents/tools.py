@@ -11,12 +11,13 @@ from pydantic import BaseModel, Field
 from seam_agents.mcp_client import SeamMCPClient
 
 
-def mcp_tools_from_client(client: SeamMCPClient) -> list[StructuredTool]:
+def mcp_tools_from_client(client: SeamMCPClient, loop: asyncio.AbstractEventLoop | None = None) -> list[StructuredTool]:
     """Convert MCP tool definitions into LangChain StructuredTools.
 
     Runs the async list_tools call and builds a sync wrapper for each tool.
     """
-    loop = asyncio.get_event_loop()
+    if loop is None:
+        loop = asyncio.get_event_loop()
     mcp_tools = loop.run_until_complete(client.list_tools())
 
     lc_tools = []
