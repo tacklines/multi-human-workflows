@@ -69,6 +69,21 @@ impl ConnectionManager {
             .unwrap_or_default()
     }
 
+    /// Returns participant IDs that are currently online across all sessions.
+    pub fn all_online_participant_ids(&self) -> std::collections::HashSet<uuid::Uuid> {
+        let mut ids = std::collections::HashSet::new();
+        for entry in self.sessions.iter() {
+            for conn in entry.value().iter() {
+                if let Some(ref pid) = conn.participant_id {
+                    if let Ok(uuid) = pid.parse::<uuid::Uuid>() {
+                        ids.insert(uuid);
+                    }
+                }
+            }
+        }
+        ids
+    }
+
     pub async fn broadcast_to_session(&self, session_code: &str, msg: &serde_json::Value) {
         let text = serde_json::to_string(msg).unwrap_or_default();
         if let Some(conns) = self.sessions.get(session_code) {

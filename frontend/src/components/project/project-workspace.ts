@@ -24,6 +24,8 @@ import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 
 import '../plans/plan-list.js';
 import '../plans/plan-detail.js';
+import '../agents/agent-list.js';
+import '../agents/agent-detail.js';
 // Lazy-loaded when graph tab is shown (Three.js is ~800KB)
 const ensureGraphLoaded = () => import('../graph/dependency-graph.js');
 
@@ -563,6 +565,7 @@ export class ProjectWorkspace extends LitElement {
   @state() private _planCount = 0;
   @state() private _workspaces: WorkspaceView[] = [];
   @state() private _selectedPlanId: string | null = null;
+  @state() private _selectedAgentId: string | null = null;
   @state() private _loading = true;
   @state() private _error = '';
   @state() private _showNewSession = false;
@@ -598,6 +601,10 @@ export class ProjectWorkspace extends LitElement {
       if (params.planId) {
         this._activeTab = 'plans';
         this._selectedPlanId = params.planId;
+      }
+      if (params.agentId) {
+        this._activeTab = 'agents';
+        this._selectedAgentId = params.agentId;
       }
     }
     this._loadProject();
@@ -764,6 +771,7 @@ export class ProjectWorkspace extends LitElement {
               ${this._renderWorkspaces()}
               ${this._renderTasks()}
             ` : nothing}
+            ${this._activeTab === 'agents' ? this._renderAgents() : nothing}
             ${this._activeTab === 'settings' ? this._renderSettings() : nothing}
           </div>
         `}
@@ -1018,6 +1026,7 @@ export class ProjectWorkspace extends LitElement {
     return html`
       <nav class="tab-nav">
         ${tab('overview', 'Overview', 'grid-1x2')}
+        ${tab('agents', 'Agents', 'robot')}
         ${tab('graph', 'Graph', 'diagram-3')}
         ${tab('settings', 'Settings', 'gear')}
       </nav>
@@ -1081,6 +1090,32 @@ export class ProjectWorkspace extends LitElement {
     } finally {
       this._settingsSaving = false;
     }
+  }
+
+  private _renderAgents() {
+    return html`
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">
+            <sl-icon name="robot"></sl-icon>
+            Agents
+          </span>
+        </div>
+
+        ${this._selectedAgentId ? html`
+          <agent-detail
+            .projectId=${this.projectId}
+            .agentId=${this._selectedAgentId}
+            @agent-back=${() => { this._selectedAgentId = null; window.history.replaceState(null, '', `/projects/${this.projectId}/agents`); }}
+          ></agent-detail>
+        ` : html`
+          <agent-list
+            .projectId=${this.projectId}
+            @agent-select=${(e: CustomEvent) => { this._selectedAgentId = e.detail.agentId; window.history.replaceState(null, '', `/projects/${this.projectId}/agents/${e.detail.agentId}`); }}
+          ></agent-list>
+        `}
+      </div>
+    `;
   }
 
   private _renderSettings() {

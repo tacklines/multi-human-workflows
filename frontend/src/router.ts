@@ -32,6 +32,11 @@ export function initRouter(outlet: HTMLElement): Router {
       action: async () => { await import('./components/project/project-workspace.js'); },
     },
     {
+      path: '/projects/:id/agents/:agentId',
+      component: 'project-workspace',
+      action: async () => { await import('./components/project/project-workspace.js'); },
+    },
+    {
       path: '/sessions/:code',
       component: 'session-lobby',
       action: async () => { await import('./components/session/session-lobby.js'); },

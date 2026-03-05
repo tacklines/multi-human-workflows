@@ -462,3 +462,71 @@ pub struct AgentJoinResponse {
     pub participant_id: Uuid,
     pub sponsor_name: String,
 }
+
+// --- Project Agent Views ---
+
+#[derive(Debug, Serialize)]
+pub struct ProjectAgentView {
+    pub id: Uuid,
+    pub display_name: String,
+    pub session_id: Uuid,
+    pub session_code: String,
+    pub session_name: Option<String>,
+    pub sponsor_name: Option<String>,
+    pub client_name: Option<String>,
+    pub client_version: Option<String>,
+    pub model: Option<String>,
+    pub joined_at: DateTime<Utc>,
+    pub disconnected_at: Option<DateTime<Utc>>,
+    pub is_online: bool,
+    /// Task currently assigned to this agent (if any)
+    pub current_task: Option<AgentTaskSummary>,
+    /// Workspace associated with this agent (if any)
+    pub workspace: Option<AgentWorkspaceSummary>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AgentTaskSummary {
+    pub id: Uuid,
+    pub ticket_id: String,
+    pub title: String,
+    pub status: TaskStatus,
+    pub task_type: TaskType,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AgentWorkspaceSummary {
+    pub id: Uuid,
+    pub status: WorkspaceStatus,
+    pub coder_workspace_name: Option<String>,
+    pub branch: Option<String>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProjectAgentDetailView {
+    pub agent: ProjectAgentView,
+    /// Recent activity/domain events related to this agent
+    pub recent_activity: Vec<AgentActivityItem>,
+    /// Comments made by this agent
+    pub recent_comments: Vec<AgentCommentView>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AgentActivityItem {
+    pub event_type: String,
+    pub summary: String,
+    pub metadata: serde_json::Value,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AgentCommentView {
+    pub id: Uuid,
+    pub task_id: Uuid,
+    pub task_title: String,
+    pub ticket_id: String,
+    pub content: String,
+    pub created_at: DateTime<Utc>,
+}

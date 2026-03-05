@@ -135,6 +135,8 @@ async fn main() {
         .route("/api/sessions/{code}/questions/{question_id}/cancel", post(routes::questions::cancel_question))
         // Activity
         .route("/api/sessions/{code}/activity", get(routes::activity::list_activity))
+        // Messages
+        .route("/api/sessions/{code}/participants/{participant_id}/messages", get(routes::messages::list_messages).post(routes::messages::send_message))
         // Workspaces (Coder integration)
         .route("/api/projects/{project_id}/workspaces", get(routes::workspaces::list_workspaces).post(routes::workspaces::create_workspace))
         .route("/api/projects/{project_id}/workspaces/{workspace_id}", get(routes::workspaces::get_workspace).delete(routes::workspaces::destroy_workspace))
@@ -146,6 +148,9 @@ async fn main() {
         // Agent API
         .route("/api/agent/join", post(routes::agent::agent_join))
         .route("/api/sessions/{code}/agents", post(routes::agents::launch_agent))
+        // Project agents
+        .route("/api/projects/{project_id}/agents", get(routes::agents::list_project_agents))
+        .route("/api/projects/{project_id}/agents/{agent_id}", get(routes::agents::get_project_agent))
         // WebSocket
         .route("/ws", get(ws::handler::ws_upgrade))
         // OAuth discovery for MCP clients

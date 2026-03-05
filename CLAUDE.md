@@ -61,7 +61,7 @@ Agents connect via Streamable HTTP at `/mcp`. Two auth methods:
 
 For local dev, set `MCP_AUTH_DISABLED=true` (or use `just dev-noauth`) to skip auth on `/mcp`.
 
-After connecting, agents call `join_session` with their agent code to enter a session. Authenticated agents get a persistent identity via the `agents` table (upserted on join).
+After connecting, agents call `join_session` with their agent code (plus optional `client_name`, `client_version`, `model`) to enter a session. Each join creates a new participant record with composition metadata — agents have no persistent identity table.
 
 ## Frontend Routing
 
@@ -72,6 +72,7 @@ Uses `@vaadin/router` (History API, not hash-based). Route config in `frontend/s
 - `/projects/:id/:tab` — project workspace tab (graph, settings, tasks, plans, agents)
 - `/projects/:id/tasks/:ticketId` — deep-link to task
 - `/projects/:id/plans/:planId` — deep-link to plan
+- `/projects/:id/agents/:agentId` — deep-link to agent detail
 - `/sessions/:code` — session lobby
 - `/sessions/:code/tasks/:ticketId` — in-session task deep-link
 
