@@ -226,6 +226,7 @@ export class SessionLobby extends LitElement {
   @state() private _sessionName = '';
 
   private _unsubscribe: (() => void) | null = null;
+  private _boundHashChange = () => this._onHashChange();
 
   connectedCallback() {
     super.connectedCallback();
@@ -242,6 +243,7 @@ export class SessionLobby extends LitElement {
         }
       }
     });
+    window.addEventListener('hashchange', this._boundHashChange);
     if (this._sessionState) {
       this._lobbyState = 'in-session';
     } else {
@@ -252,6 +254,13 @@ export class SessionLobby extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsubscribe?.();
+    window.removeEventListener('hashchange', this._boundHashChange);
+  }
+
+  private _onHashChange() {
+    // If already in a session, ignore hash changes
+    if (this._lobbyState === 'in-session') return;
+    this._tryRejoinFromHash();
   }
 
   private async _tryRejoinFromHash() {

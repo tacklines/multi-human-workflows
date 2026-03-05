@@ -1,6 +1,8 @@
 use axum::{
+    Json,
     extract::FromRequestParts,
     http::{request::Parts, StatusCode},
+    response::{IntoResponse, Response},
 };
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
@@ -109,11 +111,16 @@ impl From<AuthError> for StatusCode {
     }
 }
 
+/// JSON error response for auth failures
+fn auth_error_response(status: StatusCode, error: &str, message: &str) -> Response {
+    (status, Json(serde_json::json!({ "error": error, "message": message }))).into_response()
+}
+
 /// Extractor that validates the Bearer token and provides Claims
 pub struct AuthUser(pub Claims);
 
 impl FromRequestParts<Arc<crate::AppState>> for AuthUser {
-    type Rejection = StatusCode;
+    type Rejection = Response;
 
     async fn from_request_parts(
         parts: &mut Parts,
@@ -122,15 +129,29 @@ impl FromRequestParts<Arc<crate::AppState>> for AuthUser {
         let auth_header = parts.headers
             .get("authorization")
             .and_then(|v| v.to_str().ok())
-            .ok_or(StatusCode::UNAUTHORIZED)?;
+            .ok_or_else(|| auth_error_response(
+                StatusCode::UNAUTHORIZED, "missing_token", "Authorization header required"
+            ))?;
 
         let token = auth_header
             .strip_prefix("Bearer ")
-            .ok_or(StatusCode::UNAUTHORIZED)?;
+            .ok_or_else(|| auth_error_response(
+                StatusCode::UNAUTHORIZED, "invalid_header", "Expected Bearer token"
+            ))?;
 
         let claims = state.jwks.validate_token(token)
             .await
-            .map_err(StatusCode::from)?;
+            .map_err(|e| match e {
+                AuthError::InvalidToken => auth_error_response(
+                    StatusCode::UNAUTHORIZED, "invalid_token", "Token is invalid or expired"
+                ),
+                AuthError::MissingToken => auth_error_response(
+                    StatusCode::UNAUTHORIZED, "missing_token", "Authorization header required"
+                ),
+                AuthError::KeycloakUnavailable => auth_error_response(
+                    StatusCode::SERVICE_UNAVAILABLE, "auth_unavailable", "Authentication service unavailable"
+                ),
+            })?;
 
         Ok(AuthUser(claims))
     }
