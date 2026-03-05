@@ -3,7 +3,10 @@ export type TaskStatus = 'open' | 'in_progress' | 'done' | 'closed';
 
 export interface TaskView {
   id: string;
-  session_id: string;
+  session_id: string | null;
+  project_id: string;
+  ticket_number: number;
+  ticket_id: string;
   parent_id: string | null;
   task_type: TaskType;
   title: string;
@@ -21,6 +24,7 @@ export interface TaskView {
 
 export interface TaskSummaryView {
   id: string;
+  ticket_id: string;
   task_type: TaskType;
   title: string;
   status: TaskStatus;

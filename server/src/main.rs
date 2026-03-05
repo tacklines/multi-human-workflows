@@ -1,5 +1,6 @@
 mod auth;
 mod db;
+#[allow(dead_code)]
 mod models;
 mod routes;
 mod ws;

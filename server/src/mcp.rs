@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 mod models;
 
 use clap::Parser;
@@ -6,13 +7,14 @@ use rmcp::{
     ServerHandler,
     ServiceExt,
     handler::server::tool::ToolRouter,
-    model::{CallToolResult, Content},
+    model::{CallToolResult, Content, ServerCapabilities, ServerInfo},
     tool, tool_router, tool_handler,
     handler::server::wrapper::Parameters,
     schemars::JsonSchema,
 };
 use serde::Deserialize;
 use sqlx::PgPool;
+use std::sync::Mutex;
 use uuid::Uuid;
 use chrono::Utc;
 use models::{Task, TaskComment, TaskStatus};
@@ -119,12 +121,17 @@ struct CloseTaskParams {
 
 // --- MCP Server ---
 
-#[derive(Clone)]
-struct SeamMcp {
-    db: PgPool,
+struct SessionState {
     session_code: Option<String>,
     participant_id: Option<Uuid>,
     sponsor_name: Option<String>,
+    project_id: Option<Uuid>,
+    ticket_prefix: Option<String>,
+}
+
+struct SeamMcp {
+    db: PgPool,
+    state: Mutex<SessionState>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -133,9 +140,13 @@ impl SeamMcp {
     fn new(db: PgPool) -> Self {
         Self {
             db,
-            session_code: None,
-            participant_id: None,
-            sponsor_name: None,
+            state: Mutex::new(SessionState {
+                session_code: None,
+                participant_id: None,
+                sponsor_name: None,
+                project_id: None,
+                ticket_prefix: None,
+            }),
             tool_router: Self::tool_router(),
         }
     }
@@ -146,9 +157,41 @@ impl SeamMcp {
         Parameters(params): Parameters<JoinSessionParams>,
     ) -> Result<CallToolResult, McpError> {
         match self.do_agent_join(&params.code, params.display_name.as_deref()).await {
-            Ok(result) => Ok(CallToolResult::success(vec![Content::text(
-                serde_json::to_string_pretty(&result).unwrap(),
-            )])),
+            Ok(result) => {
+                // Persist session state so subsequent tools work
+                let session_code = result["session"]["code"].as_str().map(|s| s.to_string());
+                let participant_id = result["participant_id"].as_str()
+                    .and_then(|s| Uuid::parse_str(s).ok());
+                let sponsor_name = result["sponsor_name"].as_str().map(|s| s.to_string());
+
+                // Fetch project info from session
+                let mut project_id = None;
+                let mut ticket_prefix = None;
+                if let Some(ref code) = session_code {
+                    if let Ok(Some(session)) = sqlx::query_as::<_, Session>(
+                        "SELECT * FROM sessions WHERE code = $1"
+                    ).bind(code).fetch_optional(&self.db).await {
+                        if let Ok(Some(project)) = sqlx::query_as::<_, models::Project>(
+                            "SELECT * FROM projects WHERE id = $1"
+                        ).bind(session.project_id).fetch_optional(&self.db).await {
+                            project_id = Some(project.id);
+                            ticket_prefix = Some(project.ticket_prefix);
+                        }
+                    }
+                }
+
+                if let Ok(mut state) = self.state.lock() {
+                    state.session_code = session_code;
+                    state.participant_id = participant_id;
+                    state.sponsor_name = sponsor_name;
+                    state.project_id = project_id;
+                    state.ticket_prefix = ticket_prefix;
+                }
+
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result).unwrap(),
+                )]))
+            }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(e)])),
         }
     }
@@ -158,7 +201,7 @@ impl SeamMcp {
         &self,
         Parameters(params): Parameters<GetSessionParams>,
     ) -> Result<CallToolResult, McpError> {
-        let code = match params.code.or_else(|| self.session_code.clone()) {
+        let code = match params.code.or_else(|| self.state.lock().ok().and_then(|s| s.session_code.clone())) {
             Some(c) => c,
             None => return Ok(CallToolResult::error(vec![Content::text(
                 "No session code provided and not currently in a session. Use join_session first.",
@@ -175,16 +218,17 @@ impl SeamMcp {
 
     #[tool(description = "Get your own participant info including ID, session code, and sponsor name. Only available after joining a session.")]
     async fn my_info(&self) -> Result<CallToolResult, McpError> {
-        let Some(ref session_code) = self.session_code else {
+        let state = self.state.lock().map_err(|_| McpError::internal_error("Lock poisoned", None))?;
+        let Some(ref session_code) = state.session_code else {
             return Ok(CallToolResult::error(vec![Content::text(
                 "Not in a session. Use join_session first.",
             )]));
         };
 
         let info = serde_json::json!({
-            "participant_id": self.participant_id,
+            "participant_id": state.participant_id,
             "session_code": session_code,
-            "sponsor_name": self.sponsor_name,
+            "sponsor_name": state.sponsor_name,
         });
 
         Ok(CallToolResult::success(vec![Content::text(
@@ -192,12 +236,16 @@ impl SeamMcp {
         )]))
     }
 
-    #[tool(description = "Create a task in the current session. Types: epic, story, task, subtask, bug. Use parent_id for hierarchy (e.g. stories under epics).")]
+    #[tool(description = "Create a task in the current session's project. Types: epic, story, task, subtask, bug. Use parent_id for hierarchy (e.g. stories under epics).")]
     async fn create_task(
         &self,
         Parameters(params): Parameters<CreateTaskParams>,
     ) -> Result<CallToolResult, McpError> {
         let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let project_id = match self.require_project() {
             Ok(id) => id,
             Err(e) => return Ok(e),
         };
@@ -214,35 +262,41 @@ impl SeamMcp {
         }
 
         let parent_id = match params.parent_id {
-            Some(ref s) => Some(Uuid::parse_str(s).map_err(|_| ())
-                .map_err(|_| ())
-                .ok()
-                .ok_or("Invalid parent_id UUID")),
-            None => None,
-        };
-        let parent_id = match parent_id {
-            Some(Ok(id)) => Some(id),
-            Some(Err(e)) => return Ok(CallToolResult::error(vec![Content::text(e)])),
+            Some(ref s) => match Uuid::parse_str(s) {
+                Ok(id) => Some(id),
+                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid parent_id UUID")])),
+            },
             None => None,
         };
 
         let assigned_to = match params.assigned_to {
-            Some(ref s) => Some(Uuid::parse_str(s).map_err(|_| "Invalid assigned_to UUID")),
+            Some(ref s) => match Uuid::parse_str(s) {
+                Ok(id) => Some(id),
+                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid assigned_to UUID")])),
+            },
             None => None,
         };
-        let assigned_to = match assigned_to {
-            Some(Ok(id)) => Some(id),
-            Some(Err(e)) => return Ok(CallToolResult::error(vec![Content::text(e)])),
-            None => None,
+
+        // Atomically allocate next ticket number
+        let ticket_number: i32 = match sqlx::query_scalar(
+            "UPDATE projects SET next_ticket_number = next_ticket_number + 1 WHERE id = $1 RETURNING next_ticket_number - 1"
+        )
+        .bind(project_id)
+        .fetch_one(&self.db)
+        .await {
+            Ok(n) => n,
+            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Failed to allocate ticket number: {e}"))])),
         };
 
         let task_id = Uuid::new_v4();
         match sqlx::query(
-            "INSERT INTO tasks (id, session_id, parent_id, task_type, title, description, status, assigned_to, created_by, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, 'open', $7, $8, NOW(), NOW())"
+            "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, assigned_to, created_by, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, NOW(), NOW())"
         )
         .bind(task_id)
         .bind(session_id)
+        .bind(project_id)
+        .bind(ticket_number)
         .bind(parent_id)
         .bind(&params.task_type)
         .bind(&params.title)
@@ -264,17 +318,18 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "List tasks in the current session. Filter by task_type, status, parent_id, or assigned_to.")]
+    #[tool(description = "List tasks in the current project. Filter by task_type, status, parent_id, or assigned_to.")]
     async fn list_tasks(
         &self,
         Parameters(params): Parameters<ListTasksParams>,
     ) -> Result<CallToolResult, McpError> {
-        let session_id = match self.require_session().await {
+        let project_id = match self.require_project() {
             Ok(id) => id,
             Err(e) => return Ok(e),
         };
+        let ticket_prefix = self.get_ticket_prefix();
 
-        let mut query = String::from("SELECT * FROM tasks WHERE session_id = $1");
+        let mut query = String::from("SELECT * FROM tasks WHERE project_id = $1");
         let mut param_idx = 2u32;
 
         // Build dynamic query with filters
@@ -315,7 +370,7 @@ impl SeamMcp {
         query.push_str(" ORDER BY created_at");
 
         // Use raw query with dynamic bindings
-        let mut q = sqlx::query_as::<_, Task>(&query).bind(session_id);
+        let mut q = sqlx::query_as::<_, Task>(&query).bind(project_id);
         for val in &bind_values {
             q = q.bind(val);
         }
@@ -347,6 +402,8 @@ impl SeamMcp {
                 let summary: Vec<serde_json::Value> = tasks.iter().map(|t| {
                     serde_json::json!({
                         "id": t.id,
+                        "ticket_id": format!("{}-{}", ticket_prefix, t.ticket_number),
+                        "ticket_number": t.ticket_number,
                         "task_type": serde_json::to_value(&t.task_type).unwrap(),
                         "title": t.title,
                         "status": serde_json::to_value(&t.status).unwrap(),
@@ -559,25 +616,25 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Get a summary of task counts by status and type for the current session. Useful for orientation.")]
+    #[tool(description = "Get a summary of task counts by status and type for the current project. Useful for orientation.")]
     async fn task_summary(&self) -> Result<CallToolResult, McpError> {
-        let session_id = match self.require_session().await {
+        let project_id = match self.require_project() {
             Ok(id) => id,
             Err(e) => return Ok(e),
         };
 
         let by_status: Vec<(String, i64)> = sqlx::query_as(
-            "SELECT status::text, COUNT(*) FROM tasks WHERE session_id = $1 GROUP BY status"
+            "SELECT status::text, COUNT(*) FROM tasks WHERE project_id = $1 GROUP BY status"
         )
-        .bind(session_id)
+        .bind(project_id)
         .fetch_all(&self.db)
         .await
         .unwrap_or_default();
 
         let by_type: Vec<(String, i64)> = sqlx::query_as(
-            "SELECT task_type::text, COUNT(*) FROM tasks WHERE session_id = $1 GROUP BY task_type"
+            "SELECT task_type::text, COUNT(*) FROM tasks WHERE project_id = $1 GROUP BY task_type"
         )
-        .bind(session_id)
+        .bind(project_id)
         .fetch_all(&self.db)
         .await
         .unwrap_or_default();
@@ -630,29 +687,64 @@ impl SeamMcp {
 }
 
 #[tool_handler]
-impl ServerHandler for SeamMcp {}
+impl ServerHandler for SeamMcp {
+    fn get_info(&self) -> ServerInfo {
+        let mut info = ServerInfo::default();
+        info.capabilities = ServerCapabilities::builder()
+            .enable_tools()
+            .build();
+        info.server_info.name = "seam-mcp".into();
+        info.server_info.version = env!("CARGO_PKG_VERSION").into();
+        info.instructions = Some(
+            "Seam collaborative session server. Use join_session with an agent code to connect, then manage tasks with create_task, list_tasks, update_task, etc.".into()
+        );
+        info
+    }
+}
 
 // --- Internal helpers ---
 impl SeamMcp {
+    fn require_project(&self) -> Result<Uuid, CallToolResult> {
+        self.state.lock()
+            .ok()
+            .and_then(|s| s.project_id)
+            .ok_or_else(|| {
+                CallToolResult::error(vec![Content::text(
+                    "Not in a session. Use join_session first.",
+                )])
+            })
+    }
+
+    fn get_ticket_prefix(&self) -> String {
+        self.state.lock()
+            .ok()
+            .and_then(|s| s.ticket_prefix.clone())
+            .unwrap_or_else(|| "TASK".to_string())
+    }
+
     fn require_participant(&self) -> Result<Uuid, CallToolResult> {
-        self.participant_id.ok_or_else(|| {
-            CallToolResult::error(vec![Content::text(
-                "Not in a session. Use join_session first.",
-            )])
-        })
+        self.state.lock()
+            .ok()
+            .and_then(|s| s.participant_id)
+            .ok_or_else(|| {
+                CallToolResult::error(vec![Content::text(
+                    "Not in a session. Use join_session first.",
+                )])
+            })
     }
 
     async fn require_session(&self) -> Result<Uuid, CallToolResult> {
-        let Some(ref code) = self.session_code else {
-            return Err(CallToolResult::error(vec![Content::text(
+        let code = self.state.lock()
+            .ok()
+            .and_then(|s| s.session_code.clone())
+            .ok_or_else(|| CallToolResult::error(vec![Content::text(
                 "Not in a session. Use join_session first.",
-            )]));
-        };
+            )]))?;
 
         let session: Option<Session> = sqlx::query_as(
             "SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL",
         )
-        .bind(code)
+        .bind(&code)
         .fetch_optional(&self.db)
         .await
         .map_err(|_| CallToolResult::error(vec![Content::text("Database error")]))?;
@@ -670,8 +762,14 @@ impl SeamMcp {
             .map_err(|e| format!("Database error: {e}"))?
             .ok_or_else(|| "Task not found".to_string())?;
 
+        let ticket_prefix = self.get_ticket_prefix();
+        let ticket_id = format!("{}-{}", ticket_prefix, task.ticket_number);
+
         Ok(serde_json::json!({
             "id": task.id,
+            "ticket_id": ticket_id,
+            "ticket_number": task.ticket_number,
+            "project_id": task.project_id,
             "session_id": task.session_id,
             "parent_id": task.parent_id,
             "task_type": serde_json::to_value(&task.task_type).unwrap(),
@@ -695,8 +793,14 @@ impl SeamMcp {
             .map_err(|e| format!("Database error: {e}"))?
             .ok_or_else(|| "Task not found".to_string())?;
 
+        let ticket_prefix = self.get_ticket_prefix();
+        let ticket_id = format!("{}-{}", ticket_prefix, task.ticket_number);
+
         let mut task_json = serde_json::json!({
             "id": task.id,
+            "ticket_id": ticket_id,
+            "ticket_number": task.ticket_number,
+            "project_id": task.project_id,
             "session_id": task.session_id,
             "parent_id": task.parent_id,
             "task_type": serde_json::to_value(&task.task_type).unwrap(),
@@ -720,6 +824,7 @@ impl SeamMcp {
             {
                 task_json["parent"] = serde_json::json!({
                     "id": parent.id,
+                    "ticket_id": format!("{}-{}", ticket_prefix, parent.ticket_number),
                     "task_type": serde_json::to_value(&parent.task_type).unwrap(),
                     "title": parent.title,
                     "status": serde_json::to_value(&parent.status).unwrap(),
@@ -757,6 +862,7 @@ impl SeamMcp {
         let child_views: Vec<serde_json::Value> = children.iter().map(|t| {
             serde_json::json!({
                 "id": t.id,
+                "ticket_id": format!("{}-{}", ticket_prefix, t.ticket_number),
                 "task_type": serde_json::to_value(&t.task_type).unwrap(),
                 "title": t.title,
                 "status": serde_json::to_value(&t.status).unwrap(),
@@ -928,7 +1034,7 @@ async fn main() {
         .await
         .expect("Failed to connect to database");
 
-    let mut mcp = SeamMcp::new(db);
+    let mcp = SeamMcp::new(db);
 
     // Auto-join if agent code provided
     if let Some(ref code) = cli.agent_code {
@@ -945,9 +1051,27 @@ async fn main() {
                     eprintln!("[seam-mcp] Sponsored by: {}", name);
                 }
 
-                mcp.session_code = Some(session_code);
-                mcp.participant_id = participant_id;
-                mcp.sponsor_name = sponsor_name;
+                // Fetch project info
+                let mut project_id = None;
+                let mut ticket_prefix = None;
+                if let Ok(Some(session)) = sqlx::query_as::<_, models::Session>(
+                    "SELECT * FROM sessions WHERE code = $1"
+                ).bind(&session_code).fetch_optional(&mcp.db).await {
+                    if let Ok(Some(project)) = sqlx::query_as::<_, models::Project>(
+                        "SELECT * FROM projects WHERE id = $1"
+                    ).bind(session.project_id).fetch_optional(&mcp.db).await {
+                        project_id = Some(project.id);
+                        ticket_prefix = Some(project.ticket_prefix);
+                    }
+                }
+
+                if let Ok(mut state) = mcp.state.lock() {
+                    state.session_code = Some(session_code);
+                    state.participant_id = participant_id;
+                    state.sponsor_name = sponsor_name;
+                    state.project_id = project_id;
+                    state.ticket_prefix = ticket_prefix;
+                }
             }
             Err(e) => {
                 eprintln!("[seam-mcp] Failed to auto-join: {e}");

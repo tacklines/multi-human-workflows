@@ -11,6 +11,29 @@ use crate::auth::AuthUser;
 use crate::models::*;
 use crate::AppState;
 
+async fn resolve_project(
+    db: &sqlx::PgPool,
+    project_id: Uuid,
+) -> Result<Project, StatusCode> {
+    sqlx::query_as::<_, Project>("SELECT * FROM projects WHERE id = $1")
+        .bind(project_id)
+        .fetch_optional(db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+fn task_summary_view(t: &Task, ticket_prefix: &str) -> TaskSummaryView {
+    TaskSummaryView {
+        id: t.id,
+        ticket_id: format!("{}-{}", ticket_prefix, t.ticket_number),
+        task_type: t.task_type,
+        title: t.title.clone(),
+        status: t.status,
+        assigned_to: t.assigned_to,
+    }
+}
+
 // --- DTOs ---
 
 #[derive(Debug, Deserialize)]
@@ -58,7 +81,10 @@ pub struct ListTasksQuery {
 #[derive(Debug, Serialize)]
 pub struct TaskView {
     pub id: Uuid,
-    pub session_id: Uuid,
+    pub session_id: Option<Uuid>,
+    pub project_id: Uuid,
+    pub ticket_number: i32,
+    pub ticket_id: String,
     pub parent_id: Option<Uuid>,
     pub task_type: TaskType,
     pub title: String,
@@ -86,6 +112,7 @@ pub struct TaskDetailView {
 #[derive(Debug, Serialize)]
 pub struct TaskSummaryView {
     pub id: Uuid,
+    pub ticket_id: String,
     pub task_type: TaskType,
     pub title: String,
     pub status: TaskStatus,
@@ -100,11 +127,15 @@ pub struct CommentView {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-impl From<Task> for TaskView {
-    fn from(t: Task) -> Self {
+impl TaskView {
+    fn from_task(t: Task, ticket_prefix: &str) -> Self {
+        let ticket_id = format!("{}-{}", ticket_prefix, t.ticket_number);
         Self {
             id: t.id,
             session_id: t.session_id,
+            project_id: t.project_id,
+            ticket_number: t.ticket_number,
+            ticket_id,
             parent_id: t.parent_id,
             task_type: t.task_type,
             title: t.title,
@@ -173,13 +204,27 @@ pub async fn create_task(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    // Atomically allocate next ticket number
+    let (ticket_number, ticket_prefix): (i32, String) = sqlx::query_as(
+        "UPDATE projects SET next_ticket_number = next_ticket_number + 1 WHERE id = $1 RETURNING next_ticket_number - 1, ticket_prefix"
+    )
+    .bind(session.project_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to allocate ticket number: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, parent_id, task_type, title, description, status, assigned_to, created_by, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'open', $7, $8, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, assigned_to, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, NOW(), NOW())"
     )
     .bind(task_id)
     .bind(session.id)
+    .bind(session.project_id)
+    .bind(ticket_number)
     .bind(req.parent_id)
     .bind(&req.task_type)
     .bind(&req.title)
@@ -199,8 +244,7 @@ pub async fn create_task(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let view: TaskView = task.into();
-    // WebSocket broadcast handled by PG trigger → NOTIFY → listener
+    let view = TaskView::from_task(task, &ticket_prefix);
     Ok(Json(view))
 }
 
@@ -210,9 +254,10 @@ pub async fn list_tasks(
     Query(query): Query<ListTasksQuery>,
 ) -> Result<Json<Vec<TaskView>>, StatusCode> {
     let session = resolve_session(&state.db, &session_code).await?;
+    let project = resolve_project(&state.db, session.project_id).await?;
 
-    // Build dynamic query
-    let mut sql = String::from("SELECT * FROM tasks WHERE session_id = $1");
+    // Query by project (tasks persist across sessions)
+    let mut sql = String::from("SELECT * FROM tasks WHERE project_id = $1");
     let mut bind_values: Vec<String> = vec![];
     let mut idx = 2u32;
 
@@ -250,7 +295,7 @@ pub async fn list_tasks(
 
     sql.push_str(" ORDER BY created_at");
 
-    let mut q = sqlx::query_as::<_, Task>(&sql).bind(session.id);
+    let mut q = sqlx::query_as::<_, Task>(&sql).bind(project.id);
     for val in &bind_values {
         q = q.bind(val);
     }
@@ -284,7 +329,7 @@ pub async fn list_tasks(
 
     let views: Vec<TaskView> = tasks.into_iter().map(|t| {
         let id = t.id;
-        let mut view: TaskView = t.into();
+        let mut view = TaskView::from_task(t, &project.ticket_prefix);
         view.child_count = *child_map.get(&id).unwrap_or(&0);
         view.comment_count = *comment_map.get(&id).unwrap_or(&0);
         view
@@ -303,6 +348,9 @@ pub async fn get_task(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
+
+    let project = resolve_project(&state.db, task.project_id).await?;
+    let prefix = &project.ticket_prefix;
 
     let parent: Option<Task> = if let Some(pid) = task.parent_id {
         sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
@@ -331,27 +379,15 @@ pub async fn get_task(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(TaskDetailView {
-        task: task.into(),
-        parent: parent.map(|p| TaskSummaryView {
-            id: p.id,
-            task_type: p.task_type,
-            title: p.title,
-            status: p.status,
-            assigned_to: p.assigned_to,
-        }),
+        task: TaskView::from_task(task, prefix),
+        parent: parent.map(|p| task_summary_view(&p, prefix)),
         comments: comments.into_iter().map(|c| CommentView {
             id: c.id,
             author_id: c.author_id,
             content: c.content,
             created_at: c.created_at,
         }).collect(),
-        children: children.into_iter().map(|t| TaskSummaryView {
-            id: t.id,
-            task_type: t.task_type,
-            title: t.title,
-            status: t.status,
-            assigned_to: t.assigned_to,
-        }).collect(),
+        children: children.iter().map(|t| task_summary_view(t, prefix)).collect(),
     }))
 }
 
@@ -368,6 +404,8 @@ pub async fn update_task(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
+    let project = resolve_project(&state.db, task.project_id).await?;
+
     let title = req.title.as_deref().unwrap_or(&task.title);
     let description = match &req.description {
         Some(d) => Some(d.as_str()),
@@ -380,8 +418,8 @@ pub async fn update_task(
         TaskStatus::Closed => "closed",
     });
     let assigned_to = match req.assigned_to {
-        Some(v) => v,            // explicitly provided (could be Some(id) or None to unassign)
-        None => task.assigned_to, // field absent — keep current
+        Some(v) => v,
+        None => task.assigned_to,
     };
     let parent_id = req.parent_id.or(task.parent_id);
     let commit_sha = req.commit_sha.as_deref().or(task.commit_sha.as_deref());
@@ -416,8 +454,7 @@ pub async fn update_task(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let view: TaskView = updated.into();
-    // WebSocket broadcast handled by PG trigger → NOTIFY → listener
+    let view = TaskView::from_task(updated, &project.ticket_prefix);
     Ok(Json(view))
 }
 
@@ -449,15 +486,18 @@ pub async fn add_comment(
     let user = crate::db::upsert_user(&state.db, &claims).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Find participant in task's session
-    let task: Task = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+    // Verify task exists
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1)")
         .bind(task_id)
-        .fetch_optional(&state.db)
+        .fetch_one(&state.db)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !exists {
+        return Err(StatusCode::NOT_FOUND);
+    }
 
-    let participant = resolve_participant(&state.db, task.session_id, user.id).await?;
+    let session = resolve_session(&state.db, &_session_code).await?;
+    let participant = resolve_participant(&state.db, session.id, user.id).await?;
 
     let comment_id = Uuid::new_v4();
     let now = chrono::Utc::now();

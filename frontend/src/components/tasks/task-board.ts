@@ -584,6 +584,7 @@ export class TaskBoard extends LitElement {
       const q = this._searchQuery.toLowerCase();
       tasks = tasks.filter(t =>
         t.title.toLowerCase().includes(q) ||
+        t.ticket_id.toLowerCase().includes(q) ||
         (t.description?.toLowerCase().includes(q))
       );
     }
@@ -969,7 +970,8 @@ export class TaskBoard extends LitElement {
         <div class="task-info">
           <div class="task-title">${task.title}</div>
           <div class="task-meta">
-            ${TASK_TYPE_LABELS[task.task_type]}
+            <span style="font-family: var(--sl-font-mono); color: var(--text-tertiary);">${task.ticket_id}</span>
+            &middot; ${TASK_TYPE_LABELS[task.task_type]}
             ${assignee ? html` &middot; ${assignee}` : nothing}
             ${task.child_count > 0 ? html` &middot; <sl-icon name="diagram-3" style="font-size: 0.7rem; vertical-align: middle;"></sl-icon> ${task.child_count}` : nothing}
             ${task.comment_count > 0 ? html` &middot; <sl-icon name="chat-dots" style="font-size: 0.7rem; vertical-align: middle;"></sl-icon> ${task.comment_count}` : nothing}
@@ -1098,7 +1100,7 @@ export class TaskBoard extends LitElement {
         </div>
         <div class="kanban-card-footer">
           <span class="kanban-card-counts">
-            <span>${TASK_TYPE_LABELS[task.task_type]}</span>
+            <span style="font-family: var(--sl-font-mono);">${task.ticket_id}</span>
             ${task.child_count > 0 ? html`
               <span class="kanban-card-count">
                 <sl-icon name="diagram-3"></sl-icon> ${task.child_count}

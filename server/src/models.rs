@@ -36,6 +36,8 @@ pub struct Project {
     pub org_id: Uuid,
     pub name: String,
     pub slug: String,
+    pub ticket_prefix: String,
+    pub next_ticket_number: i32,
     pub created_at: DateTime<Utc>,
 }
 
@@ -148,7 +150,9 @@ pub enum TaskStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Task {
     pub id: Uuid,
-    pub session_id: Uuid,
+    pub session_id: Option<Uuid>,
+    pub project_id: Uuid,
+    pub ticket_number: i32,
     pub parent_id: Option<Uuid>,
     pub task_type: TaskType,
     pub title: String,
