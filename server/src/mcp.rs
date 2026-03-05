@@ -121,12 +121,38 @@ struct CloseTaskParams {
 
 // --- MCP Server ---
 
+#[derive(serde::Serialize, serde::Deserialize, Default)]
 struct SessionState {
     session_code: Option<String>,
     participant_id: Option<Uuid>,
     sponsor_name: Option<String>,
     project_id: Option<Uuid>,
     ticket_prefix: Option<String>,
+}
+
+impl SessionState {
+    /// State file path for persisting across process restarts
+    fn state_path() -> std::path::PathBuf {
+        let dir = std::env::var("TMPDIR")
+            .or_else(|_| std::env::var("XDG_RUNTIME_DIR"))
+            .unwrap_or_else(|_| "/tmp".to_string());
+        std::path::PathBuf::from(dir).join("seam-mcp-state.json")
+    }
+
+    fn load() -> Self {
+        let path = Self::state_path();
+        match std::fs::read_to_string(&path) {
+            Ok(data) => serde_json::from_str(&data).unwrap_or_default(),
+            Err(_) => Self::default(),
+        }
+    }
+
+    fn save(&self) {
+        let path = Self::state_path();
+        if let Ok(data) = serde_json::to_string(self) {
+            let _ = std::fs::write(&path, data);
+        }
+    }
 }
 
 struct SeamMcp {
@@ -138,15 +164,13 @@ struct SeamMcp {
 #[tool_router]
 impl SeamMcp {
     fn new(db: PgPool) -> Self {
+        let state = SessionState::load();
+        if state.session_code.is_some() {
+            eprintln!("[seam-mcp] Restored session state from disk: session={}", state.session_code.as_deref().unwrap_or("?"));
+        }
         Self {
             db,
-            state: Mutex::new(SessionState {
-                session_code: None,
-                participant_id: None,
-                sponsor_name: None,
-                project_id: None,
-                ticket_prefix: None,
-            }),
+            state: Mutex::new(state),
             tool_router: Self::tool_router(),
         }
     }
@@ -186,6 +210,7 @@ impl SeamMcp {
                     state.sponsor_name = sponsor_name;
                     state.project_id = project_id;
                     state.ticket_prefix = ticket_prefix;
+                    state.save();
                 }
 
                 Ok(CallToolResult::success(vec![Content::text(
@@ -1071,6 +1096,7 @@ async fn main() {
                     state.sponsor_name = sponsor_name;
                     state.project_id = project_id;
                     state.ticket_prefix = ticket_prefix;
+                    state.save();
                 }
             }
             Err(e) => {
