@@ -21,12 +21,15 @@ use rmcp::transport::streamable_http_server::{
     session::local::LocalSessionManager,
 };
 
+mod log_buffer;
+
 pub struct AppState {
     pub db: sqlx::PgPool,
     pub jwks: auth::JwksCache,
     pub connections: ws::ConnectionManager,
     pub coder: Option<coder::CoderClient>,
     pub keycloak_issuer: String,
+    pub log_buffer: log_buffer::LogBuffer,
 }
 
 #[tokio::main]
@@ -69,6 +72,7 @@ async fn main() {
         db,
         jwks: auth::JwksCache::new(&keycloak_url, &realm),
         connections: ws::ConnectionManager::new(),
+        log_buffer: log_buffer::LogBuffer::new(500),
         coder,
         keycloak_issuer: keycloak_issuer.clone(),
     });
@@ -143,6 +147,8 @@ async fn main() {
         .route("/api/projects/{project_id}/workspaces", get(routes::workspaces::list_workspaces).post(routes::workspaces::create_workspace))
         .route("/api/projects/{project_id}/workspaces/{workspace_id}", get(routes::workspaces::get_workspace).delete(routes::workspaces::destroy_workspace))
         .route("/api/projects/{project_id}/workspaces/{workspace_id}/stop", post(routes::workspaces::stop_workspace))
+        // Workspace Logs (agent process output)
+        .route("/api/workspaces/{workspace_id}/logs", post(routes::workspace_logs::ingest_logs).get(routes::workspace_logs::get_logs))
         // Integrations
         .route("/api/integrations/coder/status", get(routes::integrations::coder_status))
         // Domain Events

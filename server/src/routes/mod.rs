@@ -12,4 +12,5 @@ pub mod requirements;
 pub mod sessions;
 pub mod tasks;
 pub mod tool_invocations;
+pub mod workspace_logs;
 pub mod workspaces;

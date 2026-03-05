@@ -291,6 +291,10 @@ async fn provision_agent_workspace(
             name: "seam_token".to_string(),
             value: seam_token.to_string(),
         },
+        coder::RichParameterValue {
+            name: "workspace_id".to_string(),
+            value: workspace_id.to_string(),
+        },
     ];
 
     if !repo_url.is_empty() {

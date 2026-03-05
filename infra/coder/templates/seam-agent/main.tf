@@ -77,12 +77,30 @@ data "coder_parameter" "agent_type" {
   }
 }
 
+data "coder_parameter" "seam_token" {
+  name         = "seam_token"
+  display_name = "Seam Token"
+  description  = "Agent authentication token for Seam MCP."
+  type         = "string"
+  mutable      = false
+  default      = ""
+}
+
 data "coder_parameter" "instructions" {
   name         = "instructions"
   display_name = "Custom Instructions"
   description  = "Optional instructions for the agent."
   type         = "string"
   mutable      = true
+  default      = ""
+}
+
+data "coder_parameter" "workspace_id" {
+  name         = "workspace_id"
+  display_name = "Workspace ID"
+  description  = "Seam workspace UUID for log streaming."
+  type         = "string"
+  mutable      = false
   default      = ""
 }
 
@@ -154,6 +172,12 @@ resource "coder_agent" "dev" {
       fi
     fi
 
+    # Install Claude Code CLI if not present
+    if ! command -v claude &> /dev/null; then
+      echo "Installing Claude Code CLI..."
+      npm install -g @anthropic-ai/claude-code
+    fi
+
     # Configure Seam MCP tools if agent_code is provided
     if [ -n "${data.coder_parameter.agent_code.value}" ] && [ -n "${data.coder_parameter.seam_url.value}" ]; then
       echo "Configuring Seam MCP connection..."
@@ -163,15 +187,53 @@ resource "coder_agent" "dev" {
     {
       "mcpServers": {
         "seam": {
-          "url": "${data.coder_parameter.seam_url.value}/mcp"
+          "url": "${data.coder_parameter.seam_url.value}/mcp",
+          "headers": {
+            "Authorization": "Bearer ${data.coder_parameter.seam_token.value}"
+          }
         }
       }
     }
     SETTINGS
 
       echo "Seam MCP configured: ${data.coder_parameter.seam_url.value}/mcp"
-      echo "Agent code: ${data.coder_parameter.agent_code.value}"
       echo "Agent type: ${data.coder_parameter.agent_type.value}"
+
+      # Launch Claude Code with the /seam skill
+      echo "Launching agent..."
+      cd /workspace
+      claude --dangerously-skip-permissions \
+        "/seam ${data.coder_parameter.agent_code.value}" \
+        > /tmp/claude-agent.log 2>&1 &
+      AGENT_PID=$!
+      echo "Agent PID: $AGENT_PID"
+
+      # Start log forwarder sidecar — streams agent output to Seam server
+      if [ -n "${data.coder_parameter.workspace_id.value}" ]; then
+        (
+          # Wait for log file to exist
+          while [ ! -f /tmp/claude-agent.log ]; do sleep 0.5; done
+          tail -f /tmp/claude-agent.log | while IFS= read -r line; do
+            # Batch lines every 1s or 10 lines to reduce HTTP calls
+            echo "$line" >> /tmp/log-batch.tmp
+            LINES=$(wc -l < /tmp/log-batch.tmp 2>/dev/null || echo 0)
+            if [ "$LINES" -ge 10 ]; then
+              # Build JSON array from batch
+              PAYLOAD=$(while IFS= read -r bline; do
+                printf '{"line":%s,"fd":"stdout","ts":"%s"}' \
+                  "$(echo "$bline" | jq -Rs .)" \
+                  "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              done < /tmp/log-batch.tmp | jq -s '.')
+              curl -s -X POST "${data.coder_parameter.seam_url.value}/api/workspaces/${data.coder_parameter.workspace_id.value}/logs" \
+                -H "Authorization: Bearer ${data.coder_parameter.seam_token.value}" \
+                -H "Content-Type: application/json" \
+                -d "$PAYLOAD" > /dev/null 2>&1 || true
+              > /tmp/log-batch.tmp
+            fi
+          done
+        ) &
+        echo "Log forwarder PID: $!"
+      fi
     fi
 
     echo "Workspace ready."
@@ -183,7 +245,9 @@ resource "coder_agent" "dev" {
     SEAM_URL           = data.coder_parameter.seam_url.value
     SEAM_AGENT_CODE    = data.coder_parameter.agent_code.value
     SEAM_AGENT_TYPE    = data.coder_parameter.agent_type.value
+    SEAM_TOKEN         = data.coder_parameter.seam_token.value
     SEAM_INSTRUCTIONS  = data.coder_parameter.instructions.value
+    SEAM_WORKSPACE_ID  = data.coder_parameter.workspace_id.value
   }
 }
 
