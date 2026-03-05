@@ -257,6 +257,7 @@ pub struct ParticipantView {
     pub participant_type: ParticipantType,
     pub sponsor_id: Option<Uuid>,
     pub joined_at: DateTime<Utc>,
+    pub is_online: bool,
 }
 
 // --- Agent API DTOs ---

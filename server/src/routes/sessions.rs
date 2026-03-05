@@ -119,6 +119,7 @@ pub async fn create_session(
                 participant_type: ParticipantType::Human,
                 sponsor_id: None,
                 joined_at: chrono::Utc::now(),
+                is_online: false, // not connected via WS yet
             }],
         },
         join_code: session_code,
@@ -147,17 +148,23 @@ pub async fn get_session(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let online_ids = state.connections.online_participant_ids(&code);
+
     Ok(Json(SessionView {
         id: session.id,
         code: session.code,
         name: session.name,
         created_at: session.created_at,
-        participants: participants.into_iter().map(|p| ParticipantView {
-            id: p.id,
-            display_name: p.display_name,
-            participant_type: p.participant_type,
-            sponsor_id: p.sponsor_id,
-            joined_at: p.joined_at,
+        participants: participants.into_iter().map(|p| {
+            let is_online = online_ids.contains(&p.id.to_string());
+            ParticipantView {
+                id: p.id,
+                display_name: p.display_name,
+                participant_type: p.participant_type,
+                sponsor_id: p.sponsor_id,
+                joined_at: p.joined_at,
+                is_online,
+            }
         }).collect(),
     }))
 }
@@ -270,13 +277,20 @@ pub async fn join_session(
             code: session.code.clone(),
             name: session.name,
             created_at: session.created_at,
-            participants: participants.into_iter().map(|p| ParticipantView {
-                id: p.id,
-                display_name: p.display_name,
-                participant_type: p.participant_type,
-                sponsor_id: p.sponsor_id,
-                joined_at: p.joined_at,
-            }).collect(),
+            participants: {
+                let online_ids = state.connections.online_participant_ids(&session.code);
+                participants.into_iter().map(|p| {
+                    let is_online = online_ids.contains(&p.id.to_string());
+                    ParticipantView {
+                        id: p.id,
+                        display_name: p.display_name,
+                        participant_type: p.participant_type,
+                        sponsor_id: p.sponsor_id,
+                        joined_at: p.joined_at,
+                        is_online,
+                    }
+                }).collect()
+            },
         },
         participant_id,
         agent_code,

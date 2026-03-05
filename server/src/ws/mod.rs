@@ -58,6 +58,17 @@ impl ConnectionManager {
         removed_participant_id
     }
 
+    pub fn online_participant_ids(&self, session_code: &str) -> Vec<String> {
+        self.sessions
+            .get(session_code)
+            .map(|conns| {
+                conns.iter()
+                    .filter_map(|c| c.participant_id.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     pub async fn broadcast_to_session(&self, session_code: &str, msg: &serde_json::Value) {
         let text = serde_json::to_string(msg).unwrap_or_default();
         if let Some(conns) = self.sessions.get(session_code) {

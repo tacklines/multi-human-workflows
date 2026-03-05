@@ -49,9 +49,14 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                 session_code = Some(code.to_string());
                                 state.connections.add_connection(code, &conn_id, tx.clone());
 
-                                // Track participant identity for disconnect notifications
+                                // Track participant identity for presence notifications
                                 if let Some(pid) = parsed.get("participantId").and_then(|p| p.as_str()) {
                                     state.connections.set_participant_id(code, &conn_id, pid);
+                                    // Notify others this participant is online
+                                    state.connections.broadcast_to_session(code, &serde_json::json!({
+                                        "type": "participant_connected",
+                                        "participantId": pid,
+                                    })).await;
                                 }
 
                                 let _ = tx.send(serde_json::json!({

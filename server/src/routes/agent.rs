@@ -69,6 +69,18 @@ pub async fn agent_join(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let participant_id = if let Some(existing) = existing_agent {
+        // Update display_name if a new one was provided
+        if let Some(ref new_name) = req.display_name {
+            sqlx::query("UPDATE participants SET display_name = $1 WHERE id = $2")
+                .bind(new_name)
+                .bind(existing.id)
+                .execute(&state.db)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to update agent display_name: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+        }
         existing.id
     } else {
         let display_name = req.display_name
@@ -118,19 +130,27 @@ pub async fn agent_join(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let online_ids = state.connections.online_participant_ids(&session.code);
+
     Ok(Json(AgentJoinResponse {
         session: SessionView {
             id: session.id,
             code: session.code,
             name: session.name,
             created_at: session.created_at,
-            participants: participants.into_iter().map(|p| ParticipantView {
-                id: p.id,
-                display_name: p.display_name,
-                participant_type: p.participant_type,
-                sponsor_id: p.sponsor_id,
-                joined_at: p.joined_at,
-            }).collect(),
+            participants: {
+                participants.into_iter().map(|p| {
+                    let is_online = online_ids.contains(&p.id.to_string());
+                    ParticipantView {
+                        id: p.id,
+                        display_name: p.display_name,
+                        participant_type: p.participant_type,
+                        sponsor_id: p.sponsor_id,
+                        joined_at: p.joined_at,
+                        is_online,
+                    }
+                }).collect()
+            },
         },
         participant_id,
         sponsor_name: sponsor_user.display_name,

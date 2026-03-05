@@ -98,8 +98,16 @@ export class PresenceBar extends LitElement {
       background: var(--avatar-status-online);
     }
 
+    .status-dot.offline {
+      background: var(--text-muted, #6b7280);
+    }
+
     .status-dot.agent {
       background: var(--sl-color-primary-500);
+    }
+
+    .avatar.is-offline .avatar-inner {
+      opacity: 0.45;
     }
 
     .agent-badge {
@@ -194,17 +202,19 @@ export class PresenceBar extends LitElement {
           const sponsor = isAgent && p.sponsor_id
             ? this.participants.find((s) => s.id === p.sponsor_id)
             : null;
-          const tooltipContent = `${p.display_name}${isYou ? ' (you)' : ''} · ${isAgent ? 'AI Agent' : 'Participant'}${sponsor ? ` · Agent of ${sponsor.display_name}` : ''}`;
+          const isOnline = p.is_online;
+          const statusLabel = isOnline ? 'Online' : 'Offline';
+          const tooltipContent = `${p.display_name}${isYou ? ' (you)' : ''} · ${isAgent ? 'AI Agent' : 'Participant'} · ${statusLabel}${sponsor ? ` · Agent of ${sponsor.display_name}` : ''}`;
 
           const avatarButton = html`
             <button
-              class="avatar ${isYou ? 'is-you' : ''} ${isAgent ? 'is-agent' : ''}"
+              class="avatar ${isYou ? 'is-you' : ''} ${isAgent ? 'is-agent' : ''} ${!isOnline ? 'is-offline' : ''}"
               @click=${() => this._onClick(p.id)}
-              aria-label="${p.display_name}${isYou ? ' (you)' : ''}${isAgent ? ' (AI agent)' : ''}"
+              aria-label="${p.display_name}${isYou ? ' (you)' : ''}${isAgent ? ' (AI agent)' : ''}, ${statusLabel}"
             >
               <div class="avatar-inner" style="background: ${isAgent ? '' : bgColor}">
                 ${initials}
-                <span class="status-dot ${isAgent ? 'agent' : ''}" aria-hidden="true"></span>
+                <span class="status-dot ${isAgent ? 'agent' : ''} ${!isOnline ? 'offline' : ''}" aria-hidden="true"></span>
                 ${isAgent ? html`<span class="agent-badge" aria-hidden="true">&#10024;</span>` : nothing}
               </div>
             </button>

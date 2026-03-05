@@ -4,6 +4,7 @@ export interface SessionParticipant {
   participant_type: 'human' | 'agent';
   sponsor_id: string | null;
   joined_at: string;
+  is_online: boolean;
 }
 
 export interface SessionView {

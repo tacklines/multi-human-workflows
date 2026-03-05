@@ -1293,6 +1293,14 @@ impl SeamMcp {
         .map_err(|e| format!("Database error: {e}"))?;
 
         let participant_id = if let Some(existing) = existing_agent {
+            // Update display_name if a new one was provided
+            if let Some(new_name) = display_name {
+                let _ = sqlx::query("UPDATE participants SET display_name = $1 WHERE id = $2")
+                    .bind(new_name)
+                    .bind(existing.id)
+                    .execute(&self.db)
+                    .await;
+            }
             existing.id
         } else {
             let name = display_name

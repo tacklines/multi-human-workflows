@@ -74,12 +74,25 @@ function openSocket(code: string): void {
         }
       }
 
+      if (msg.type === 'participant_connected' && msg.participantId) {
+        const current = store.get().sessionState;
+        if (!current) return;
+        store.updateSession({
+          ...current.session,
+          participants: current.session.participants.map((p) =>
+            p.id === msg.participantId ? { ...p, is_online: true } : p
+          ),
+        });
+      }
+
       if (msg.type === 'participant_disconnected' && msg.participantId) {
         const current = store.get().sessionState;
         if (!current) return;
         store.updateSession({
           ...current.session,
-          participants: current.session.participants.filter((p) => p.id !== msg.participantId),
+          participants: current.session.participants.map((p) =>
+            p.id === msg.participantId ? { ...p, is_online: false } : p
+          ),
         });
       }
 
