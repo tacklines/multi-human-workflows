@@ -147,6 +147,27 @@ pub enum TaskStatus {
     Closed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum TaskPriority {
+    Critical,
+    High,
+    Medium,
+    Low,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum TaskComplexity {
+    Xl,
+    Large,
+    Medium,
+    Small,
+    Trivial,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Task {
     pub id: Uuid,
@@ -158,6 +179,8 @@ pub struct Task {
     pub title: String,
     pub description: Option<String>,
     pub status: TaskStatus,
+    pub priority: TaskPriority,
+    pub complexity: TaskComplexity,
     pub assigned_to: Option<Uuid>,
     pub created_by: Uuid,
     pub commit_sha: Option<String>,
@@ -172,6 +195,22 @@ pub struct TaskComment {
     pub task_id: Uuid,
     pub author_id: Uuid,
     pub content: String,
+    pub created_at: DateTime<Utc>,
+}
+
+// --- Activity Events ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ActivityEvent {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub session_id: Option<Uuid>,
+    pub actor_id: Uuid,
+    pub event_type: String,
+    pub target_type: String,
+    pub target_id: Uuid,
+    pub summary: String,
+    pub metadata: serde_json::Value,
     pub created_at: DateTime<Utc>,
 }
 

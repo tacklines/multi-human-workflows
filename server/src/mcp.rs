@@ -65,6 +65,10 @@ struct CreateTaskParams {
     parent_id: Option<String>,
     /// Participant ID to assign to
     assigned_to: Option<String>,
+    /// Priority: critical, high, medium (default), low
+    priority: Option<String>,
+    /// Complexity: xl, large, medium (default), small, trivial
+    complexity: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -73,6 +77,10 @@ struct ListTasksParams {
     task_type: Option<String>,
     /// Filter by status: open, in_progress, done, closed
     status: Option<String>,
+    /// Filter by priority: critical, high, medium, low
+    priority: Option<String>,
+    /// Filter by complexity: xl, large, medium, small, trivial
+    complexity: Option<String>,
     /// Filter by parent task ID (get children of a task)
     parent_id: Option<String>,
     /// Filter by assigned participant ID
@@ -97,6 +105,10 @@ struct UpdateTaskParams {
     description: Option<String>,
     /// New status: open, in_progress, done, closed
     status: Option<String>,
+    /// New priority: critical, high, medium, low
+    priority: Option<String>,
+    /// New complexity: xl, large, medium, small, trivial
+    complexity: Option<String>,
     /// New assignee participant ID (use "none" to unassign)
     assigned_to: Option<String>,
     /// New parent task ID (use "none" to remove parent)
@@ -313,10 +325,13 @@ impl SeamMcp {
             Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Failed to allocate ticket number: {e}"))])),
         };
 
+        let priority = params.priority.as_deref().unwrap_or("medium");
+        let complexity = params.complexity.as_deref().unwrap_or("medium");
+
         let task_id = Uuid::new_v4();
         match sqlx::query(
-            "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, assigned_to, created_by, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, NOW(), NOW())"
+            "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, priority, complexity, assigned_to, created_by, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, NOW(), NOW())"
         )
         .bind(task_id)
         .bind(session_id)
@@ -326,6 +341,8 @@ impl SeamMcp {
         .bind(&params.task_type)
         .bind(&params.title)
         .bind(&params.description)
+        .bind(priority)
+        .bind(complexity)
         .bind(assigned_to)
         .bind(participant_id)
         .execute(&self.db)
@@ -368,6 +385,16 @@ impl SeamMcp {
         if let Some(ref st) = params.status {
             query.push_str(&format!(" AND status = ${param_idx}"));
             bind_values.push(st.clone());
+            param_idx += 1;
+        }
+        if let Some(ref pr) = params.priority {
+            query.push_str(&format!(" AND priority = ${param_idx}"));
+            bind_values.push(pr.clone());
+            param_idx += 1;
+        }
+        if let Some(ref cx) = params.complexity {
+            query.push_str(&format!(" AND complexity = ${param_idx}"));
+            bind_values.push(cx.clone());
             param_idx += 1;
         }
         if let Some(ref pid) = params.parent_id {
@@ -432,6 +459,8 @@ impl SeamMcp {
                         "task_type": serde_json::to_value(&t.task_type).unwrap(),
                         "title": t.title,
                         "status": serde_json::to_value(&t.status).unwrap(),
+                        "priority": serde_json::to_value(&t.priority).unwrap(),
+                        "complexity": serde_json::to_value(&t.complexity).unwrap(),
                         "parent_id": t.parent_id,
                         "assigned_to": t.assigned_to,
                         "created_at": t.created_at,
@@ -508,6 +537,25 @@ impl SeamMcp {
             )]));
         }
 
+        let priority = params.priority.as_deref().unwrap_or(
+            match task.priority {
+                models::TaskPriority::Critical => "critical",
+                models::TaskPriority::High => "high",
+                models::TaskPriority::Medium => "medium",
+                models::TaskPriority::Low => "low",
+            }
+        );
+
+        let complexity = params.complexity.as_deref().unwrap_or(
+            match task.complexity {
+                models::TaskComplexity::Xl => "xl",
+                models::TaskComplexity::Large => "large",
+                models::TaskComplexity::Medium => "medium",
+                models::TaskComplexity::Small => "small",
+                models::TaskComplexity::Trivial => "trivial",
+            }
+        );
+
         let assigned_to = match &params.assigned_to {
             Some(s) if s == "none" || s == "null" => None,
             Some(s) => match Uuid::parse_str(s) {
@@ -533,11 +581,13 @@ impl SeamMcp {
         };
 
         match sqlx::query(
-            "UPDATE tasks SET title = $1, description = $2, status = $3, assigned_to = $4, parent_id = $5, closed_at = COALESCE($6, closed_at), updated_at = NOW() WHERE id = $7"
+            "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, closed_at = COALESCE($8, closed_at), updated_at = NOW() WHERE id = $9"
         )
         .bind(title)
         .bind(description)
         .bind(status)
+        .bind(priority)
+        .bind(complexity)
         .bind(assigned_to)
         .bind(parent_id)
         .bind(closed_at)
@@ -801,6 +851,8 @@ impl SeamMcp {
             "title": task.title,
             "description": task.description,
             "status": serde_json::to_value(&task.status).unwrap(),
+            "priority": serde_json::to_value(&task.priority).unwrap(),
+            "complexity": serde_json::to_value(&task.complexity).unwrap(),
             "assigned_to": task.assigned_to,
             "created_by": task.created_by,
             "commit_sha": task.commit_sha,
@@ -832,6 +884,8 @@ impl SeamMcp {
             "title": task.title,
             "description": task.description,
             "status": serde_json::to_value(&task.status).unwrap(),
+            "priority": serde_json::to_value(&task.priority).unwrap(),
+            "complexity": serde_json::to_value(&task.complexity).unwrap(),
             "assigned_to": task.assigned_to,
             "created_by": task.created_by,
             "commit_sha": task.commit_sha,

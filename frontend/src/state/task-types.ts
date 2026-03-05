@@ -1,5 +1,7 @@
 export type TaskType = 'epic' | 'story' | 'task' | 'subtask' | 'bug';
 export type TaskStatus = 'open' | 'in_progress' | 'done' | 'closed';
+export type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
+export type TaskComplexity = 'xl' | 'large' | 'medium' | 'small' | 'trivial';
 
 export interface TaskView {
   id: string;
@@ -12,6 +14,8 @@ export interface TaskView {
   title: string;
   description: string | null;
   status: TaskStatus;
+  priority: TaskPriority;
+  complexity: TaskComplexity;
   assigned_to: string | null;
   created_by: string;
   commit_sha: string | null;
@@ -80,4 +84,33 @@ export const STATUS_VARIANTS: Record<TaskStatus, string> = {
   in_progress: 'primary',
   done: 'success',
   closed: 'neutral',
+};
+
+export const PRIORITY_LABELS: Record<TaskPriority, string> = {
+  critical: 'Critical',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+};
+
+export const PRIORITY_ICONS: Record<TaskPriority, string> = {
+  critical: 'exclamation-octagon-fill',
+  high: 'arrow-up-circle-fill',
+  medium: 'dash-circle',
+  low: 'arrow-down-circle-fill',
+};
+
+export const PRIORITY_COLORS: Record<TaskPriority, string> = {
+  critical: 'var(--sl-color-danger-500)',
+  high: 'var(--sl-color-warning-500)',
+  medium: 'var(--sl-color-neutral-500)',
+  low: 'var(--sl-color-primary-300)',
+};
+
+export const COMPLEXITY_LABELS: Record<TaskComplexity, string> = {
+  xl: 'XL',
+  large: 'Large',
+  medium: 'Medium',
+  small: 'Small',
+  trivial: 'Trivial',
 };

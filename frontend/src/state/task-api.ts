@@ -44,7 +44,7 @@ export async function fetchTask(sessionCode: string, taskId: string): Promise<Ta
 
 export async function createTask(
   sessionCode: string,
-  data: { task_type: string; title: string; description?: string; parent_id?: string; assigned_to?: string },
+  data: { task_type: string; title: string; description?: string; parent_id?: string; assigned_to?: string; priority?: string; complexity?: string },
 ): Promise<TaskView> {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/tasks`, {
     method: 'POST',
@@ -57,7 +57,7 @@ export async function createTask(
 export async function updateTask(
   sessionCode: string,
   taskId: string,
-  data: { title?: string; description?: string | null; status?: string; assigned_to?: string | null; parent_id?: string; commit_sha?: string | null },
+  data: { title?: string; description?: string | null; status?: string; priority?: string; complexity?: string; assigned_to?: string | null; parent_id?: string; commit_sha?: string | null },
 ): Promise<TaskView> {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/tasks/${taskId}`, {
     method: 'PATCH',

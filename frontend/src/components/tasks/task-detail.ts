@@ -3,9 +3,11 @@ import { customElement, state, property } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { fetchTask, updateTask, deleteTask, addComment } from '../../state/task-api.js';
 import {
-  type TaskDetailView, type TaskStatus, type TaskType,
+  type TaskDetailView, type TaskStatus, type TaskType, type TaskPriority, type TaskComplexity,
   TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
   STATUS_LABELS, STATUS_VARIANTS,
+  PRIORITY_LABELS, PRIORITY_ICONS, PRIORITY_COLORS,
+  COMPLEXITY_LABELS,
 } from '../../state/task-types.js';
 import { store, type SessionParticipant } from '../../state/app-state.js';
 
@@ -891,6 +893,64 @@ export class TaskDetail extends LitElement {
               <span class="meta-label">Status</span>
               <span class="meta-value">
                 <sl-badge variant=${STATUS_VARIANTS[task.status] as any} pill size="small">${STATUS_LABELS[task.status]}</sl-badge>
+                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
+              </span>
+            </div>`
+        }
+
+        <!-- Priority -->
+        ${this._editingField === 'priority'
+          ? html`
+            <div class="meta-row">
+              <sl-select size="small" value=${task.priority}
+                @sl-change=${(e: Event) => {
+                  const val = (e.target as HTMLSelectElement).value;
+                  if (val !== task.priority) this._updateField({ priority: val });
+                  this._editingField = null;
+                }}
+                style="width: 100%;"
+              >
+                ${(['critical', 'high', 'medium', 'low'] as const).map(p => html`
+                  <sl-option value=${p}>
+                    <sl-icon slot="prefix" name=${PRIORITY_ICONS[p]} style="color: ${PRIORITY_COLORS[p]}"></sl-icon>
+                    ${PRIORITY_LABELS[p]}
+                  </sl-option>
+                `)}
+              </sl-select>
+            </div>`
+          : html`
+            <div class="meta-row editable" @click=${() => { this._editingField = 'priority'; }}>
+              <span class="meta-label">Priority</span>
+              <span class="meta-value">
+                <sl-icon name=${PRIORITY_ICONS[task.priority]} style="color: ${PRIORITY_COLORS[task.priority]}; font-size: 0.85rem;"></sl-icon>
+                ${PRIORITY_LABELS[task.priority]}
+                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
+              </span>
+            </div>`
+        }
+
+        <!-- Complexity -->
+        ${this._editingField === 'complexity'
+          ? html`
+            <div class="meta-row">
+              <sl-select size="small" value=${task.complexity}
+                @sl-change=${(e: Event) => {
+                  const val = (e.target as HTMLSelectElement).value;
+                  if (val !== task.complexity) this._updateField({ complexity: val });
+                  this._editingField = null;
+                }}
+                style="width: 100%;"
+              >
+                ${(['xl', 'large', 'medium', 'small', 'trivial'] as const).map(c => html`
+                  <sl-option value=${c}>${COMPLEXITY_LABELS[c]}</sl-option>
+                `)}
+              </sl-select>
+            </div>`
+          : html`
+            <div class="meta-row editable" @click=${() => { this._editingField = 'complexity'; }}>
+              <span class="meta-label">Complexity</span>
+              <span class="meta-value">
+                ${COMPLEXITY_LABELS[task.complexity]}
                 <sl-icon class="edit-pencil" name="pencil"></sl-icon>
               </span>
             </div>`

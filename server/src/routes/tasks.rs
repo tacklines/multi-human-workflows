@@ -43,6 +43,8 @@ pub struct CreateTaskRequest {
     pub description: Option<String>,
     pub parent_id: Option<Uuid>,
     pub assigned_to: Option<Uuid>,
+    pub priority: Option<String>,
+    pub complexity: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,6 +52,8 @@ pub struct UpdateTaskRequest {
     pub title: Option<String>,
     pub description: Option<String>,
     pub status: Option<String>,
+    pub priority: Option<String>,
+    pub complexity: Option<String>,
     /// None = field absent (keep current), Some(None) = explicitly null (unassign), Some(Some(id)) = assign
     #[serde(default, deserialize_with = "deserialize_optional_field")]
     pub assigned_to: Option<Option<Uuid>>,
@@ -73,6 +77,8 @@ pub struct AddCommentRequest {
 pub struct ListTasksQuery {
     pub task_type: Option<String>,
     pub status: Option<String>,
+    pub priority: Option<String>,
+    pub complexity: Option<String>,
     pub parent_id: Option<String>,
     pub assigned_to: Option<Uuid>,
     pub search: Option<String>,
@@ -90,6 +96,8 @@ pub struct TaskView {
     pub title: String,
     pub description: Option<String>,
     pub status: TaskStatus,
+    pub priority: TaskPriority,
+    pub complexity: TaskComplexity,
     pub assigned_to: Option<Uuid>,
     pub created_by: Uuid,
     pub commit_sha: Option<String>,
@@ -141,6 +149,8 @@ impl TaskView {
             title: t.title,
             description: t.description,
             status: t.status,
+            priority: t.priority,
+            complexity: t.complexity,
             assigned_to: t.assigned_to,
             created_by: t.created_by,
             commit_sha: t.commit_sha,
@@ -216,10 +226,13 @@ pub async fn create_task(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+    let priority = req.priority.as_deref().unwrap_or("medium");
+    let complexity = req.complexity.as_deref().unwrap_or("medium");
+
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, assigned_to, created_by, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, priority, complexity, assigned_to, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, NOW(), NOW())"
     )
     .bind(task_id)
     .bind(session.id)
@@ -229,6 +242,8 @@ pub async fn create_task(
     .bind(&req.task_type)
     .bind(&req.title)
     .bind(&req.description)
+    .bind(priority)
+    .bind(complexity)
     .bind(req.assigned_to)
     .bind(participant.id)
     .execute(&state.db)
@@ -269,6 +284,16 @@ pub async fn list_tasks(
     if let Some(ref st) = query.status {
         sql.push_str(&format!(" AND status = ${idx}"));
         bind_values.push(st.clone());
+        idx += 1;
+    }
+    if let Some(ref pr) = query.priority {
+        sql.push_str(&format!(" AND priority = ${idx}"));
+        bind_values.push(pr.clone());
+        idx += 1;
+    }
+    if let Some(ref cx) = query.complexity {
+        sql.push_str(&format!(" AND complexity = ${idx}"));
+        bind_values.push(cx.clone());
         idx += 1;
     }
     if let Some(ref pid) = query.parent_id {
@@ -417,6 +442,19 @@ pub async fn update_task(
         TaskStatus::Done => "done",
         TaskStatus::Closed => "closed",
     });
+    let priority_str = req.priority.as_deref().unwrap_or(match task.priority {
+        TaskPriority::Critical => "critical",
+        TaskPriority::High => "high",
+        TaskPriority::Medium => "medium",
+        TaskPriority::Low => "low",
+    });
+    let complexity_str = req.complexity.as_deref().unwrap_or(match task.complexity {
+        TaskComplexity::Xl => "xl",
+        TaskComplexity::Large => "large",
+        TaskComplexity::Medium => "medium",
+        TaskComplexity::Small => "small",
+        TaskComplexity::Trivial => "trivial",
+    });
     let assigned_to = match req.assigned_to {
         Some(v) => v,
         None => task.assigned_to,
@@ -431,11 +469,13 @@ pub async fn update_task(
     };
 
     sqlx::query(
-        "UPDATE tasks SET title = $1, description = $2, status = $3, assigned_to = $4, parent_id = $5, commit_sha = $6, closed_at = $7, updated_at = NOW() WHERE id = $8"
+        "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, commit_sha = $8, closed_at = $9, updated_at = NOW() WHERE id = $10"
     )
     .bind(title)
     .bind(description)
     .bind(status_str)
+    .bind(priority_str)
+    .bind(complexity_str)
     .bind(assigned_to)
     .bind(parent_id)
     .bind(commit_sha)

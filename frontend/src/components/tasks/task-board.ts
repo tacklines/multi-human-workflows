@@ -3,9 +3,11 @@ import { customElement, state, property } from 'lit/decorators.js';
 import { store } from '../../state/app-state.js';
 import { fetchTasks, createTask, updateTask, deleteTask } from '../../state/task-api.js';
 import {
-  type TaskView, type TaskType, type TaskStatus,
+  type TaskView, type TaskType, type TaskStatus, type TaskPriority, type TaskComplexity,
   TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
   STATUS_LABELS, STATUS_VARIANTS,
+  PRIORITY_LABELS, PRIORITY_ICONS, PRIORITY_COLORS,
+  COMPLEXITY_LABELS,
 } from '../../state/task-types.js';
 import type { SessionParticipant } from '../../state/app-state.js';
 
@@ -499,6 +501,8 @@ export class TaskBoard extends LitElement {
   @state() private _createDescription = '';
   @state() private _createParentId = '';
   @state() private _createAssignee = '';
+  @state() private _createPriority: TaskPriority = 'medium';
+  @state() private _createComplexity: TaskComplexity = 'medium';
   @state() private _createStatus: TaskStatus | '' = '';
   @state() private _createLoading = false;
   @state() private _toastMessage = '';
@@ -702,6 +706,8 @@ export class TaskBoard extends LitElement {
         description: this._createDescription.trim() || undefined,
         parent_id: this._createParentId || undefined,
         assigned_to: this._createAssignee || undefined,
+        priority: this._createPriority !== 'medium' ? this._createPriority : undefined,
+        complexity: this._createComplexity !== 'medium' ? this._createComplexity : undefined,
       });
       // If a non-default status was requested (e.g. from kanban column "+"), update it
       if (this._createStatus && this._createStatus !== 'open') {
@@ -712,6 +718,8 @@ export class TaskBoard extends LitElement {
       this._createDescription = '';
       this._createParentId = '';
       this._createAssignee = '';
+      this._createPriority = 'medium';
+      this._createComplexity = 'medium';
       this._createStatus = '';
       this._showToast('Task created');
       await this._loadTasks();
@@ -971,6 +979,7 @@ export class TaskBoard extends LitElement {
           <div class="task-title">${task.title}</div>
           <div class="task-meta">
             <span style="font-family: var(--sl-font-mono); color: var(--text-tertiary);">${task.ticket_id}</span>
+            ${task.priority !== 'medium' ? html`&middot; <sl-icon name=${PRIORITY_ICONS[task.priority]} style="color: ${PRIORITY_COLORS[task.priority]}; font-size: 0.75rem; vertical-align: middle;"></sl-icon>` : nothing}
             &middot; ${TASK_TYPE_LABELS[task.task_type]}
             ${assignee ? html` &middot; ${assignee}` : nothing}
             ${task.child_count > 0 ? html` &middot; <sl-icon name="diagram-3" style="font-size: 0.7rem; vertical-align: middle;"></sl-icon> ${task.child_count}` : nothing}
@@ -1097,6 +1106,7 @@ export class TaskBoard extends LitElement {
         <div class="kanban-card-header">
           <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${typeColor}"></sl-icon>
           <span class="kanban-card-title">${task.title}</span>
+          ${task.priority !== 'medium' ? html`<sl-icon name=${PRIORITY_ICONS[task.priority]} style="color: ${PRIORITY_COLORS[task.priority]}; font-size: 0.75rem; flex-shrink: 0;"></sl-icon>` : nothing}
         </div>
         <div class="kanban-card-footer">
           <span class="kanban-card-counts">
@@ -1185,6 +1195,33 @@ export class TaskBoard extends LitElement {
               `)}
             </sl-select>
           ` : nothing}
+
+          <div style="display: flex; gap: 0.75rem;">
+            <sl-select
+              label="Priority"
+              value=${this._createPriority}
+              @sl-change=${(e: Event) => { this._createPriority = (e.target as HTMLSelectElement).value as TaskPriority; }}
+              style="flex: 1;"
+            >
+              ${(['critical', 'high', 'medium', 'low'] as const).map(p => html`
+                <sl-option value=${p}>
+                  <sl-icon slot="prefix" name=${PRIORITY_ICONS[p]} style="color: ${PRIORITY_COLORS[p]}"></sl-icon>
+                  ${PRIORITY_LABELS[p]}
+                </sl-option>
+              `)}
+            </sl-select>
+
+            <sl-select
+              label="Complexity"
+              value=${this._createComplexity}
+              @sl-change=${(e: Event) => { this._createComplexity = (e.target as HTMLSelectElement).value as TaskComplexity; }}
+              style="flex: 1;"
+            >
+              ${(['trivial', 'small', 'medium', 'large', 'xl'] as const).map(c => html`
+                <sl-option value=${c}>${COMPLEXITY_LABELS[c]}</sl-option>
+              `)}
+            </sl-select>
+          </div>
 
           ${parentCandidates.length > 0 ? html`
             <sl-select
