@@ -79,6 +79,40 @@ Uses `@vaadin/router` (History API, not hash-based). Route config in `frontend/s
 Navigation: use `navigateTo('/path')` from `router.ts`, never `window.location.hash`.
 Router sets `location` property on routed components (params available via `this.location.params`).
 
+## Agent Observability
+
+Real-time streaming of agent activity via multiplexed WebSocket channels.
+
+### Streams
+
+Three stream types on the existing `/ws` connection, discriminated by `stream` field:
+
+- **`tool`** — MCP tool invocations (captured server-side in `mcp_handler.rs`), stored in `tool_invocations` table
+- **`output`** — Process stdout/stderr from Coder workspaces, ingested via `POST /api/workspaces/:id/logs`
+- **`state`** — Agent lifecycle transitions (joined, working, idle), emitted via PG NOTIFY
+
+### WebSocket Protocol
+
+Clients subscribe to specific agents:
+```jsonc
+{"type": "subscribe_agent", "participantId": "uuid"}
+{"type": "unsubscribe_agent", "participantId": "uuid"}
+```
+
+Server sends filtered `agent_stream` messages only to subscribed connections.
+
+### Key Endpoints
+
+- `GET /api/sessions/:code/tool-invocations` — historical tool calls (filterable by participant_id, tool_name)
+- `POST /api/workspaces/:id/logs` — log line ingest from Coder sidecar
+- `GET /api/workspaces/:id/logs` — recent log lines from ring buffer
+
+### Frontend Components
+
+- `agent-stream.ts` — WebSocket service managing subscriptions with auto-reconnect
+- `agent-activity-panel.ts` — Tabbed panel (All/Tools/Output) with live indicator and state badges
+- Integrated into `agent-detail.ts` for online agents
+
 ## Conventions
 
 - Frontend API calls go through Vite proxy (`/api` → `:3002`, `/ws` → WebSocket)
