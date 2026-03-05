@@ -301,6 +301,7 @@ export class AgentDetail extends LitElement {
   @state() private _detail: ProjectAgentDetailView | null = null;
   @state() private _loading = true;
   @state() private _error = '';
+  @state() private _agentState = '';
 
   connectedCallback() {
     super.connectedCallback();
@@ -415,10 +416,16 @@ export class AgentDetail extends LitElement {
         <div class="section">
           <div class="section-title">
             <sl-icon name="terminal"></sl-icon> Live Activity
+            ${this._agentState ? html`
+              <sl-badge variant=${this._agentState === 'working' ? 'primary' : this._agentState === 'idle' ? 'neutral' : 'warning'}>
+                ${this._agentState}
+              </sl-badge>
+            ` : nothing}
           </div>
           <agent-activity-panel
             .sessionCode=${agent.session_code}
             .participantId=${agent.id}
+            @agent-state-change=${(e: CustomEvent) => { this._agentState = e.detail.state; }}
           ></agent-activity-panel>
         </div>
       ` : nothing}

@@ -355,6 +355,8 @@ impl SeamMcp {
                     state.ticket_prefix = ticket_prefix;
                 }
 
+                self.notify_agent_state("joined", "Session joined").await;
+
                 Ok(CallToolResult::success(vec![Content::text(
                     serde_json::to_string_pretty(&result).unwrap(),
                 )]))
@@ -937,6 +939,7 @@ impl SeamMcp {
                 Ok(CallToolResult::error(vec![Content::text("Task not found")]))
             }
             Ok(_) => {
+                self.notify_agent_state("idle", &format!("Closed task {}", params.id)).await;
                 let task = self.fetch_task(task_id).await;
                 match task {
                     Ok(t) => Ok(CallToolResult::success(vec![Content::text(
@@ -1008,6 +1011,8 @@ impl SeamMcp {
                     &format!("claimed {}", ticket_id),
                     serde_json::json!({ "ticket_id": ticket_id, "assigned_to": participant_id }),
                 ).await;
+
+                self.notify_agent_state("working", &format!("Claimed {}", ticket_id)).await;
 
                 let updated = self.fetch_task(task_id).await;
                 match updated {
@@ -2514,6 +2519,32 @@ impl SeamMcp {
         .await
         {
             eprintln!("[seam-mcp] Failed to record activity: {e}");
+        }
+    }
+
+    async fn notify_agent_state(&self, state: &str, detail: &str) {
+        let (session_code, participant_id) = {
+            let s = match self.state.lock() {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            match (s.session_code.clone(), s.participant_id) {
+                (Some(code), Some(pid)) => (code, pid),
+                _ => return,
+            }
+        };
+        let payload = serde_json::json!({
+            "session_code": session_code,
+            "participant_id": participant_id.to_string(),
+            "state": state,
+            "detail": detail,
+        });
+        if let Err(e) = sqlx::query("SELECT pg_notify('agent_state', $1)")
+            .bind(payload.to_string())
+            .execute(&self.db)
+            .await
+        {
+            eprintln!("[seam-mcp] Failed to notify agent state: {e}");
         }
     }
 

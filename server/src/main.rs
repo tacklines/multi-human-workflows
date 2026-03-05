@@ -237,7 +237,8 @@ async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<()
     listener.listen("task_changes").await?;
     listener.listen("domain_events").await?;
     listener.listen("tool_invocations").await?;
-    tracing::info!("PG LISTEN on 'task_changes', 'domain_events', and 'tool_invocations' channels active");
+    listener.listen("agent_state").await?;
+    tracing::info!("PG LISTEN on 'task_changes', 'domain_events', 'tool_invocations', and 'agent_state' channels active");
 
     loop {
         let notification = listener.recv().await?;
@@ -272,6 +273,35 @@ async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<()
                     }
                     Err(e) => {
                         tracing::warn!("Bad tool_invocations NOTIFY payload: {e}");
+                    }
+                }
+            }
+            "agent_state" => {
+                match serde_json::from_str::<serde_json::Value>(payload) {
+                    Ok(msg) => {
+                        let session_code = msg["session_code"].as_str().unwrap_or("");
+                        let participant_id = msg["participant_id"].as_str().unwrap_or("");
+
+                        if !session_code.is_empty() && !participant_id.is_empty() {
+                            state.connections.broadcast_agent_stream(
+                                session_code,
+                                participant_id,
+                                &serde_json::json!({
+                                    "type": "agent_stream",
+                                    "stream": "state",
+                                    "participant_id": participant_id,
+                                    "data": {
+                                        "from": "",
+                                        "to": msg["state"],
+                                        "detail": msg["detail"],
+                                        "ts": chrono::Utc::now().to_rfc3339(),
+                                    }
+                                }),
+                            ).await;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Bad agent_state NOTIFY payload: {e}");
                     }
                 }
             }

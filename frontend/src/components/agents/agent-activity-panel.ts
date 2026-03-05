@@ -26,7 +26,14 @@ interface OutputLine {
   ts: string;
 }
 
-type ActivityEntry = ToolEvent | OutputLine;
+interface StateEvent {
+  kind: 'state';
+  to: string;
+  detail: string;
+  ts: string;
+}
+
+type ActivityEntry = ToolEvent | OutputLine | StateEvent;
 
 const MAX_ENTRIES = 500;
 const MAX_OUTPUT_LINES = 1000;
@@ -84,6 +91,7 @@ export class AgentActivityPanel extends LitElement {
     }
     .entry-kind.tool { color: var(--sl-color-primary-400); }
     .entry-kind.output { color: var(--sl-color-neutral-400); }
+    .entry-kind.state { color: var(--sl-color-warning-400); }
 
     .entry-detail {
       flex: 1;
@@ -183,6 +191,7 @@ export class AgentActivityPanel extends LitElement {
   @state() private _connected = false;
   @state() private _historicalTools: ToolEvent[] = [];
   @state() private _historicalLoaded = false;
+  @state() private _currentState = '';
 
   private _listener: AgentStreamListener = (event: AgentStreamEvent) => {
     if (event.participant_id !== this.participantId) return;
@@ -207,6 +216,20 @@ export class AgentActivityPanel extends LitElement {
       };
       this._outputLines = [...this._outputLines.slice(-(MAX_OUTPUT_LINES - 1)), entry];
       this._allEntries = [...this._allEntries.slice(-(MAX_ENTRIES - 1)), entry];
+    } else if (event.stream === 'state') {
+      const entry: StateEvent = {
+        kind: 'state',
+        to: (event.data as any).to ?? '',
+        detail: (event.data as any).detail ?? '',
+        ts: (event.data as any).ts ?? new Date().toISOString(),
+      };
+      this._currentState = entry.to;
+      this._allEntries = [...this._allEntries.slice(-(MAX_ENTRIES - 1)), entry];
+      this.dispatchEvent(new CustomEvent('agent-state-change', {
+        detail: { state: entry.to, detail: entry.detail },
+        bubbles: true,
+        composed: true,
+      }));
     }
 
     this.requestUpdate();
@@ -373,6 +396,15 @@ export class AgentActivityPanel extends LitElement {
           <span class="entry-detail ${e.is_error ? 'error' : ''}">${e.tool_name}</span>
           <span class="tool-duration">${this._formatDuration(e.duration_ms)}</span>
           ${e.is_error ? html`<sl-badge variant="danger" size="small">err</sl-badge>` : nothing}
+        </div>
+      `;
+    }
+    if (e.kind === 'state') {
+      return html`
+        <div class="entry">
+          <span class="entry-ts">${this._formatTime(e.ts)}</span>
+          <span class="entry-kind state">state</span>
+          <span class="entry-detail">${e.to}${e.detail ? ` — ${e.detail}` : ''}</span>
         </div>
       `;
     }
