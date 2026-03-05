@@ -1,6 +1,6 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import './markdown-content.js';
 import { store } from '../../state/app-state.js';
 import { fetchNotes, upsertNote, type NoteView } from '../../state/task-api.js';
 
@@ -242,7 +242,7 @@ export class NotesPanel extends LitElement {
             </div>
           ` : html`
             <div class="note-display" @click=${this._startEditing}>
-              ${activeNote.content || ''}
+              <markdown-content .content=${activeNote.content || ''}></markdown-content>
             </div>
           `}
           ${activeNote.updated_by_name ? html`

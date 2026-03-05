@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import './markdown-content.js';
 import { store } from '../../state/app-state.js';
 import { fetchQuestions, answerQuestion, cancelQuestion, type QuestionView } from '../../state/task-api.js';
 
@@ -279,7 +280,7 @@ export class QuestionPanel extends LitElement {
           <span class="asker-name">${q.asked_by_name}</span>
           <span class="question-time">${this._relativeTime(q.created_at)}</span>
         </div>
-        <div class="question-text">${q.question_text}</div>
+        <div class="question-text"><markdown-content .content=${q.question_text}></markdown-content></div>
 
         ${q.status === 'pending' ? html`
           ${isAnswering ? html`
@@ -326,7 +327,7 @@ export class QuestionPanel extends LitElement {
               Answered by ${q.answered_by_name ?? 'Unknown'}
               ${q.answered_at ? ` · ${this._relativeTime(q.answered_at)}` : ''}
             </div>
-            <div class="answer-text">${q.answer_text}</div>
+            <div class="answer-text"><markdown-content .content=${q.answer_text ?? ''}></markdown-content></div>
           </div>
         ` : nothing}
       </div>

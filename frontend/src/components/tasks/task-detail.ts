@@ -1,6 +1,6 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
-import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import '../shared/markdown-content.js';
 import { fetchTask, fetchTasks, updateTask, deleteTask, addComment, addDependency, removeDependency, fetchActivity, type ActivityEvent } from '../../state/task-api.js';
 import {
   type TaskDetailView, type TaskStatus, type TaskType, type TaskPriority, type TaskComplexity,
@@ -240,43 +240,6 @@ export class TaskDetail extends LitElement {
       display: inline;
     }
 
-    .description-content code {
-      background: var(--surface-bg);
-      padding: 0.15em 0.35em;
-      border-radius: 3px;
-      font-size: 0.85em;
-      font-family: monospace;
-    }
-
-    .description-content pre {
-      background: var(--surface-bg);
-      padding: 0.75rem;
-      border-radius: 4px;
-      overflow-x: auto;
-      margin: 0.5rem 0;
-    }
-
-    .description-content pre code {
-      background: none;
-      padding: 0;
-    }
-
-    .description-content a {
-      color: var(--sl-color-primary-400);
-    }
-
-    .description-content .mention {
-      color: var(--sl-color-primary-400);
-      font-weight: 600;
-    }
-
-    .description-content p {
-      margin: 0 0 0.5rem 0;
-    }
-
-    .description-content p:last-child {
-      margin-bottom: 0;
-    }
 
     .no-description {
       color: var(--text-tertiary);
@@ -438,40 +401,6 @@ export class TaskDetail extends LitElement {
       line-height: 1.5;
     }
 
-    .comment-content code {
-      background: var(--surface-bg);
-      padding: 0.1em 0.3em;
-      border-radius: 3px;
-      font-size: 0.85em;
-      font-family: monospace;
-    }
-
-    .comment-content pre {
-      background: var(--surface-bg);
-      padding: 0.5rem;
-      border-radius: 4px;
-      overflow-x: auto;
-      margin: 0.35rem 0;
-    }
-
-    .comment-content pre code {
-      background: none;
-      padding: 0;
-    }
-
-    .mention {
-      color: var(--sl-color-primary-400);
-      font-weight: 600;
-      cursor: default;
-    }
-
-    .comment-content p {
-      margin: 0 0 0.35rem 0;
-    }
-
-    .comment-content p:last-child {
-      margin-bottom: 0;
-    }
 
     /* ── Collapsed comment input ── */
     .comment-input-collapsed {
@@ -632,40 +561,6 @@ export class TaskDetail extends LitElement {
     return this._formatDate(iso);
   }
 
-  private _renderMarkdown(text: string) {
-    let escaped = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-    escaped = escaped.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _lang, code) =>
-      `<pre><code>${code.trimEnd()}</code></pre>`
-    );
-    escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
-    escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    escaped = escaped.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    escaped = escaped.replace(
-      /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener">$1</a>'
-    );
-    escaped = escaped.replace(
-      /(?<!")(https?:\/\/[^\s<]+)/g,
-      '<a href="$1" target="_blank" rel="noopener">$1</a>'
-    );
-    // Highlight @mentions
-    escaped = escaped.replace(
-      /@([\w.\-]+(?:\s[\w.\-]+)?)/g,
-      '<span class="mention">@$1</span>'
-    );
-
-    escaped = escaped
-      .split(/\n{2,}/)
-      .filter(p => p.trim())
-      .map(p => p.includes('<pre>') ? p : `<p>${p.replace(/\n/g, '<br>')}</p>`)
-      .join('');
-
-    return unsafeHTML(escaped);
-  }
 
   private async _updateField(fields: Record<string, unknown>) {
     if (!this._task) return;
@@ -896,7 +791,7 @@ export class TaskDetail extends LitElement {
             </div>`
           : task.description
             ? html`<div class="description-content" @click=${() => { this._editingDescription = true; }}>
-                ${this._renderMarkdown(task.description)}
+                <markdown-content .content=${task.description}></markdown-content>
                 <sl-icon class="edit-hint" name="pencil" style="position: absolute; top: 0.5rem; right: 0.5rem;"></sl-icon>
               </div>`
             : html`<div class="no-description" @click=${() => { this._editingDescription = true; }}>Click to add a description...</div>`
@@ -1106,7 +1001,7 @@ export class TaskDetail extends LitElement {
                       <span class="comment-time">${this._relativeTime(item.created_at)}</span>
                     </sl-tooltip>
                   </div>
-                  <div class="comment-content">${this._renderMarkdown(item.data.content)}</div>
+                  <div class="comment-content"><markdown-content .content=${item.data.content}></markdown-content></div>
                 </div>`
               : html`
                 <div class="activity-event">
