@@ -42,6 +42,36 @@ export CODER_TOKEN=<coder tokens create --name seam-integration>
 
 Health check: `GET /api/integrations/coder/status`
 
+## MCP Access
+
+Two transports for AI agents to connect:
+
+**Local (stdio)** — for agents with DB access (dev, same-host):
+```json
+{
+  "mcpServers": {
+    "seam": {
+      "command": "cargo",
+      "args": ["run", "--bin", "seam-mcp", "--manifest-path", "server/Cargo.toml", "--"],
+      "env": { "DATABASE_URL": "postgres://seam:seam@localhost:5433/seam" }
+    }
+  }
+}
+```
+
+**Remote (Streamable HTTP)** — for distributed teams, no DB access needed:
+```json
+{
+  "mcpServers": {
+    "seam": {
+      "url": "http://localhost:3002/mcp"
+    }
+  }
+}
+```
+
+Both transports expose the same tools. Agents authenticate by calling `join_session` with their agent code.
+
 ## Conventions
 
 - Frontend API calls go through Vite proxy (`/api` → `:3002`, `/ws` → WebSocket)

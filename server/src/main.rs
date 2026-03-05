@@ -2,6 +2,7 @@ mod auth;
 mod coder;
 mod db;
 mod events;
+mod mcp_handler;
 #[allow(dead_code)]
 mod models;
 mod routes;
@@ -12,6 +13,10 @@ use tower_http::cors::{CorsLayer, Any};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use std::sync::Arc;
+use rmcp::transport::streamable_http_server::{
+    StreamableHttpService, StreamableHttpServerConfig,
+    session::local::LocalSessionManager,
+};
 
 pub struct AppState {
     pub db: sqlx::PgPool,
@@ -131,7 +136,17 @@ async fn main() {
         .route("/ws", get(ws::handler::ws_upgrade))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        .with_state(state.clone());
+
+    // Mount MCP Streamable HTTP endpoint for remote agents
+    let mcp_db = state.db.clone();
+    let mcp_service = StreamableHttpService::new(
+        move || Ok(mcp_handler::SeamMcp::new(mcp_db.clone())),
+        Arc::new(LocalSessionManager::default()),
+        StreamableHttpServerConfig::default(),
+    );
+    let app = app.nest_service("/mcp", mcp_service);
+    tracing::info!("MCP Streamable HTTP endpoint available at /mcp");
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3002".to_string());
     let addr = format!("0.0.0.0:{}", port);
