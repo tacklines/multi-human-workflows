@@ -93,8 +93,13 @@ export class AppShell extends LitElement {
         "sidebar main";
     }
 
-    .app-layout.sidebar-collapsed {
+    .app-layout.sidebar-collapsed,
+    .app-layout.no-sidebar {
       grid-template-columns: 0 1fr;
+    }
+
+    .app-layout.no-sidebar .sidebar {
+      display: none;
     }
 
     /* ── Header ── */
@@ -487,7 +492,7 @@ export class AppShell extends LitElement {
     const currentId = session?.participantId ?? '';
 
     return html`
-      <div class="app-layout ${this._sidebarCollapsed ? 'sidebar-collapsed' : ''}">
+      <div class="app-layout ${!session ? 'no-sidebar' : this._sidebarCollapsed ? 'sidebar-collapsed' : ''}">
         <header class="header">
           <div class="header-left">
             <sl-icon-button

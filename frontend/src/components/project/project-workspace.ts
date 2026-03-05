@@ -1,6 +1,9 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchProject, fetchProjectSessions, type ProjectView } from '../../state/project-api.js';
+import { fetchProjectTasks } from '../../state/task-api.js';
+import type { TaskView, TaskStatus } from '../../state/task-types.js';
+import { TASK_TYPE_ICONS, TASK_TYPE_COLORS, STATUS_LABELS, STATUS_VARIANTS, PRIORITY_ICONS, PRIORITY_COLORS } from '../../state/task-types.js';
 import { store, type SessionView } from '../../state/app-state.js';
 import { connectSession } from '../../state/session-connection.js';
 import { authStore } from '../../state/auth-state.js';
@@ -12,19 +15,26 @@ import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
-import '@shoelace-style/shoelace/dist/components/tab-group/tab-group.js';
-import '@shoelace-style/shoelace/dist/components/tab/tab.js';
-import '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js';
 import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
-
-import '../tasks/task-board.js';
+import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 
 const API_BASE = '';
 
 @customElement('project-workspace')
 export class ProjectWorkspace extends LitElement {
   static styles = css`
-    :host { display: flex; flex-direction: column; flex: 1; min-height: 100%; }
+    :host { display: block; flex: 1; }
+
+    .container {
+      min-height: 100%;
+      padding: 2rem;
+      background: var(--surface-1, #111320);
+    }
+
+    .inner {
+      max-width: 64rem;
+      margin: 0 auto;
+    }
 
     .loading {
       display: flex;
@@ -33,20 +43,12 @@ export class ProjectWorkspace extends LitElement {
       min-height: 200px;
     }
 
-    .workspace {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 100%;
-    }
-
-    .workspace-header {
+    /* ── Project header ── */
+    .project-header {
       display: flex;
       align-items: center;
       gap: 0.75rem;
-      padding: 0.75rem 1rem;
-      border-bottom: 1px solid var(--border-color);
-      background: var(--surface-2);
+      margin-bottom: 2rem;
     }
 
     .back-link {
@@ -56,124 +58,258 @@ export class ProjectWorkspace extends LitElement {
       color: var(--text-tertiary);
       cursor: pointer;
       font-size: 0.85rem;
+      text-decoration: none;
+      flex-shrink: 0;
     }
     .back-link:hover { color: var(--sl-color-primary-400); }
 
-    .workspace-header h2 {
+    .project-header h1 {
       margin: 0;
-      font-size: 1.1rem;
-      font-weight: 600;
+      font-size: 1.5rem;
+      font-weight: 700;
       color: var(--text-primary);
+      letter-spacing: -0.02em;
       flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
-    .workspace-header .prefix {
+    .prefix-badge {
       font-family: var(--sl-font-mono);
       font-size: 0.75rem;
       background: var(--surface-active);
-      padding: 0.15rem 0.4rem;
+      padding: 0.2rem 0.5rem;
       border-radius: 4px;
       color: var(--text-secondary);
+      flex-shrink: 0;
     }
 
-    sl-tab-group {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
+    /* ── Section headers ── */
+    .section {
+      margin-bottom: 2rem;
     }
 
-    sl-tab-group::part(body) {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-
-    sl-tab-panel {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-
-    sl-tab-panel::part(base) {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      padding: 0;
-    }
-
-    task-board {
-      flex: 1;
-    }
-
-    .sessions-panel {
-      padding: 1rem;
-    }
-
-    .session-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      max-width: 48rem;
-    }
-
-    .session-row {
+    .section-header {
       display: flex;
       align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .section-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* ── Sessions grid ── */
+    .sessions-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
       gap: 0.75rem;
-      padding: 0.75rem 1rem;
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--sl-border-radius-medium);
-      background: var(--surface-card);
+    }
+
+    .session-card {
       cursor: pointer;
-      transition: border-color 0.15s, background 0.15s;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--sl-border-radius-large);
+      padding: 1.25rem;
+      background: var(--surface-card);
+      box-shadow: var(--shadow-xs);
+      transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
     }
 
-    .session-row:hover {
+    .session-card:hover {
       border-color: var(--color-primary-border);
-      background: var(--surface-active);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-1px);
     }
 
-    .session-row .code {
+    .session-card .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+
+    .session-card .code {
       font-family: var(--sl-font-mono);
       font-weight: 700;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       color: var(--sl-color-primary-400);
       letter-spacing: 0.08em;
-      min-width: 5rem;
     }
 
-    .session-row .name {
-      flex: 1;
+    .session-card .date {
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+    }
+
+    .session-card .name {
+      font-size: 0.95rem;
+      font-weight: 500;
       color: var(--text-primary);
-      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    .session-row .participants {
+    .session-card .participants {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
       font-size: 0.8rem;
       color: var(--text-tertiary);
     }
 
-    .session-row .date {
-      font-size: 0.75rem;
-      color: var(--text-tertiary);
+    .session-card .participants sl-icon {
+      font-size: 0.85rem;
     }
 
-    .new-session-form {
+    .online-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--sl-color-success-500);
+      margin-right: 0.15rem;
+    }
+
+    .new-session-card {
+      cursor: pointer;
+      border: 2px dashed var(--border-medium);
+      border-radius: var(--sl-border-radius-large);
+      padding: 1.25rem;
+      background: transparent;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      color: var(--text-tertiary);
+      transition: border-color 0.2s, color 0.2s;
+      min-height: 100px;
+    }
+
+    .new-session-card:hover {
+      border-color: var(--sl-color-primary-500);
+      color: var(--sl-color-primary-400);
+    }
+
+    .new-session-card sl-icon {
+      font-size: 1.25rem;
+    }
+
+    /* ── Stats row ── */
+    .stats-row {
       display: flex;
       gap: 0.5rem;
-      align-items: flex-end;
       margin-bottom: 1rem;
-      max-width: 48rem;
+      flex-wrap: wrap;
     }
 
-    .new-session-form sl-input {
+    .stat-chip {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: var(--sl-border-radius-pill);
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .stat-chip .count {
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .stat-chip.active {
+      border-color: var(--color-primary-border);
+      background: var(--surface-active);
+    }
+
+    /* ── Task list ── */
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--sl-border-radius-medium);
+      overflow: hidden;
+    }
+
+    .task-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 1rem;
+      background: var(--surface-card);
+      cursor: default;
+      font-size: 0.875rem;
+    }
+
+    .task-row:not(:last-child) {
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .task-row .type-icon {
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+
+    .task-row .ticket-id {
+      font-family: var(--sl-font-mono);
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+      flex-shrink: 0;
+      min-width: 5rem;
+    }
+
+    .task-row .task-title {
       flex: 1;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .task-row .priority-icon {
+      font-size: 0.8rem;
+      flex-shrink: 0;
+    }
+
+    .task-row sl-badge::part(base) {
+      font-size: 0.7rem;
     }
 
     .empty-state {
       text-align: center;
       padding: 2rem;
       color: var(--text-tertiary);
+      font-size: 0.9rem;
+    }
+
+    .empty-state sl-icon {
+      font-size: 2rem;
+      display: block;
+      margin: 0 auto 0.75rem;
+      opacity: 0.5;
+    }
+
+    .dialog-form {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
     }
   `;
 
@@ -181,11 +317,13 @@ export class ProjectWorkspace extends LitElement {
 
   @state() private _project: ProjectView | null = null;
   @state() private _sessions: SessionView[] = [];
+  @state() private _tasks: TaskView[] = [];
+  @state() private _taskCounts = { open: 0, in_progress: 0, done: 0, closed: 0, total: 0 };
   @state() private _loading = true;
   @state() private _error = '';
+  @state() private _showNewSession = false;
   @state() private _newSessionName = '';
   @state() private _creatingSess = false;
-  @state() private _activeTab = 'tasks';
 
   private _appUnsub: (() => void) | null = null;
 
@@ -194,7 +332,7 @@ export class ProjectWorkspace extends LitElement {
     this._loadProject();
     this._appUnsub = store.subscribe((event) => {
       if (event.type === 'session-connected') {
-        // Switched to in-session mode, app-shell will handle
+        // app-shell handles the switch
       }
     });
   }
@@ -215,12 +353,26 @@ export class ProjectWorkspace extends LitElement {
     this._loading = true;
     this._error = '';
     try {
-      const [project, sessions] = await Promise.all([
+      const [project, sessions, allTasks] = await Promise.all([
         fetchProject(this.projectId),
         fetchProjectSessions(this.projectId),
+        fetchProjectTasks(this.projectId),
       ]);
       this._project = project;
       this._sessions = sessions;
+
+      // Compute counts from all tasks
+      const counts = { open: 0, in_progress: 0, done: 0, closed: 0, total: allTasks.length };
+      for (const t of allTasks) {
+        counts[t.status as keyof typeof counts] = (counts[t.status as keyof typeof counts] as number) + 1;
+      }
+      this._taskCounts = counts;
+
+      // Show only open + in_progress tasks, sorted by updated_at desc, capped at 25
+      this._tasks = allTasks
+        .filter(t => t.status === 'open' || t.status === 'in_progress')
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        .slice(0, 25);
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to load project';
     } finally {
@@ -250,6 +402,7 @@ export class ProjectWorkspace extends LitElement {
       connectSession(data.session.code);
       window.location.hash = `#session/${data.session.code}`;
       this._newSessionName = '';
+      this._showNewSession = false;
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to create session';
     } finally {
@@ -287,6 +440,17 @@ export class ProjectWorkspace extends LitElement {
     return session.participants.filter(p => p.is_online).length;
   }
 
+  private _relativeTime(iso: string): string {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  }
+
   render() {
     if (this._loading) {
       return html`<div class="loading"><sl-spinner style="font-size: 2rem;"></sl-spinner></div>`;
@@ -297,71 +461,161 @@ export class ProjectWorkspace extends LitElement {
     }
 
     return html`
-      <div class="workspace">
-        <div class="workspace-header">
-          <span class="back-link" role="button" tabindex="0"
-                @click=${() => { window.location.hash = '#projects'; }}>
-            <sl-icon name="arrow-left"></sl-icon> Projects
+      <div class="container">
+        <div class="inner">
+          ${this._renderHeader()}
+          ${this._error ? html`<sl-alert variant="danger" open style="margin-bottom: 1rem;">${this._error}</sl-alert>` : nothing}
+          ${this._renderSessions()}
+          ${this._renderTasks()}
+        </div>
+      </div>
+
+      <sl-dialog label="New Session" ?open=${this._showNewSession}
+                 @sl-after-hide=${() => { this._showNewSession = false; }}>
+        <div class="dialog-form">
+          <sl-input label="Session Name" placeholder="e.g. Sprint Planning"
+                    help-text="Optional — give it a name to help others find it"
+                    value=${this._newSessionName}
+                    @sl-input=${(e: CustomEvent) => { this._newSessionName = (e.target as HTMLInputElement).value; }}
+                    @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createSession(); }}
+          ></sl-input>
+        </div>
+        <sl-button slot="footer" variant="primary" ?loading=${this._creatingSess}
+                   @click=${() => void this._createSession()}>
+          Create Session
+        </sl-button>
+      </sl-dialog>
+    `;
+  }
+
+  private _renderHeader() {
+    const p = this._project!;
+    return html`
+      <div class="project-header">
+        <span class="back-link" role="button" tabindex="0"
+              @click=${() => { window.location.hash = '#projects'; }}
+              @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') window.location.hash = '#projects'; }}>
+          <sl-icon name="arrow-left"></sl-icon> Projects
+        </span>
+        <h1>${p.name}</h1>
+        <span class="prefix-badge">${p.ticket_prefix}</span>
+      </div>
+    `;
+  }
+
+  private _renderSessions() {
+    const active = this._sessions.filter(s => this._onlineCount(s) > 0);
+    const inactive = this._sessions.filter(s => this._onlineCount(s) === 0);
+
+    return html`
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">
+            <sl-icon name="people-fill"></sl-icon>
+            Sessions
+            <sl-badge variant="neutral" pill>${this._sessions.length}</sl-badge>
           </span>
-          <h2>${this._project.name}</h2>
-          <span class="prefix">${this._project.ticket_prefix}</span>
         </div>
 
-        ${this._error ? html`<sl-alert variant="danger" open style="margin: 0.5rem 1rem;">${this._error}</sl-alert>` : nothing}
+        <div class="sessions-grid">
+          ${active.map(s => this._renderSessionCard(s, true))}
+          ${inactive.slice(0, 8).map(s => this._renderSessionCard(s, false))}
 
-        <sl-tab-group @sl-tab-show=${(e: CustomEvent) => { this._activeTab = (e.detail as { name: string }).name; }}>
-          <sl-tab slot="nav" panel="tasks">Tasks</sl-tab>
-          <sl-tab slot="nav" panel="sessions">
-            Sessions
-            <sl-badge variant="neutral" pill style="margin-left: 0.3rem;">${this._sessions.length}</sl-badge>
-          </sl-tab>
+          <div class="new-session-card" role="button" tabindex="0"
+               @click=${() => { this._showNewSession = true; }}
+               @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._showNewSession = true; } }}>
+            <sl-icon name="plus-lg"></sl-icon>
+            <span>New Session</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 
-          <sl-tab-panel name="tasks">
-            <task-board
-              project-id=${this.projectId}
-              session-code=""
-              session-name=""
-              .participants=${[]}
-            ></task-board>
-          </sl-tab-panel>
+  private _renderSessionCard(s: SessionView, hasOnline: boolean) {
+    const online = this._onlineCount(s);
+    return html`
+      <div class="session-card" role="button" tabindex="0"
+           @click=${() => void this._joinSession(s.code)}
+           @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void this._joinSession(s.code); } }}>
+        <div class="card-top">
+          <span class="code">${s.code}</span>
+          <span class="date">${this._formatDate(s.created_at)}</span>
+        </div>
+        <div class="name">${s.name || 'Untitled session'}</div>
+        <div class="participants">
+          ${hasOnline ? html`<span class="online-dot"></span>` : nothing}
+          <sl-icon name="people"></sl-icon>
+          ${hasOnline
+            ? html`${online} online`
+            : html`${s.participants.length} participant${s.participants.length !== 1 ? 's' : ''}`}
+        </div>
+      </div>
+    `;
+  }
 
-          <sl-tab-panel name="sessions">
-            <div class="sessions-panel">
-              <div class="new-session-form">
-                <sl-input placeholder="Session name (optional)"
-                          size="small"
-                          value=${this._newSessionName}
-                          @sl-input=${(e: CustomEvent) => { this._newSessionName = (e.target as HTMLInputElement).value; }}
-                          @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createSession(); }}
-                ></sl-input>
-                <sl-button variant="primary" size="small" ?loading=${this._creatingSess}
-                           @click=${() => void this._createSession()}>
-                  <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-                  New Session
-                </sl-button>
+  private _renderTasks() {
+    const { open, in_progress, done, closed, total } = this._taskCounts;
+
+    return html`
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">
+            <sl-icon name="kanban"></sl-icon>
+            Tasks
+            <sl-badge variant="neutral" pill>${total}</sl-badge>
+          </span>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat-chip ${open > 0 ? 'active' : ''}">
+            <span class="count">${open}</span> Open
+          </div>
+          <div class="stat-chip ${in_progress > 0 ? 'active' : ''}">
+            <span class="count">${in_progress}</span> In Progress
+          </div>
+          <div class="stat-chip">
+            <span class="count">${done}</span> Done
+          </div>
+          <div class="stat-chip">
+            <span class="count">${closed}</span> Closed
+          </div>
+        </div>
+
+        ${this._tasks.length === 0 ? html`
+          <div class="empty-state">
+            <sl-icon name="check-circle"></sl-icon>
+            ${total === 0
+              ? 'No tasks yet. Join a session to create tasks.'
+              : 'All tasks are done or closed.'}
+          </div>
+        ` : html`
+          <div class="task-list">
+            ${this._tasks.map(t => html`
+              <div class="task-row">
+                <sl-icon class="type-icon" name=${TASK_TYPE_ICONS[t.task_type]}
+                         style="color: ${TASK_TYPE_COLORS[t.task_type]}"></sl-icon>
+                <span class="ticket-id">${t.ticket_id}</span>
+                <span class="task-title">${t.title}</span>
+                <sl-icon class="priority-icon" name=${PRIORITY_ICONS[t.priority]}
+                         style="color: ${PRIORITY_COLORS[t.priority]}"></sl-icon>
+                <sl-badge variant=${STATUS_VARIANTS[t.status]}>${STATUS_LABELS[t.status]}</sl-badge>
+                <sl-tooltip content="Updated ${this._relativeTime(t.updated_at)}">
+                  <span class="date" style="font-size: 0.75rem; color: var(--text-tertiary);">
+                    ${this._relativeTime(t.updated_at)}
+                  </span>
+                </sl-tooltip>
               </div>
-
-              ${this._sessions.length === 0 ? html`
-                <div class="empty-state">No sessions yet. Create one to start collaborating.</div>
-              ` : html`
-                <div class="session-list">
-                  ${this._sessions.map(s => html`
-                    <div class="session-row" role="button" tabindex="0"
-                         @click=${() => void this._joinSession(s.code)}
-                         @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void this._joinSession(s.code); } }}>
-                      <span class="code">${s.code}</span>
-                      <span class="name">${s.name || 'Untitled session'}</span>
-                      <span class="participants">
-                        ${this._onlineCount(s)} online / ${s.participants.length} total
-                      </span>
-                      <span class="date">${this._formatDate(s.created_at)}</span>
-                    </div>
-                  `)}
-                </div>
-              `}
+            `)}
+          </div>
+          ${this._tasks.length >= 25 ? html`
+            <div style="text-align: center; margin-top: 0.75rem;">
+              <span style="font-size: 0.8rem; color: var(--text-tertiary);">
+                Showing 25 of ${open + in_progress} active tasks. Join a session for the full board.
+              </span>
             </div>
-          </sl-tab-panel>
-        </sl-tab-group>
+          ` : nothing}
+        `}
       </div>
     `;
   }
