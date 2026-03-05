@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchProject, fetchProjectSessions, type ProjectView } from '../../state/project-api.js';
 import { fetchProjectTasks } from '../../state/task-api.js';
+import { fetchPlans, type PlanListView } from '../../state/plan-api.js';
 import type { TaskView, TaskStatus } from '../../state/task-types.js';
 import { TASK_TYPE_ICONS, TASK_TYPE_COLORS, STATUS_LABELS, STATUS_VARIANTS, PRIORITY_ICONS, PRIORITY_COLORS } from '../../state/task-types.js';
 import { store, type SessionView } from '../../state/app-state.js';
@@ -17,6 +18,9 @@ import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
 import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
+
+import '../plans/plan-list.js';
+import '../plans/plan-detail.js';
 
 const API_BASE = '';
 
@@ -319,6 +323,9 @@ export class ProjectWorkspace extends LitElement {
   @state() private _sessions: SessionView[] = [];
   @state() private _tasks: TaskView[] = [];
   @state() private _taskCounts = { open: 0, in_progress: 0, done: 0, closed: 0, total: 0 };
+  @state() private _plans: PlanListView[] = [];
+  @state() private _planCount = 0;
+  @state() private _selectedPlanId: string | null = null;
   @state() private _loading = true;
   @state() private _error = '';
   @state() private _showNewSession = false;
@@ -353,13 +360,16 @@ export class ProjectWorkspace extends LitElement {
     this._loading = true;
     this._error = '';
     try {
-      const [project, sessions, allTasks] = await Promise.all([
+      const [project, sessions, allTasks, plans] = await Promise.all([
         fetchProject(this.projectId),
         fetchProjectSessions(this.projectId),
         fetchProjectTasks(this.projectId),
+        fetchPlans(this.projectId),
       ]);
       this._project = project;
       this._sessions = sessions;
+      this._plans = plans;
+      this._planCount = plans.length;
 
       // Compute counts from all tasks
       const counts = { open: 0, in_progress: 0, done: 0, closed: 0, total: allTasks.length };
@@ -466,6 +476,7 @@ export class ProjectWorkspace extends LitElement {
           ${this._renderHeader()}
           ${this._error ? html`<sl-alert variant="danger" open style="margin-bottom: 1rem;">${this._error}</sl-alert>` : nothing}
           ${this._renderSessions()}
+          ${this._renderPlans()}
           ${this._renderTasks()}
         </div>
       </div>
@@ -550,6 +561,33 @@ export class ProjectWorkspace extends LitElement {
             ? html`${online} online`
             : html`${s.participants.length} participant${s.participants.length !== 1 ? 's' : ''}`}
         </div>
+      </div>
+    `;
+  }
+
+  private _renderPlans() {
+    return html`
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">
+            <sl-icon name="file-earmark-text"></sl-icon>
+            Plans
+            <sl-badge variant="neutral" pill>${this._planCount}</sl-badge>
+          </span>
+        </div>
+
+        ${this._selectedPlanId ? html`
+          <plan-detail
+            .projectId=${this.projectId}
+            .planId=${this._selectedPlanId}
+            @plan-back=${() => { this._selectedPlanId = null; }}
+          ></plan-detail>
+        ` : html`
+          <plan-list
+            .projectId=${this.projectId}
+            @plan-select=${(e: CustomEvent) => { this._selectedPlanId = e.detail.planId; }}
+          ></plan-list>
+        `}
       </div>
     `;
   }

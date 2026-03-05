@@ -1,0 +1,330 @@
+import { LitElement, html, css, nothing } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
+import { fetchPlan, updatePlan, type PlanDetailView, type PlanStatusType } from '../../state/plan-api.js';
+
+import '@shoelace-style/shoelace/dist/components/button/button.js';
+import '@shoelace-style/shoelace/dist/components/badge/badge.js';
+import '@shoelace-style/shoelace/dist/components/icon/icon.js';
+import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
+import '@shoelace-style/shoelace/dist/components/input/input.js';
+import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
+import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
+import '@shoelace-style/shoelace/dist/components/alert/alert.js';
+
+import '../shared/markdown-content.js';
+
+const STATUS_VARIANTS: Record<PlanStatusType, string> = {
+  draft: 'neutral',
+  review: 'warning',
+  accepted: 'success',
+  superseded: 'neutral',
+  abandoned: 'neutral',
+};
+
+const STATUS_LABELS: Record<PlanStatusType, string> = {
+  draft: 'Draft',
+  review: 'Review',
+  accepted: 'Accepted',
+  superseded: 'Superseded',
+  abandoned: 'Abandoned',
+};
+
+interface Transition {
+  label: string;
+  status: string;
+  variant: string;
+}
+
+const TRANSITIONS: Record<PlanStatusType, Transition[]> = {
+  draft: [
+    { label: 'Submit for Review', status: 'review', variant: 'warning' },
+    { label: 'Abandon', status: 'abandoned', variant: 'danger' },
+  ],
+  review: [
+    { label: 'Accept', status: 'accepted', variant: 'success' },
+    { label: 'Return to Draft', status: 'draft', variant: 'neutral' },
+    { label: 'Abandon', status: 'abandoned', variant: 'danger' },
+  ],
+  accepted: [
+    { label: 'Supersede', status: 'superseded', variant: 'neutral' },
+    { label: 'Abandon', status: 'abandoned', variant: 'danger' },
+  ],
+  superseded: [],
+  abandoned: [],
+};
+
+@customElement('plan-detail')
+export class PlanDetail extends LitElement {
+  static styles = css`
+    :host { display: block; }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .header {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .back-btn {
+      flex-shrink: 0;
+      margin-top: 0.15rem;
+    }
+
+    .header-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .title-input {
+      flex: 1;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.8rem;
+      color: var(--text-tertiary);
+    }
+
+    .actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .body-section {
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--sl-border-radius-large);
+      background: var(--surface-card);
+      padding: 1.5rem;
+      min-height: 200px;
+    }
+
+    .edit-controls {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      justify-content: flex-end;
+    }
+
+    sl-textarea::part(textarea) {
+      min-height: 300px;
+      font-family: var(--sl-font-mono);
+      font-size: 0.875rem;
+    }
+
+    .empty-body {
+      color: var(--text-tertiary);
+      font-style: italic;
+    }
+  `;
+
+  @property() projectId = '';
+  @property() planId = '';
+
+  @state() private _plan: PlanDetailView | null = null;
+  @state() private _loading = true;
+  @state() private _error = '';
+  @state() private _editing = false;
+  @state() private _editTitle = '';
+  @state() private _editBody = '';
+  @state() private _saving = false;
+  @state() private _transitioning = false;
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._load();
+  }
+
+  updated(changed: Map<string, unknown>) {
+    if ((changed.has('planId') || changed.has('projectId')) && this.planId && this.projectId) {
+      this._load();
+    }
+  }
+
+  private async _load() {
+    if (!this.projectId || !this.planId) return;
+    this._loading = true;
+    this._error = '';
+    this._editing = false;
+    try {
+      this._plan = await fetchPlan(this.projectId, this.planId);
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Failed to load plan';
+    } finally {
+      this._loading = false;
+    }
+  }
+
+  private _startEdit() {
+    if (!this._plan) return;
+    this._editTitle = this._plan.title;
+    this._editBody = this._plan.body;
+    this._editing = true;
+  }
+
+  private _cancelEdit() {
+    this._editing = false;
+  }
+
+  private async _saveEdit() {
+    if (!this._plan) return;
+    this._saving = true;
+    this._error = '';
+    try {
+      const updates: Record<string, string> = {};
+      if (this._editTitle !== this._plan.title) updates.title = this._editTitle;
+      if (this._editBody !== this._plan.body) updates.body = this._editBody;
+      if (Object.keys(updates).length > 0) {
+        this._plan = await updatePlan(this.projectId, this.planId, updates);
+      }
+      this._editing = false;
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Failed to save';
+    } finally {
+      this._saving = false;
+    }
+  }
+
+  private async _transition(status: string) {
+    if (!this._plan) return;
+    this._transitioning = true;
+    this._error = '';
+    try {
+      this._plan = await updatePlan(this.projectId, this.planId, { status });
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Failed to update status';
+    } finally {
+      this._transitioning = false;
+    }
+  }
+
+  private _isEditable(): boolean {
+    return this._plan?.status === 'draft' || this._plan?.status === 'review';
+  }
+
+  private _relativeTime(iso: string): string {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  }
+
+  render() {
+    if (this._loading) {
+      return html`<div class="loading"><sl-spinner style="font-size: 1.5rem;"></sl-spinner></div>`;
+    }
+
+    if (!this._plan) {
+      return html`<div style="text-align: center; color: var(--text-tertiary); padding: 2rem;">Plan not found</div>`;
+    }
+
+    const p = this._plan;
+    const transitions = TRANSITIONS[p.status] ?? [];
+
+    return html`
+      ${this._error ? html`<sl-alert variant="danger" open style="margin-bottom: 0.75rem;">${this._error}</sl-alert>` : nothing}
+
+      <div class="header">
+        <sl-button class="back-btn" size="small" variant="text"
+                   @click=${() => this.dispatchEvent(new CustomEvent('plan-back', { bubbles: true, composed: true }))}>
+          <sl-icon name="arrow-left"></sl-icon>
+        </sl-button>
+        <div class="header-content">
+          <div class="title-row">
+            ${this._editing ? html`
+              <sl-input class="title-input" size="small" value=${this._editTitle}
+                        @sl-input=${(e: CustomEvent) => { this._editTitle = (e.target as HTMLInputElement).value; }}
+              ></sl-input>
+            ` : html`
+              <h2>${p.title}</h2>
+            `}
+            <sl-badge variant=${STATUS_VARIANTS[p.status]}>${STATUS_LABELS[p.status]}</sl-badge>
+          </div>
+          <div class="meta">
+            <span>Updated ${this._relativeTime(p.updated_at)}</span>
+            <span>Created ${this._relativeTime(p.created_at)}</span>
+          </div>
+        </div>
+      </div>
+
+      ${transitions.length > 0 || this._isEditable() ? html`
+        <div class="actions">
+          ${this._isEditable() && !this._editing ? html`
+            <sl-button size="small" variant="default" @click=${() => this._startEdit()}>
+              <sl-icon slot="prefix" name="pencil"></sl-icon>
+              Edit
+            </sl-button>
+          ` : nothing}
+          ${transitions.map(t => html`
+            <sl-button size="small" variant=${t.variant} ?loading=${this._transitioning}
+                       @click=${() => void this._transition(t.status)}>
+              ${t.label}
+            </sl-button>
+          `)}
+        </div>
+      ` : nothing}
+
+      <div class="body-section">
+        ${this._editing ? html`
+          <sl-textarea rows="15" value=${this._editBody}
+                       @sl-input=${(e: CustomEvent) => { this._editBody = (e.target as HTMLTextAreaElement).value; }}
+                       placeholder="Write your plan in Markdown..."
+          ></sl-textarea>
+          <div class="edit-controls">
+            <sl-button size="small" variant="default" @click=${() => this._cancelEdit()}>Cancel</sl-button>
+            <sl-button size="small" variant="primary" ?loading=${this._saving}
+                       @click=${() => void this._saveEdit()}>
+              Save
+            </sl-button>
+          </div>
+        ` : html`
+          ${p.body ? html`
+            <markdown-content .content=${p.body}></markdown-content>
+          ` : html`
+            <div class="empty-body">No content yet. ${this._isEditable() ? 'Click Edit to start writing.' : ''}</div>
+          `}
+        `}
+      </div>
+    `;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'plan-detail': PlanDetail;
+  }
+}

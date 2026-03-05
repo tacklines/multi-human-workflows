@@ -327,6 +327,33 @@ pub struct Note {
     pub updated_at: DateTime<Utc>,
 }
 
+// --- Plans ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum PlanStatus {
+    Draft,
+    Review,
+    Accepted,
+    Superseded,
+    Abandoned,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Plan {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub author_id: Uuid,
+    pub title: String,
+    pub slug: String,
+    pub body: String,
+    pub status: PlanStatus,
+    pub parent_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 // --- Agent API DTOs ---
 
 #[derive(Debug, Deserialize)]
