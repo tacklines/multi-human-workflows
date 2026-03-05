@@ -80,6 +80,8 @@ async fn main() {
         .route("/api/sessions/{code}/tasks/{task_id}", patch(routes::tasks::update_task))
         .route("/api/sessions/{code}/tasks/{task_id}", delete(routes::tasks::delete_task))
         .route("/api/sessions/{code}/tasks/{task_id}/comments", post(routes::tasks::add_comment))
+        // Activity
+        .route("/api/sessions/{code}/activity", get(routes::activity::list_activity))
         // Agent API
         .route("/api/agent/join", post(routes::agent::agent_join))
         // WebSocket

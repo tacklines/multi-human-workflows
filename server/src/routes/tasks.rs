@@ -11,7 +11,7 @@ use crate::auth::AuthUser;
 use crate::models::*;
 use crate::AppState;
 
-async fn resolve_project(
+pub async fn resolve_project(
     db: &sqlx::PgPool,
     project_id: Uuid,
 ) -> Result<Project, StatusCode> {
@@ -182,7 +182,7 @@ async fn resolve_participant(
     .ok_or(StatusCode::FORBIDDEN)
 }
 
-async fn resolve_session(
+pub async fn resolve_session_pub(
     db: &sqlx::PgPool,
     code: &str,
 ) -> Result<Session, StatusCode> {
@@ -206,7 +206,7 @@ pub async fn create_task(
 ) -> Result<Json<TaskView>, StatusCode> {
     let user = crate::db::upsert_user(&state.db, &claims).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let session = resolve_session(&state.db, &session_code).await?;
+    let session = resolve_session_pub(&state.db, &session_code).await?;
     let participant = resolve_participant(&state.db, session.id, user.id).await?;
 
     let valid_types = ["epic", "story", "task", "subtask", "bug"];
@@ -259,6 +259,19 @@ pub async fn create_task(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let ticket_id = format!("{}-{}", ticket_prefix, ticket_number);
+    super::activity::record_activity(
+        &state.db,
+        session.project_id,
+        Some(session.id),
+        participant.id,
+        "task_created",
+        "task",
+        task_id,
+        &format!("created {} {}", req.task_type, ticket_id),
+        serde_json::json!({ "ticket_id": ticket_id, "task_type": req.task_type, "title": req.title }),
+    ).await;
+
     let view = TaskView::from_task(task, &ticket_prefix);
     Ok(Json(view))
 }
@@ -268,7 +281,7 @@ pub async fn list_tasks(
     Path(session_code): Path<String>,
     Query(query): Query<ListTasksQuery>,
 ) -> Result<Json<Vec<TaskView>>, StatusCode> {
-    let session = resolve_session(&state.db, &session_code).await?;
+    let session = resolve_session_pub(&state.db, &session_code).await?;
     let project = resolve_project(&state.db, session.project_id).await?;
 
     // Query by project (tasks persist across sessions)
@@ -419,7 +432,7 @@ pub async fn get_task(
 pub async fn update_task(
     State(state): State<Arc<AppState>>,
     Path((_session_code, task_id)): Path<(String, Uuid)>,
-    AuthUser(_claims): AuthUser,
+    AuthUser(claims): AuthUser,
     Json(req): Json<UpdateTaskRequest>,
 ) -> Result<Json<TaskView>, StatusCode> {
     let task: Task = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
@@ -494,6 +507,52 @@ pub async fn update_task(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Record activity for meaningful changes
+    let ticket_id = format!("{}-{}", project.ticket_prefix, task.ticket_number);
+    let event_type = if req.status.is_some() && (status_str == "closed" || status_str == "done") && task.closed_at.is_none() {
+        "task_closed"
+    } else {
+        "task_updated"
+    };
+
+    // Find the actor — try to resolve participant from auth user
+    if let Ok(user) = crate::db::upsert_user(&state.db, &claims).await {
+        // Find any participant for this user in the project's sessions
+        if let Ok(actor) = sqlx::query_scalar::<_, Uuid>(
+            "SELECT p.id FROM participants p JOIN sessions s ON s.id = p.session_id WHERE s.project_id = $1 AND p.user_id = $2 LIMIT 1"
+        )
+        .bind(project.id)
+        .bind(user.id)
+        .fetch_one(&state.db)
+        .await
+        {
+            let mut changes = serde_json::Map::new();
+            if req.status.is_some() { changes.insert("status".into(), serde_json::json!(status_str)); }
+            if req.priority.is_some() { changes.insert("priority".into(), serde_json::json!(priority_str)); }
+            if req.title.is_some() { changes.insert("title".into(), serde_json::json!(title)); }
+            if req.assigned_to.is_some() { changes.insert("assigned_to".into(), serde_json::json!(assigned_to)); }
+
+            let summary = if event_type == "task_closed" {
+                format!("closed {}", ticket_id)
+            } else {
+                let fields: Vec<&str> = changes.keys().map(|k| k.as_str()).collect();
+                format!("updated {} ({})", ticket_id, fields.join(", "))
+            };
+
+            super::activity::record_activity(
+                &state.db,
+                project.id,
+                task.session_id,
+                actor,
+                event_type,
+                "task",
+                task_id,
+                &summary,
+                serde_json::Value::Object(changes),
+            ).await;
+        }
+    }
+
     let view = TaskView::from_task(updated, &project.ticket_prefix);
     Ok(Json(view))
 }
@@ -536,7 +595,7 @@ pub async fn add_comment(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let session = resolve_session(&state.db, &_session_code).await?;
+    let session = resolve_session_pub(&state.db, &_session_code).await?;
     let participant = resolve_participant(&state.db, session.id, user.id).await?;
 
     let comment_id = Uuid::new_v4();
@@ -556,6 +615,26 @@ pub async fn add_comment(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+    // Record activity
+    let task: Task = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+        .bind(task_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let project = super::tasks::resolve_project(&state.db, task.project_id).await?;
+    let ticket_id = format!("{}-{}", project.ticket_prefix, task.ticket_number);
+    super::activity::record_activity(
+        &state.db,
+        task.project_id,
+        task.session_id,
+        participant.id,
+        "comment_added",
+        "comment",
+        comment_id,
+        &format!("commented on {}", ticket_id),
+        serde_json::json!({ "ticket_id": ticket_id, "preview": &req.content[..req.content.len().min(100)] }),
+    ).await;
+
     let view = CommentView {
         id: comment_id,
         author_id: participant.id,
@@ -563,6 +642,5 @@ pub async fn add_comment(
         created_at: now,
     };
 
-    // WebSocket broadcast handled by PG trigger → NOTIFY → listener
     Ok(Json(view))
 }

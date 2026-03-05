@@ -29,7 +29,8 @@ export type AppStateEvent =
   | { type: 'session-connected'; code: string; participantId: string }
   | { type: 'session-updated' }
   | { type: 'session-disconnected' }
-  | { type: 'tasks-changed' };
+  | { type: 'tasks-changed' }
+  | { type: 'activity-changed' };
 
 type Listener = (event: AppStateEvent) => void;
 
@@ -77,6 +78,10 @@ class Store {
 
   notifyTasksChanged() {
     this.notify({ type: 'tasks-changed' });
+  }
+
+  notifyActivityChanged() {
+    this.notify({ type: 'activity-changed' });
   }
 }
 

@@ -13,6 +13,7 @@ import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 
 import './presence-bar.js';
+import './activity-feed.js';
 import '../session/session-lobby.js';
 
 @customElement('app-shell')
@@ -362,6 +363,10 @@ export class AppShell extends LitElement {
         <sl-icon slot="prefix" name="box-arrow-left"></sl-icon>
         Leave
       </sl-button>
+
+      <sl-divider></sl-divider>
+
+      <activity-feed session-code=${s.code}></activity-feed>
     `;
   }
 

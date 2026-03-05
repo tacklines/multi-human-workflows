@@ -78,6 +78,28 @@ export async function deleteTask(sessionCode: string, taskId: string): Promise<v
   }
 }
 
+export interface ActivityEvent {
+  id: string;
+  actor_id: string;
+  actor_name: string;
+  event_type: string;
+  target_type: string;
+  target_id: string;
+  summary: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export async function fetchActivity(
+  sessionCode: string,
+  limit = 50,
+): Promise<ActivityEvent[]> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/activity?limit=${limit}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<ActivityEvent[]>(res);
+}
+
 export async function addComment(
   sessionCode: string,
   taskId: string,

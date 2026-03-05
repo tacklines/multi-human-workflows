@@ -87,6 +87,11 @@ function openSocket(code: string): void {
       if (msg.type === 'task_created' || msg.type === 'task_updated' || msg.type === 'task_deleted' || msg.type === 'comment_added') {
         store.notifyTasksChanged();
       }
+
+      // Activity events — notify activity feed to refresh
+      if (msg.type === 'activity') {
+        store.notifyActivityChanged();
+      }
     } catch {
       // ignore malformed messages
     }

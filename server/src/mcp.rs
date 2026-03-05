@@ -131,6 +131,12 @@ struct CloseTaskParams {
     commit_sha: Option<String>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ListActivityParams {
+    /// Maximum number of events to return (default 20, max 100)
+    limit: Option<i64>,
+}
+
 // --- MCP Server ---
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
@@ -348,6 +354,16 @@ impl SeamMcp {
         .execute(&self.db)
         .await {
             Ok(_) => {
+                // Record activity
+                let prefix = self.get_ticket_prefix();
+                let ticket_id = format!("{}-{}", prefix, ticket_number);
+                self.record_activity(
+                    project_id, Some(session_id), participant_id,
+                    "task_created", "task", task_id,
+                    &format!("created {} {}", params.task_type, ticket_id),
+                    serde_json::json!({ "ticket_id": ticket_id, "task_type": params.task_type, "title": params.title }),
+                ).await;
+
                 let task = self.fetch_task(task_id).await;
                 match task {
                     Ok(t) => Ok(CallToolResult::success(vec![Content::text(
@@ -499,6 +515,19 @@ impl SeamMcp {
         &self,
         Parameters(params): Parameters<UpdateTaskParams>,
     ) -> Result<CallToolResult, McpError> {
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
         let task_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
@@ -595,6 +624,26 @@ impl SeamMcp {
         .execute(&self.db)
         .await {
             Ok(_) => {
+                // Record activity
+                let prefix = self.get_ticket_prefix();
+                let ticket_id = format!("{}-{}", prefix, task.ticket_number);
+                let event_type = if (status == "closed" || status == "done") && task.closed_at.is_none() {
+                    "task_closed"
+                } else {
+                    "task_updated"
+                };
+                let summary = if event_type == "task_closed" {
+                    format!("closed {}", ticket_id)
+                } else {
+                    format!("updated {}", ticket_id)
+                };
+                self.record_activity(
+                    project_id, Some(session_id), participant_id,
+                    event_type, "task", task_id,
+                    &summary,
+                    serde_json::json!({ "ticket_id": ticket_id }),
+                ).await;
+
                 let updated = self.fetch_task(task_id).await;
                 match updated {
                     Ok(t) => Ok(CallToolResult::success(vec![Content::text(
@@ -644,6 +693,26 @@ impl SeamMcp {
         .execute(&self.db)
         .await {
             Ok(_) => {
+                // Record activity
+                if let (Ok(project_id), Ok(session_id)) = (self.require_project(), self.require_session().await) {
+                    let task: Option<Task> = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+                        .bind(task_id)
+                        .fetch_optional(&self.db)
+                        .await
+                        .ok()
+                        .flatten();
+                    if let Some(t) = task {
+                        let prefix = self.get_ticket_prefix();
+                        let ticket_id = format!("{}-{}", prefix, t.ticket_number);
+                        self.record_activity(
+                            project_id, Some(session_id), participant_id,
+                            "comment_added", "comment", comment_id,
+                            &format!("commented on {}", ticket_id),
+                            serde_json::json!({ "ticket_id": ticket_id, "preview": &params.content[..params.content.len().min(100)] }),
+                        ).await;
+                    }
+                }
+
                 let comment = serde_json::json!({
                     "id": comment_id,
                     "task_id": task_id,
@@ -734,6 +803,53 @@ impl SeamMcp {
 
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&summary).unwrap(),
+        )]))
+    }
+
+    #[tool(description = "List recent activity events in the project. Shows who did what and when — task creates, updates, comments, etc.")]
+    async fn list_activity(
+        &self,
+        Parameters(params): Parameters<ListActivityParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let limit = params.limit.unwrap_or(20).min(100);
+
+        let events: Vec<(Uuid, Uuid, String, String, String, Uuid, String, serde_json::Value, chrono::DateTime<Utc>)> = match sqlx::query_as(
+            "SELECT ae.id, ae.actor_id, p.display_name, ae.event_type, ae.target_type, ae.target_id, ae.summary, ae.metadata, ae.created_at
+             FROM activity_events ae
+             JOIN participants p ON p.id = ae.actor_id
+             WHERE ae.project_id = $1
+             ORDER BY ae.created_at DESC
+             LIMIT $2"
+        )
+        .bind(project_id)
+        .bind(limit)
+        .fetch_all(&self.db)
+        .await
+        {
+            Ok(rows) => rows,
+            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Failed to fetch activity: {e}"))])),
+        };
+
+        let items: Vec<serde_json::Value> = events.into_iter().map(|(id, actor_id, actor_name, event_type, _target_type, target_id, summary, metadata, created_at)| {
+            serde_json::json!({
+                "id": id,
+                "actor_id": actor_id,
+                "actor_name": actor_name,
+                "event_type": event_type,
+                "target_id": target_id,
+                "summary": summary,
+                "metadata": metadata,
+                "created_at": created_at.to_rfc3339(),
+            })
+        }).collect();
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&items).unwrap(),
         )]))
     }
 
@@ -952,6 +1068,36 @@ impl SeamMcp {
         task_json["comments"] = serde_json::json!(comment_views);
         task_json["children"] = serde_json::json!(child_views);
         Ok(task_json)
+    }
+
+    async fn record_activity(
+        &self,
+        project_id: Uuid,
+        session_id: Option<Uuid>,
+        actor_id: Uuid,
+        event_type: &str,
+        target_type: &str,
+        target_id: Uuid,
+        summary: &str,
+        metadata: serde_json::Value,
+    ) {
+        if let Err(e) = sqlx::query(
+            "INSERT INTO activity_events (project_id, session_id, actor_id, event_type, target_type, target_id, summary, metadata)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+        )
+        .bind(project_id)
+        .bind(session_id)
+        .bind(actor_id)
+        .bind(event_type)
+        .bind(target_type)
+        .bind(target_id)
+        .bind(summary)
+        .bind(metadata)
+        .execute(&self.db)
+        .await
+        {
+            eprintln!("[seam-mcp] Failed to record activity: {e}");
+        }
     }
 
     async fn do_agent_join(
