@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import '../shared/markdown-content.js';
-import { fetchTask, fetchTasks, updateTask, deleteTask, addComment, addDependency, removeDependency, fetchActivity, type ActivityEvent } from '../../state/task-api.js';
+import { fetchTask, fetchProjectTask, fetchTasks, updateTask, deleteTask, addComment, addDependency, removeDependency, fetchActivity, type ActivityEvent } from '../../state/task-api.js';
 import {
   type TaskDetailView, type TaskStatus, type TaskType, type TaskPriority, type TaskComplexity,
   TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
@@ -477,7 +477,9 @@ export class TaskDetail extends LitElement {
   `;
 
   @property({ type: String, attribute: 'session-code' }) sessionCode = '';
+  @property({ type: String, attribute: 'project-id' }) projectId = '';
   @property({ type: String, attribute: 'task-id' }) taskId = '';
+  @property({ type: Boolean }) readonly = false;
   @property({ type: Array }) participants: SessionParticipant[] = [];
 
   @state() private _task: TaskDetailView | null = null;
@@ -518,14 +520,17 @@ export class TaskDetail extends LitElement {
   }
 
   private async _loadTask() {
-    if (!this.sessionCode || !this.taskId) return;
+    if ((!this.sessionCode && !this.projectId) || !this.taskId) return;
     this._loading = true;
     this._error = '';
     try {
-      const [task, activity] = await Promise.all([
-        fetchTask(this.sessionCode, this.taskId),
-        fetchActivity(this.sessionCode, { target_id: this.taskId }).catch(() => [] as ActivityEvent[]),
-      ]);
+      const taskPromise = this.sessionCode
+        ? fetchTask(this.sessionCode, this.taskId)
+        : fetchProjectTask(this.projectId, this.taskId);
+      const activityPromise = this.sessionCode
+        ? fetchActivity(this.sessionCode, { target_id: this.taskId }).catch(() => [] as ActivityEvent[])
+        : Promise.resolve([] as ActivityEvent[]);
+      const [task, activity] = await Promise.all([taskPromise, activityPromise]);
       this._task = task;
       this._activity = activity;
     } catch (err) {

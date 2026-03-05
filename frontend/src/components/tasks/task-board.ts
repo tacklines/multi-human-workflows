@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import { store } from '../../state/app-state.js';
-import { fetchTasks, createTask, updateTask, deleteTask } from '../../state/task-api.js';
+import { fetchTasks, fetchProjectTasks, createTask, updateTask, deleteTask } from '../../state/task-api.js';
 import {
   type TaskView, type TaskType, type TaskStatus, type TaskPriority, type TaskComplexity,
   TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
@@ -473,6 +473,9 @@ export class TaskBoard extends LitElement {
   @property({ type: String, attribute: 'session-code' })
   sessionCode = '';
 
+  @property({ type: String, attribute: 'project-id' })
+  projectId = '';
+
   @property({ type: String, attribute: 'session-name' })
   sessionName = '';
 
@@ -563,21 +566,31 @@ export class TaskBoard extends LitElement {
     window.removeEventListener('hashchange', this._boundHashHandler);
   }
 
+  /** True when viewing project tasks outside a session (read-only mode). */
+  private get _isProjectMode(): boolean {
+    return !this.sessionCode && !!this.projectId;
+  }
+
   updated(changed: Map<string, unknown>) {
-    if (changed.has('sessionCode') && this.sessionCode) {
+    if ((changed.has('sessionCode') && this.sessionCode) ||
+        (changed.has('projectId') && this.projectId && !this.sessionCode)) {
       this._loadTasks();
     }
   }
 
   private async _loadTasks() {
-    if (!this.sessionCode) return;
+    if (!this.sessionCode && !this.projectId) return;
     this._loading = true;
     this._error = '';
     try {
       const filters: Record<string, string> = {};
       if (this._filterType) filters.task_type = this._filterType;
       if (this._filterStatus) filters.status = this._filterStatus;
-      this._tasks = await fetchTasks(this.sessionCode, filters as any);
+      if (this._isProjectMode) {
+        this._tasks = await fetchProjectTasks(this.projectId, filters as any);
+      } else {
+        this._tasks = await fetchTasks(this.sessionCode, filters as any);
+      }
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to load tasks';
     } finally {
@@ -586,7 +599,7 @@ export class TaskBoard extends LitElement {
   }
 
   private _getTaskTicketMatch(): string | null {
-    const m = window.location.hash.match(/^#session\/[A-Z0-9]+\/task\/(TASK-\d+)$/i);
+    const m = window.location.hash.match(/\/task\/([A-Z]+-\d+)$/i);
     return m ? m[1].toUpperCase() : null;
   }
 
@@ -614,8 +627,12 @@ export class TaskBoard extends LitElement {
   private _selectTask(taskId: string) {
     this._selectedTaskId = taskId;
     const task = this._tasks.find(t => t.id === taskId);
-    if (task && this.sessionCode) {
-      window.location.hash = `session/${this.sessionCode}/task/${task.ticket_id}`;
+    if (task) {
+      if (this.sessionCode) {
+        window.location.hash = `session/${this.sessionCode}/task/${task.ticket_id}`;
+      } else if (this.projectId) {
+        window.location.hash = `project/${this.projectId}/task/${task.ticket_id}`;
+      }
     }
   }
 
@@ -623,6 +640,8 @@ export class TaskBoard extends LitElement {
     this._selectedTaskId = null;
     if (this.sessionCode) {
       window.location.hash = `session/${this.sessionCode}`;
+    } else if (this.projectId) {
+      window.location.hash = `project/${this.projectId}`;
     }
     this._loadTasks();
   }
@@ -795,8 +814,10 @@ export class TaskBoard extends LitElement {
       return html`
         <task-detail
           session-code=${this.sessionCode}
+          project-id=${this.projectId}
           task-id=${this._selectedTaskId}
           .participants=${this.participants}
+          ?readonly=${this._isProjectMode}
           @back=${() => { this._deselectTask(); }}
           @deleted=${() => { this._deselectTask(); }}
           @navigate-task=${(e: CustomEvent) => { this._selectTask(e.detail); }}
@@ -833,10 +854,12 @@ export class TaskBoard extends LitElement {
           <sl-tooltip content="Refresh">
             <sl-icon-button name="arrow-clockwise" @click=${() => this._loadTasks()}></sl-icon-button>
           </sl-tooltip>
-          <sl-button variant="primary" size="small" @click=${() => this._openCreateDialog()}>
-            <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-            New Task
-          </sl-button>
+          ${this._isProjectMode ? nothing : html`
+            <sl-button variant="primary" size="small" @click=${() => this._openCreateDialog()}>
+              <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+              New Task
+            </sl-button>
+          `}
         </div>
       </div>
 

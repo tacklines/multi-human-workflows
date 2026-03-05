@@ -17,6 +17,23 @@ import './presence-bar.js';
 import './activity-feed.js';
 import './question-panel.js';
 import '../session/session-lobby.js';
+import '../project/project-list.js';
+import '../project/project-workspace.js';
+
+type AppRoute =
+  | { view: 'projects' }
+  | { view: 'project'; projectId: string }
+  | { view: 'session'; code: string };
+
+function parseRoute(): AppRoute {
+  const hash = window.location.hash;
+  const projectMatch = hash.match(/^#project\/([a-f0-9-]+)/i);
+  if (projectMatch) return { view: 'project', projectId: projectMatch[1] };
+  const sessionMatch = hash.match(/^#session\/([A-Z0-9]+)/i);
+  if (sessionMatch) return { view: 'session', code: sessionMatch[1].toUpperCase() };
+  return { view: 'projects' };
+}
+
 
 @customElement('app-shell')
 export class AppShell extends LitElement {
@@ -272,9 +289,11 @@ export class AppShell extends LitElement {
   @state() private _appState: AppState = store.get();
   @state() private _sidebarCollapsed = false;
   @state() private _unreadMentions: UnreadMentionView[] = [];
+  @state() private _route: AppRoute = parseRoute();
 
   private _authUnsub: (() => void) | null = null;
   private _appUnsub: (() => void) | null = null;
+  private _boundHashChange = () => { this._route = parseRoute(); };
 
   connectedCallback() {
     super.connectedCallback();
@@ -288,7 +307,18 @@ export class AppShell extends LitElement {
       if (event.type === 'mentioned' || event.type === 'session-connected') {
         this._loadUnreadMentions();
       }
+      if (event.type === 'session-disconnected') {
+        // Go back to project view or project list
+        const session = this._appState.sessionState?.session;
+        if (session?.project_id) {
+          window.location.hash = `#project/${session.project_id}`;
+        } else {
+          window.location.hash = '#projects';
+        }
+      }
     });
+
+    window.addEventListener('hashchange', this._boundHashChange);
 
     if (window.location.pathname === '/auth/callback') {
       authStore.handleCallback();
@@ -301,6 +331,7 @@ export class AppShell extends LitElement {
     super.disconnectedCallback();
     this._authUnsub?.();
     this._appUnsub?.();
+    window.removeEventListener('hashchange', this._boundHashChange);
   }
 
   private _toggleSidebar() {
@@ -406,6 +437,25 @@ export class AppShell extends LitElement {
     `;
   }
 
+  private _renderMain() {
+    // If we have an active session, show the session lobby (in-session view)
+    if (this._appState.sessionState) {
+      return html`<session-lobby></session-lobby>`;
+    }
+
+    // Route based on hash
+    switch (this._route.view) {
+      case 'project':
+        return html`<project-workspace project-id=${this._route.projectId}></project-workspace>`;
+      case 'session':
+        // Session hash but no active session — session-lobby will attempt rejoin
+        return html`<session-lobby></session-lobby>`;
+      case 'projects':
+      default:
+        return html`<project-list></project-list>`;
+    }
+  }
+
   render() {
     if (this._authState.isLoading) {
       return html`
@@ -480,7 +530,7 @@ export class AppShell extends LitElement {
         </aside>
 
         <main class="main">
-          <session-lobby></session-lobby>
+          ${this._renderMain()}
         </main>
       </div>
     `;

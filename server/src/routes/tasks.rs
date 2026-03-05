@@ -957,3 +957,174 @@ async fn extract_and_record_mentions(
 
     mentioned_names
 }
+
+// --- Project-scoped handlers (read-only, no session required) ---
+
+pub async fn list_project_tasks(
+    State(state): State<Arc<AppState>>,
+    Path(project_id): Path<Uuid>,
+    Query(query): Query<ListTasksQuery>,
+    AuthUser(_claims): AuthUser,
+) -> Result<Json<Vec<TaskView>>, StatusCode> {
+    let project = resolve_project(&state.db, project_id).await?;
+
+    let mut sql = String::from("SELECT * FROM tasks WHERE project_id = $1");
+    let mut bind_values: Vec<String> = vec![];
+    let mut idx = 2u32;
+
+    if let Some(ref tt) = query.task_type {
+        sql.push_str(&format!(" AND task_type = ${idx}"));
+        bind_values.push(tt.clone());
+        idx += 1;
+    }
+    if let Some(ref st) = query.status {
+        sql.push_str(&format!(" AND status = ${idx}"));
+        bind_values.push(st.clone());
+        idx += 1;
+    }
+    if let Some(ref pr) = query.priority {
+        sql.push_str(&format!(" AND priority = ${idx}"));
+        bind_values.push(pr.clone());
+        idx += 1;
+    }
+    if let Some(ref cx) = query.complexity {
+        sql.push_str(&format!(" AND complexity = ${idx}"));
+        bind_values.push(cx.clone());
+        idx += 1;
+    }
+    if let Some(ref pid) = query.parent_id {
+        if pid == "none" || pid == "null" {
+            sql.push_str(" AND parent_id IS NULL");
+        } else {
+            sql.push_str(&format!(" AND parent_id = ${idx}"));
+            bind_values.push(pid.clone());
+            idx += 1;
+        }
+    }
+    if let Some(ref at) = query.assigned_to {
+        sql.push_str(&format!(" AND assigned_to = ${idx}"));
+        bind_values.push(at.to_string());
+        idx += 1;
+    }
+    if let Some(ref search) = query.search {
+        sql.push_str(&format!(
+            " AND (title ILIKE ${idx} OR description ILIKE ${idx})"
+        ));
+        bind_values.push(format!("%{search}%"));
+        let _ = idx;
+    }
+
+    sql.push_str(" ORDER BY created_at");
+
+    let mut q = sqlx::query_as::<_, Task>(&sql).bind(project.id);
+    for val in &bind_values {
+        q = q.bind(val);
+    }
+
+    let tasks = q.fetch_all(&state.db).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let task_ids: Vec<Uuid> = tasks.iter().map(|t| t.id).collect();
+
+    let child_counts: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT parent_id, COUNT(*) FROM tasks WHERE parent_id = ANY($1) GROUP BY parent_id"
+    )
+    .bind(&task_ids)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let child_map: std::collections::HashMap<Uuid, i64> = child_counts.into_iter().collect();
+
+    let comment_counts: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT task_id, COUNT(*) FROM task_comments WHERE task_id = ANY($1) GROUP BY task_id"
+    )
+    .bind(&task_ids)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let comment_map: std::collections::HashMap<Uuid, i64> = comment_counts.into_iter().collect();
+
+    let views: Vec<TaskView> = tasks.into_iter().map(|t| {
+        let id = t.id;
+        let mut view = TaskView::from_task(t, &project.ticket_prefix);
+        view.child_count = *child_map.get(&id).unwrap_or(&0);
+        view.comment_count = *comment_map.get(&id).unwrap_or(&0);
+        view
+    }).collect();
+
+    Ok(Json(views))
+}
+
+pub async fn get_project_task(
+    State(state): State<Arc<AppState>>,
+    Path((_project_id, task_id)): Path<(Uuid, Uuid)>,
+    AuthUser(_claims): AuthUser,
+) -> Result<Json<TaskDetailView>, StatusCode> {
+    let task: Task = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+        .bind(task_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let project = resolve_project(&state.db, task.project_id).await?;
+    let prefix = &project.ticket_prefix;
+
+    let parent: Option<Task> = if let Some(pid) = task.parent_id {
+        sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+            .bind(pid)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        None
+    };
+
+    let comments: Vec<TaskComment> = sqlx::query_as(
+        "SELECT * FROM task_comments WHERE task_id = $1 ORDER BY created_at"
+    )
+    .bind(task_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let children: Vec<Task> = sqlx::query_as(
+        "SELECT * FROM tasks WHERE parent_id = $1 ORDER BY created_at"
+    )
+    .bind(task_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let blocks: Vec<Task> = sqlx::query_as(
+        "SELECT t.* FROM tasks t JOIN task_dependencies d ON d.blocked_id = t.id WHERE d.blocker_id = $1 ORDER BY t.created_at"
+    )
+    .bind(task_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let blocked_by: Vec<Task> = sqlx::query_as(
+        "SELECT t.* FROM tasks t JOIN task_dependencies d ON d.blocker_id = t.id WHERE d.blocked_id = $1 ORDER BY t.created_at"
+    )
+    .bind(task_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Ok(Json(TaskDetailView {
+        task: TaskView::from_task(task, prefix),
+        parent: parent.map(|p| task_summary_view(&p, prefix)),
+        comments: comments.into_iter().map(|c| CommentView {
+            id: c.id,
+            author_id: c.author_id,
+            content: c.content,
+            created_at: c.created_at,
+        }).collect(),
+        children: children.iter().map(|t| task_summary_view(t, prefix)).collect(),
+        blocks: blocks.iter().map(|t| task_summary_view(t, prefix)).collect(),
+        blocked_by: blocked_by.iter().map(|t| task_summary_view(t, prefix)).collect(),
+    }))
+}

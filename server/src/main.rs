@@ -75,6 +75,8 @@ async fn main() {
         .route("/api/projects/{project_id}", get(routes::projects::get_project))
         .route("/api/projects/{project_id}", patch(routes::projects::update_project))
         .route("/api/projects/{project_id}/sessions", get(routes::projects::list_project_sessions))
+        .route("/api/projects/{project_id}/tasks", get(routes::tasks::list_project_tasks))
+        .route("/api/projects/{project_id}/tasks/{task_id}", get(routes::tasks::get_project_task))
         // Sessions
         .route("/api/sessions", post(routes::sessions::create_session))
         .route("/api/sessions/{code}", get(routes::sessions::get_session))

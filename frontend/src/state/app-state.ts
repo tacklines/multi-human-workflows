@@ -11,6 +11,8 @@ export interface SessionView {
   id: string;
   code: string;
   name: string | null;
+  project_id: string;
+  project_name: string;
   created_at: string;
   participants: SessionParticipant[];
 }

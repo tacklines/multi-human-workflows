@@ -35,8 +35,31 @@ export async function fetchTasks(
   return handleResponse<TaskView[]>(res);
 }
 
+export async function fetchProjectTasks(
+  projectId: string,
+  filters?: { task_type?: TaskType; status?: TaskStatus; parent_id?: string; assigned_to?: string },
+): Promise<TaskView[]> {
+  const params = new URLSearchParams();
+  if (filters?.task_type) params.set('task_type', filters.task_type);
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.parent_id) params.set('parent_id', filters.parent_id);
+  if (filters?.assigned_to) params.set('assigned_to', filters.assigned_to);
+
+  const qs = params.toString();
+  const url = `${API_BASE}/api/projects/${projectId}/tasks${qs ? `?${qs}` : ''}`;
+  const res = await fetch(url, { headers: authHeaders() });
+  return handleResponse<TaskView[]>(res);
+}
+
 export async function fetchTask(sessionCode: string, taskId: string): Promise<TaskDetailView> {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/tasks/${taskId}`, {
+    headers: authHeaders(),
+  });
+  return handleResponse<TaskDetailView>(res);
+}
+
+export async function fetchProjectTask(projectId: string, taskId: string): Promise<TaskDetailView> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}`, {
     headers: authHeaders(),
   });
   return handleResponse<TaskDetailView>(res);
