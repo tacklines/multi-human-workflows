@@ -264,7 +264,7 @@ export class SessionLobby extends LitElement {
   }
 
   private async _tryRejoinFromHash() {
-    const match = window.location.hash.match(/^#session\/([A-Z0-9]+)$/i);
+    const match = window.location.hash.match(/^#session\/([A-Z0-9]+)(?:\/.*)?$/i);
     if (!match) return;
     const code = match[1].toUpperCase();
 
@@ -300,6 +300,7 @@ export class SessionLobby extends LitElement {
       const data = await res.json();
       store.setSession(code, data.participant_id, data.session, data.agent_code);
       connectSession(code);
+      this._requestNotificationPermission();
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to rejoin session';
       this._lobbyState = 'landing';
@@ -336,6 +337,7 @@ export class SessionLobby extends LitElement {
       const data = await res.json();
       store.setSession(data.session.code, data.session.participants[0]?.id, data.session, data.agent_code);
       connectSession(data.session.code);
+      this._requestNotificationPermission();
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to create session';
     } finally {
@@ -366,10 +368,17 @@ export class SessionLobby extends LitElement {
       const data = await res.json();
       store.setSession(code, data.participant_id, data.session, data.agent_code);
       connectSession(code);
+      this._requestNotificationPermission();
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to join session';
     } finally {
       this._loading = false;
+    }
+  }
+
+  private _requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
     }
   }
 

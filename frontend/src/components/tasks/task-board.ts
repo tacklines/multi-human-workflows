@@ -521,8 +521,7 @@ export class TaskBoard extends LitElement {
       } else if (this._selectedIds.size > 0) {
         this._clearSelection();
       } else if (this._selectedTaskId) {
-        this._selectedTaskId = null;
-        this._loadTasks();
+        this._deselectTask();
       }
       return;
     }
@@ -542,15 +541,18 @@ export class TaskBoard extends LitElement {
     }
   };
 
+  private _boundHashHandler = () => this._onHashChange();
+
   connectedCallback() {
     super.connectedCallback();
-    this._loadTasks();
+    this._loadTasks().then(() => this._restoreTaskFromHash());
     this._storeUnsub = store.subscribe((event) => {
       if (event.type === 'tasks-changed') {
         this._loadTasks();
       }
     });
     document.addEventListener('keydown', this._keyHandler);
+    window.addEventListener('hashchange', this._boundHashHandler);
   }
 
   disconnectedCallback() {
@@ -558,6 +560,7 @@ export class TaskBoard extends LitElement {
     this._storeUnsub?.();
     this._storeUnsub = null;
     document.removeEventListener('keydown', this._keyHandler);
+    window.removeEventListener('hashchange', this._boundHashHandler);
   }
 
   updated(changed: Map<string, unknown>) {
@@ -580,6 +583,48 @@ export class TaskBoard extends LitElement {
     } finally {
       this._loading = false;
     }
+  }
+
+  private _getTaskTicketMatch(): string | null {
+    const m = window.location.hash.match(/^#session\/[A-Z0-9]+\/task\/(TASK-\d+)$/i);
+    return m ? m[1].toUpperCase() : null;
+  }
+
+  private _restoreTaskFromHash() {
+    const ticketId = this._getTaskTicketMatch();
+    if (!ticketId) return;
+    const task = this._tasks.find(t => t.ticket_id === ticketId);
+    if (task) this._selectedTaskId = task.id;
+  }
+
+  private _onHashChange() {
+    const ticketId = this._getTaskTicketMatch();
+    if (ticketId) {
+      const task = this._tasks.find(t => t.ticket_id === ticketId);
+      if (task && this._selectedTaskId !== task.id) {
+        this._selectedTaskId = task.id;
+      }
+    } else if (this._selectedTaskId) {
+      // Hash no longer has a task — user pressed back
+      this._selectedTaskId = null;
+      this._loadTasks();
+    }
+  }
+
+  private _selectTask(taskId: string) {
+    this._selectedTaskId = taskId;
+    const task = this._tasks.find(t => t.id === taskId);
+    if (task && this.sessionCode) {
+      window.location.hash = `session/${this.sessionCode}/task/${task.ticket_id}`;
+    }
+  }
+
+  private _deselectTask() {
+    this._selectedTaskId = null;
+    if (this.sessionCode) {
+      window.location.hash = `session/${this.sessionCode}`;
+    }
+    this._loadTasks();
   }
 
   private get _filteredTasks(): TaskView[] {
@@ -688,7 +733,7 @@ export class TaskBoard extends LitElement {
   private async _handleDelete(taskId: string) {
     try {
       await deleteTask(this.sessionCode, taskId);
-      if (this._selectedTaskId === taskId) this._selectedTaskId = null;
+      if (this._selectedTaskId === taskId) this._deselectTask();
       this._showToast('Task deleted');
       await this._loadTasks();
     } catch (err) {
@@ -752,10 +797,10 @@ export class TaskBoard extends LitElement {
           session-code=${this.sessionCode}
           task-id=${this._selectedTaskId}
           .participants=${this.participants}
-          @back=${() => { this._selectedTaskId = null; this._loadTasks(); }}
-          @deleted=${() => { this._selectedTaskId = null; this._loadTasks(); }}
-          @navigate-task=${(e: CustomEvent) => { this._selectedTaskId = e.detail; }}
-          @create-child=${(e: CustomEvent) => { this._selectedTaskId = null; this._openCreateDialog(e.detail, 'subtask'); }}
+          @back=${() => { this._deselectTask(); }}
+          @deleted=${() => { this._deselectTask(); }}
+          @navigate-task=${(e: CustomEvent) => { this._selectTask(e.detail); }}
+          @create-child=${(e: CustomEvent) => { this._deselectTask(); this._openCreateDialog(e.detail, 'subtask'); }}
         ></task-detail>
       `;
     }
@@ -967,7 +1012,7 @@ export class TaskBoard extends LitElement {
     const isSelected = this._selectedIds.has(task.id);
 
     return html`
-      <div class="task-card ${isChild ? 'child' : ''} ${isSelected ? 'selected' : ''}" @click=${() => { this._selectedTaskId = task.id; }}>
+      <div class="task-card ${isChild ? 'child' : ''} ${isSelected ? 'selected' : ''}" @click=${() => { this._selectTask(task.id); }}>
         <div class="select-checkbox" @click=${(e: Event) => { e.stopPropagation(); this._toggleSelect(task.id); }}>
           <sl-icon name=${isSelected ? 'check-square-fill' : 'square'} style="font-size: 1rem; color: ${isSelected ? 'var(--sl-color-primary-500)' : 'var(--text-tertiary)'}; cursor: pointer;"></sl-icon>
         </div>
@@ -1101,7 +1146,7 @@ export class TaskBoard extends LitElement {
           e.dataTransfer!.effectAllowed = 'move';
         }}
         @dragend=${() => { this._dragTaskId = null; this.requestUpdate(); }}
-        @click=${() => { this._selectedTaskId = task.id; }}
+        @click=${() => { this._selectTask(task.id); }}
       >
         <div class="kanban-card-header">
           <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${typeColor}"></sl-icon>
