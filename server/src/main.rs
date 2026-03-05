@@ -2,17 +2,19 @@ mod auth;
 mod coder;
 mod db;
 mod events;
+mod mcp_auth;
 mod mcp_handler;
 #[allow(dead_code)]
 mod models;
 mod routes;
 mod ws;
 
-use axum::{Router, routing::{delete, get, patch, post}};
+use axum::{Router, routing::{delete, get, patch, post}, extract::State, response::IntoResponse, Json};
 use tower_http::cors::{CorsLayer, Any};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use std::sync::Arc;
+use tower::Layer;
 use rmcp::transport::streamable_http_server::{
     StreamableHttpService, StreamableHttpServerConfig,
     session::local::LocalSessionManager,
@@ -23,6 +25,7 @@ pub struct AppState {
     pub jwks: auth::JwksCache,
     pub connections: ws::ConnectionManager,
     pub coder: Option<coder::CoderClient>,
+    pub keycloak_issuer: String,
 }
 
 #[tokio::main]
@@ -59,11 +62,14 @@ async fn main() {
         tracing::info!("Coder integration disabled (CODER_URL not set)");
     }
 
+    let keycloak_issuer = format!("{}/realms/{}", keycloak_url, realm);
+
     let state = Arc::new(AppState {
         db,
         jwks: auth::JwksCache::new(&keycloak_url, &realm),
         connections: ws::ConnectionManager::new(),
         coder,
+        keycloak_issuer: keycloak_issuer.clone(),
     });
 
     let cors = CorsLayer::new()
@@ -134,19 +140,31 @@ async fn main() {
         .route("/api/agent/join", post(routes::agent::agent_join))
         // WebSocket
         .route("/ws", get(ws::handler::ws_upgrade))
+        // OAuth discovery for MCP clients
+        .route("/.well-known/oauth-protected-resource", get(well_known_protected_resource))
+        .route("/.well-known/oauth-authorization-server", get(well_known_authorization_server))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state.clone());
 
-    // Mount MCP Streamable HTTP endpoint for remote agents
+    // Mount MCP Streamable HTTP endpoint with JWT auth middleware
+    let mcp_auth_enabled = std::env::var("MCP_AUTH_DISABLED")
+        .map(|v| v != "true" && v != "1")
+        .unwrap_or(true);
+    if !mcp_auth_enabled {
+        tracing::warn!("MCP authentication is DISABLED (MCP_AUTH_DISABLED=true)");
+    }
+
     let mcp_db = state.db.clone();
     let mcp_service = StreamableHttpService::new(
         move || Ok(mcp_handler::SeamMcp::new(mcp_db.clone())),
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );
-    let app = app.nest_service("/mcp", mcp_service);
-    tracing::info!("MCP Streamable HTTP endpoint available at /mcp");
+    let auth_layer = mcp_auth::McpAuthLayer::new(state.jwks.clone(), mcp_auth_enabled);
+    let authed_mcp = auth_layer.layer(mcp_service);
+    let app = app.nest_service("/mcp", authed_mcp);
+    tracing::info!(auth_enabled = mcp_auth_enabled, "MCP Streamable HTTP endpoint available at /mcp");
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3002".to_string());
     let addr = format!("0.0.0.0:{}", port);
@@ -154,6 +172,43 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+/// RFC 9728: OAuth Protected Resource Metadata
+/// Tells MCP clients where to authenticate and what scopes are needed.
+async fn well_known_protected_resource(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    Json(serde_json::json!({
+        "resource": "/mcp",
+        "authorization_servers": [&state.keycloak_issuer],
+        "scopes_supported": ["openid", "profile"],
+        "bearer_methods_supported": ["header"],
+    }))
+}
+
+/// Proxy to Keycloak's OpenID Connect discovery document.
+/// MCP clients use this to find token, authorization, and device auth endpoints.
+async fn well_known_authorization_server(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let url = format!(
+        "{}/.well-known/openid-configuration",
+        state.keycloak_issuer
+    );
+    match reqwest::get(&url).await {
+        Ok(resp) => match resp.json::<serde_json::Value>().await {
+            Ok(body) => (axum::http::StatusCode::OK, Json(body)).into_response(),
+            Err(_) => (
+                axum::http::StatusCode::BAD_GATEWAY,
+                Json(serde_json::json!({"error": "Failed to parse Keycloak response"})),
+            ).into_response(),
+        },
+        Err(_) => (
+            axum::http::StatusCode::BAD_GATEWAY,
+            Json(serde_json::json!({"error": "Keycloak unavailable"})),
+        ).into_response(),
+    }
 }
 
 async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<(), sqlx::Error> {

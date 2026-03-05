@@ -185,7 +185,7 @@ struct RemoveDependencyParams {
 
 // --- MCP Server ---
 
-#[derive(serde::Serialize, serde::Deserialize, Default)]
+#[derive(Default)]
 pub(crate) struct SessionState {
     pub session_code: Option<String>,
     pub participant_id: Option<Uuid>,
@@ -194,60 +194,18 @@ pub(crate) struct SessionState {
     pub ticket_prefix: Option<String>,
 }
 
-impl SessionState {
-    /// State file path for persisting across process restarts
-    fn state_path() -> std::path::PathBuf {
-        let dir = std::env::var("TMPDIR")
-            .or_else(|_| std::env::var("XDG_RUNTIME_DIR"))
-            .unwrap_or_else(|_| "/tmp".to_string());
-        std::path::PathBuf::from(dir).join("seam-mcp-state.json")
-    }
-
-    fn load() -> Self {
-        let path = Self::state_path();
-        match std::fs::read_to_string(&path) {
-            Ok(data) => serde_json::from_str(&data).unwrap_or_default(),
-            Err(_) => Self::default(),
-        }
-    }
-
-    pub(crate) fn save(&self) {
-        let path = Self::state_path();
-        if let Ok(data) = serde_json::to_string(self) {
-            let _ = std::fs::write(&path, data);
-        }
-    }
-}
-
 pub struct SeamMcp {
     pub(crate) db: PgPool,
     pub(crate) state: Mutex<SessionState>,
-    persist_state: bool,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
 impl SeamMcp {
-    /// Create a new SeamMcp handler (no persisted state — for HTTP transport)
     pub fn new(db: PgPool) -> Self {
         Self {
             db,
             state: Mutex::new(SessionState::default()),
-            persist_state: false,
-            tool_router: Self::tool_router(),
-        }
-    }
-
-    /// Create with file-based state persistence (for stdio transport)
-    pub fn new_with_persisted_state(db: PgPool) -> Self {
-        let state = SessionState::load();
-        if state.session_code.is_some() {
-            eprintln!("[seam-mcp] Restored session state from disk: session={}", state.session_code.as_deref().unwrap_or("?"));
-        }
-        Self {
-            db,
-            state: Mutex::new(state),
-            persist_state: true,
             tool_router: Self::tool_router(),
         }
     }
@@ -287,9 +245,6 @@ impl SeamMcp {
                     state.sponsor_name = sponsor_name;
                     state.project_id = project_id;
                     state.ticket_prefix = ticket_prefix;
-                    if self.persist_state {
-                        state.save();
-                    }
                 }
 
                 Ok(CallToolResult::success(vec![Content::text(

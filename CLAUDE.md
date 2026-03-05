@@ -44,22 +44,8 @@ Health check: `GET /api/integrations/coder/status`
 
 ## MCP Access
 
-Two transports for AI agents to connect:
+Agents connect via Streamable HTTP at `/mcp`. Authentication is required via Keycloak JWT (Bearer token).
 
-**Local (stdio)** — for agents with DB access (dev, same-host):
-```json
-{
-  "mcpServers": {
-    "seam": {
-      "command": "cargo",
-      "args": ["run", "--bin", "seam-mcp", "--manifest-path", "server/Cargo.toml", "--"],
-      "env": { "DATABASE_URL": "postgres://seam:seam@localhost:5433/seam" }
-    }
-  }
-}
-```
-
-**Remote (Streamable HTTP)** — for distributed teams, no DB access needed:
 ```json
 {
   "mcpServers": {
@@ -70,7 +56,9 @@ Two transports for AI agents to connect:
 }
 ```
 
-Both transports expose the same tools. Agents authenticate by calling `join_session` with their agent code.
+MCP clients with OAuth support auto-discover auth via `/.well-known/oauth-protected-resource`. For local dev, set `MCP_AUTH_DISABLED=true` to skip JWT validation.
+
+After connecting, agents call `join_session` with their agent code to enter a session.
 
 ## Conventions
 

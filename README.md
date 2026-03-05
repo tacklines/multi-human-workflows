@@ -12,7 +12,7 @@ A **session** is a shared workspace. The host creates one and gets a 6-character
 Organization → Project → Session → Participants (human + agent)
 ```
 
-Agents connect via an MCP server (`seam-mcp`) that exposes session tools over stdio. Any MCP-compatible client (Claude Code, custom LangGraph agents, etc.) can participate.
+Agents connect via MCP (Model Context Protocol). The primary interface is a Streamable HTTP endpoint on the API server — no database access or local binaries needed. Any MCP-compatible client (Claude Code, custom LangGraph agents, etc.) can participate.
 
 ## Stack
 
@@ -55,23 +55,24 @@ just infra-reset        # stop + wipe volumes
 
 ### MCP Server
 
-The MCP server lets agents join sessions. It connects to Postgres directly and communicates over stdio.
+Agents join sessions via MCP over Streamable HTTP, served by the API server. The endpoint requires Keycloak JWT authentication.
 
-```bash
-# Run standalone
-just mcp code=ABCD1234
-
-# Or configure in .mcp.json for Claude Code
+```json
+// .mcp.json
 {
   "mcpServers": {
     "seam": {
-      "command": "cargo",
-      "args": ["run", "--bin", "seam-mcp", "--manifest-path", "server/Cargo.toml", "--"],
-      "env": { "DATABASE_URL": "postgres://seam:seam@localhost:5433/seam" }
+      "url": "http://localhost:3002/mcp"
     }
   }
 }
 ```
+
+MCP clients with OAuth support (e.g., Claude Code) auto-discover authentication via `GET /.well-known/oauth-protected-resource`. The server delegates to Keycloak and supports the device authorization flow (RFC 8628) for headless agents.
+
+For local development without Keycloak, set `MCP_AUTH_DISABLED=true` on the server.
+
+After connecting, agents call `join_session` with their 8-character agent code to enter a session.
 
 ### Coder Integration (optional)
 
@@ -88,7 +89,7 @@ export CODER_TOKEN=$(coder tokens create --name seam-integration)
 
 ```
 frontend/       Lit components, Vite dev server
-server/         Rust API server + MCP server binary
+server/         Rust API server (includes MCP endpoint)
 agents/         Python LangGraph agents (optional, see agents/README.md)
 infra/          Keycloak realm config, Coder templates, Postgres init
 docs/           Design docs and plans
