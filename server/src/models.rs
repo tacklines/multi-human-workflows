@@ -362,6 +362,59 @@ pub struct Plan {
     pub updated_at: DateTime<Utc>,
 }
 
+// --- Workspaces (Coder Integration) ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum WorkspaceStatus {
+    Pending,
+    Creating,
+    Running,
+    Stopping,
+    Stopped,
+    Failed,
+    Destroyed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Workspace {
+    pub id: Uuid,
+    pub task_id: Uuid,
+    pub project_id: Uuid,
+    pub coder_workspace_id: Option<Uuid>,
+    pub coder_workspace_name: Option<String>,
+    pub coder_agent_id: Option<Uuid>,
+    pub status: WorkspaceStatus,
+    pub template_name: String,
+    pub branch: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub stopped_at: Option<DateTime<Utc>>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WorkspaceView {
+    pub id: Uuid,
+    pub task_id: Uuid,
+    pub status: WorkspaceStatus,
+    pub coder_workspace_name: Option<String>,
+    pub template_name: String,
+    pub branch: Option<String>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub stopped_at: Option<DateTime<Utc>>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateWorkspaceRequest {
+    pub task_id: Uuid,
+    pub template_name: Option<String>,
+    pub branch: Option<String>,
+}
+
 // --- Agent API DTOs ---
 
 #[derive(Debug, Deserialize)]
