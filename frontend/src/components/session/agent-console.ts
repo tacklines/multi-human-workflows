@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state, query } from 'lit/decorators.js';
 import { fetchActivity, type ActivityEvent } from '../../state/task-api.js';
-import { fetchMessages, sendMessage, type MessageView } from '../../state/agent-api.js';
+import { fetchMessages, sendMessage, fetchProjectAgent, type MessageView, type ProjectAgentDetailView } from '../../state/agent-api.js';
 import { store, type SessionParticipant } from '../../state/app-state.js';
 
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -399,6 +399,113 @@ export class AgentConsole extends LitElement {
       font-size: 0.7rem;
     }
 
+    /* -- Workspace tab -- */
+    .workspace-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem 1rem;
+    }
+
+    .ws-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .ws-card-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-tertiary);
+      margin-bottom: 0.35rem;
+    }
+
+    .ws-card-value {
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      font-family: var(--sl-font-mono);
+    }
+
+    .ws-card-value.muted {
+      color: var(--text-tertiary);
+      font-family: inherit;
+      font-style: italic;
+    }
+
+    .ws-status-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .ws-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .ws-status-badge.running {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--sl-color-success-500);
+    }
+
+    .ws-status-badge.stopped {
+      background: rgba(107, 114, 128, 0.15);
+      color: var(--text-tertiary);
+    }
+
+    .ws-status-badge.failed {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--sl-color-danger-500);
+    }
+
+    .ws-status-badge.pending, .ws-status-badge.creating {
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--sl-color-primary-400);
+    }
+
+    .ws-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 1rem;
+      color: var(--text-tertiary);
+      font-size: 0.85rem;
+      text-align: center;
+    }
+
+    .ws-empty sl-icon {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+      opacity: 0.5;
+    }
+
+    .ws-task-card {
+      display: flex;
+      gap: 0.5rem;
+      align-items: flex-start;
+    }
+
+    .ws-task-card .ticket-id {
+      font-family: var(--sl-font-mono);
+      font-size: 0.75rem;
+      color: var(--sl-color-primary-400);
+      flex-shrink: 0;
+    }
+
+    .ws-task-card .title {
+      font-size: 0.85rem;
+      color: var(--text-primary);
+    }
+
     @media (max-width: 480px) {
       .panel { width: 100vw; }
       :host { width: 100vw; }
@@ -411,8 +518,10 @@ export class AgentConsole extends LitElement {
 
   @state() private _messages: MessageView[] = [];
   @state() private _activity: ActivityEvent[] = [];
+  @state() private _agentDetail: ProjectAgentDetailView | null = null;
   @state() private _loadingMessages = false;
   @state() private _loadingActivity = false;
+  @state() private _loadingWorkspace = false;
   @state() private _sendingMessage = false;
   @state() private _messageText = '';
   @state() private _activeTab = 'messages';
@@ -453,6 +562,7 @@ export class AgentConsole extends LitElement {
       if (this.open && this.participant) {
         this._loadMessages();
         this._loadActivity();
+        this._loadAgentDetail();
         this._startRefresh();
       } else {
         this._stopRefresh();
@@ -503,6 +613,20 @@ export class AgentConsole extends LitElement {
       // silent
     } finally {
       this._loadingActivity = false;
+    }
+  }
+
+  private async _loadAgentDetail() {
+    if (!this.participant) return;
+    const projectId = store.get().sessionState?.session.project_id;
+    if (!projectId) return;
+    try {
+      this._loadingWorkspace = !this._agentDetail;
+      this._agentDetail = await fetchProjectAgent(projectId, this.participant.id);
+    } catch {
+      // Agent may not have a project-level record yet
+    } finally {
+      this._loadingWorkspace = false;
     }
   }
 
@@ -567,12 +691,16 @@ export class AgentConsole extends LitElement {
               Activity
               ${this._activity.length > 0 ? html`<sl-badge variant="neutral" pill style="margin-left: 0.3rem">${this._activity.length}</sl-badge>` : nothing}
             </sl-tab>
+            <sl-tab slot="nav" panel="workspace">Workspace</sl-tab>
 
             <sl-tab-panel name="messages">
               ${this._renderMessages(myId)}
             </sl-tab-panel>
             <sl-tab-panel name="activity">
               ${this._renderActivity()}
+            </sl-tab-panel>
+            <sl-tab-panel name="workspace">
+              ${this._renderWorkspace()}
             </sl-tab-panel>
           </sl-tab-group>
         </div>
@@ -691,6 +819,95 @@ export class AgentConsole extends LitElement {
             </div>
           `;
         })}
+      </div>
+    `;
+  }
+  private _renderWorkspace() {
+    if (this._loadingWorkspace) {
+      return html`<div class="loading"><sl-spinner></sl-spinner></div>`;
+    }
+
+    const agent = this._agentDetail?.agent;
+    const ws = agent?.workspace;
+    const task = agent?.current_task;
+
+    if (!agent) {
+      return html`
+        <div class="ws-empty">
+          <sl-icon name="hdd-stack"></sl-icon>
+          <div>No workspace info available</div>
+          <div style="font-size: 0.75rem; margin-top: 0.25rem; opacity: 0.7">
+            Workspace details appear here when the agent has an active Coder workspace.
+          </div>
+        </div>
+      `;
+    }
+
+    return html`
+      <div class="workspace-scroll">
+        ${ws ? html`
+          <div class="ws-card">
+            <div class="ws-card-label">Status</div>
+            <div class="ws-status-row">
+              <span class="ws-status-badge ${ws.status}">${ws.status}</span>
+              ${ws.coder_workspace_name ? html`
+                <span style="font-size: 0.75rem; color: var(--text-tertiary);">${ws.coder_workspace_name}</span>
+              ` : nothing}
+            </div>
+          </div>
+
+          ${ws.branch ? html`
+            <div class="ws-card">
+              <div class="ws-card-label">Branch</div>
+              <div class="ws-card-value">
+                <sl-icon name="git-branch" style="font-size: 0.8rem; vertical-align: middle; margin-right: 0.25rem;"></sl-icon>
+                ${ws.branch}
+              </div>
+            </div>
+          ` : nothing}
+
+          ${ws.error_message ? html`
+            <div class="ws-card" style="border-color: var(--sl-color-danger-500);">
+              <div class="ws-card-label" style="color: var(--sl-color-danger-500);">Error</div>
+              <div class="ws-card-value" style="color: var(--sl-color-danger-400); font-size: 0.8rem; white-space: pre-wrap;">
+                ${ws.error_message}
+              </div>
+            </div>
+          ` : nothing}
+
+          ${ws.started_at ? html`
+            <div class="ws-card">
+              <div class="ws-card-label">Started</div>
+              <div class="ws-card-value muted">${timeAgo(ws.started_at)}</div>
+            </div>
+          ` : nothing}
+        ` : html`
+          <div class="ws-card">
+            <div class="ws-card-label">Workspace</div>
+            <div class="ws-card-value muted">No workspace provisioned</div>
+          </div>
+        `}
+
+        ${task ? html`
+          <div class="ws-card">
+            <div class="ws-card-label">Current Task</div>
+            <div class="ws-task-card">
+              <span class="ticket-id">${task.ticket_id}</span>
+              <span class="title">${task.title}</span>
+            </div>
+            <sl-badge variant=${task.status === 'in_progress' ? 'primary' : task.status === 'done' ? 'success' : 'neutral'} style="margin-top: 0.35rem;">
+              ${task.status}
+            </sl-badge>
+          </div>
+        ` : nothing}
+
+        ${agent.client_name || agent.model ? html`
+          <div class="ws-card">
+            <div class="ws-card-label">Agent Info</div>
+            ${agent.client_name ? html`<div style="font-size: 0.8rem; color: var(--text-secondary);">${agent.client_name}${agent.client_version ? ` v${agent.client_version}` : ''}</div>` : nothing}
+            ${agent.model ? html`<div style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 0.15rem;">Model: ${agent.model}</div>` : nothing}
+          </div>
+        ` : nothing}
       </div>
     `;
   }
