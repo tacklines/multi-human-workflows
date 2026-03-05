@@ -110,6 +110,11 @@ class AuthStore {
 
   async login(): Promise<void> {
     try {
+      // Save current path to restore after callback
+      const currentPath = window.location.pathname;
+      if (currentPath && currentPath !== '/' && currentPath !== '/auth/callback') {
+        sessionStorage.setItem('seam_return_path', currentPath);
+      }
       await this.userManager.signinRedirect();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
@@ -124,13 +129,16 @@ class AuthStore {
       this.notify({ type: 'auth-loading' });
       const user = await this.userManager.signinRedirectCallback();
       this.setUser(user);
-      window.history.replaceState({}, '', '/' + window.location.hash);
+      // After OIDC callback, redirect to the originally requested path or default to /projects
+      const returnPath = sessionStorage.getItem('seam_return_path') || '/projects';
+      sessionStorage.removeItem('seam_return_path');
+      window.history.replaceState({}, '', returnPath);
     } catch (err) {
       // Stale OIDC state (e.g. authority changed) — clear and restart
       await this.userManager.removeUser();
       await this.userManager.clearStaleState();
       this.clearUser();
-      window.history.replaceState({}, '', '/');
+      window.history.replaceState({}, '', '/projects');
     }
   }
 

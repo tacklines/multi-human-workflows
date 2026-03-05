@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { fetchProjects, createProject, type ProjectView } from '../../state/project-api.js';
+import { navigateTo } from '../../router.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -156,7 +157,7 @@ export class ProjectList extends LitElement {
   }
 
   private _selectProject(project: ProjectView) {
-    window.location.hash = `#project/${project.id}`;
+    navigateTo(`/projects/${project.id}`);
   }
 
   private async _createProject() {

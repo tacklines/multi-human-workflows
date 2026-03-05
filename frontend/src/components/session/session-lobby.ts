@@ -3,6 +3,8 @@ import { customElement, state } from 'lit/decorators.js';
 import { store, type SessionState } from '../../state/app-state.js';
 import { connectSession, disconnectSession } from '../../state/session-connection.js';
 import { authStore } from '../../state/auth-state.js';
+import { navigateTo } from '../../router.js';
+import type { RouterLocation } from '@vaadin/router';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -213,6 +215,9 @@ export class SessionLobby extends LitElement {
     .error-msg { margin-bottom: 0.75rem; }
   `;
 
+  // Set by @vaadin/router
+  location!: RouterLocation;
+
   @state() private _lobbyState: LobbyState = 'landing';
   @state() private _joinCode = '';
   @state() private _loading = false;
@@ -226,7 +231,6 @@ export class SessionLobby extends LitElement {
   @state() private _sessionName = '';
 
   private _unsubscribe: (() => void) | null = null;
-  private _boundHashChange = () => this._onHashChange();
 
   connectedCallback() {
     super.connectedCallback();
@@ -236,37 +240,29 @@ export class SessionLobby extends LitElement {
         if (event.type === 'session-connected') {
           this._lobbyState = 'in-session';
           const code = store.get().sessionState?.code;
-          if (code) window.location.hash = `session/${code}`;
+          if (code) navigateTo(`/sessions/${code}`);
         } else if (event.type === 'session-disconnected') {
           this._lobbyState = 'landing';
-          window.location.hash = '';
+          navigateTo('/projects');
         }
       }
     });
-    window.addEventListener('hashchange', this._boundHashChange);
     if (this._sessionState) {
       this._lobbyState = 'in-session';
     } else {
-      this._tryRejoinFromHash();
+      this._tryJoinFromRoute();
     }
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsubscribe?.();
-    window.removeEventListener('hashchange', this._boundHashChange);
   }
 
-  private _onHashChange() {
-    // If already in a session, ignore hash changes
-    if (this._lobbyState === 'in-session') return;
-    this._tryRejoinFromHash();
-  }
-
-  private async _tryRejoinFromHash() {
-    const match = window.location.hash.match(/^#session\/([A-Z0-9]+)(?:\/.*)?$/i);
-    if (!match) return;
-    const code = match[1].toUpperCase();
+  private async _tryJoinFromRoute() {
+    const params = this.location?.params as Record<string, string> | undefined;
+    if (!params?.code) return;
+    const code = params.code.toUpperCase();
 
     // Wait for auth to be ready
     const waitForAuth = () => new Promise<void>((resolve) => {
@@ -294,7 +290,7 @@ export class SessionLobby extends LitElement {
         body: JSON.stringify({ display_name: user?.name ?? 'Participant' }),
       });
       if (!res.ok) {
-        window.location.hash = '';
+        navigateTo('/projects');
         throw new Error(await res.text() || `HTTP ${res.status}`);
       }
       const data = await res.json();

@@ -1,9 +1,10 @@
 import { LitElement, html, css, nothing } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement, state, query } from 'lit/decorators.js';
 import { authStore, type AuthState } from '../../state/auth-state.js';
 import { store, type AppState, type SessionState } from '../../state/app-state.js';
 import { disconnectSession } from '../../state/session-connection.js';
 import { fetchUnreadMentions, clearUnreadMentions, type UnreadMentionView } from '../../state/task-api.js';
+import { initRouter, navigateTo } from '../../router.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -16,23 +17,6 @@ import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 import './presence-bar.js';
 import './activity-feed.js';
 import './question-panel.js';
-import '../session/session-lobby.js';
-import '../project/project-list.js';
-import '../project/project-workspace.js';
-
-type AppRoute =
-  | { view: 'projects' }
-  | { view: 'project'; projectId: string; tab?: string }
-  | { view: 'session'; code: string };
-
-function parseRoute(): AppRoute {
-  const hash = window.location.hash;
-  const projectMatch = hash.match(/^#project\/([a-f0-9-]+)(?:\/(\w+))?/i);
-  if (projectMatch) return { view: 'project', projectId: projectMatch[1], tab: projectMatch[2] };
-  const sessionMatch = hash.match(/^#session\/([A-Z0-9]+)/i);
-  if (sessionMatch) return { view: 'session', code: sessionMatch[1].toUpperCase() };
-  return { view: 'projects' };
-}
 
 
 @customElement('app-shell')
@@ -268,6 +252,12 @@ export class AppShell extends LitElement {
       flex-direction: column;
     }
 
+    #outlet {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
     /* ── Sidebar toggle ── */
     .sidebar-toggle {
       display: flex;
@@ -294,17 +284,22 @@ export class AppShell extends LitElement {
   @state() private _appState: AppState = store.get();
   @state() private _sidebarCollapsed = false;
   @state() private _unreadMentions: UnreadMentionView[] = [];
-  @state() private _route: AppRoute = parseRoute();
+  @state() private _routerReady = false;
+
+  @query('#outlet') private _outlet!: HTMLElement;
 
   private _authUnsub: (() => void) | null = null;
   private _appUnsub: (() => void) | null = null;
-  private _boundHashChange = () => { this._route = parseRoute(); };
 
   connectedCallback() {
     super.connectedCallback();
 
     this._authUnsub = authStore.subscribe(() => {
       this._authState = authStore.get();
+      // Once authenticated, init the router if not already done
+      if (this._authState.isAuthenticated && !this._routerReady) {
+        this._initRouter();
+      }
     });
 
     this._appUnsub = store.subscribe((event) => {
@@ -312,12 +307,10 @@ export class AppShell extends LitElement {
       if (event.type === 'mentioned' || event.type === 'session-connected') {
         this._loadUnreadMentions();
       }
-      if (event.type === 'session-disconnected' && !window.location.hash.startsWith('#project/')) {
-        window.location.hash = '#projects';
+      if (event.type === 'session-disconnected' && !window.location.pathname.startsWith('/projects/')) {
+        navigateTo('/projects');
       }
     });
-
-    window.addEventListener('hashchange', this._boundHashChange);
 
     if (window.location.pathname === '/auth/callback') {
       authStore.handleCallback();
@@ -330,7 +323,17 @@ export class AppShell extends LitElement {
     super.disconnectedCallback();
     this._authUnsub?.();
     this._appUnsub?.();
-    window.removeEventListener('hashchange', this._boundHashChange);
+  }
+
+  private _initRouter() {
+    // Wait for the outlet element to be rendered
+    this.updateComplete.then(() => {
+      const outlet = this.renderRoot.querySelector('#outlet');
+      if (outlet && !this._routerReady) {
+        initRouter(outlet as HTMLElement);
+        this._routerReady = true;
+      }
+    });
   }
 
   private _toggleSidebar() {
@@ -345,11 +348,7 @@ export class AppShell extends LitElement {
     const projectId = this._appState.sessionState?.session?.project_id;
     disconnectSession();
     store.clearSession();
-    if (projectId) {
-      window.location.hash = `#project/${projectId}`;
-    } else {
-      window.location.hash = '#projects';
-    }
+    navigateTo(projectId ? `/projects/${projectId}` : '/projects');
   }
 
   private async _loadUnreadMentions() {
@@ -366,7 +365,7 @@ export class AppShell extends LitElement {
     // Navigate to the most recent mention's task
     const latest = this._unreadMentions[0];
     if (latest) {
-      window.location.hash = `#session/${code}/task/${latest.task_id}`;
+      navigateTo(`/sessions/${code}/tasks/${latest.task_id}`);
     }
     try {
       await clearUnreadMentions(code);
@@ -443,22 +442,8 @@ export class AppShell extends LitElement {
   }
 
   private _renderMain() {
-    // If we have an active session, show the session lobby (in-session view)
-    if (this._appState.sessionState) {
-      return html`<session-lobby></session-lobby>`;
-    }
-
-    // Route based on hash
-    switch (this._route.view) {
-      case 'project':
-        return html`<project-workspace project-id=${this._route.projectId} .initialTab=${this._route.tab ?? ''}></project-workspace>`;
-      case 'session':
-        // Session hash but no active session — session-lobby will attempt rejoin
-        return html`<session-lobby></session-lobby>`;
-      case 'projects':
-      default:
-        return html`<project-list></project-list>`;
-    }
+    // The router outlet handles rendering the correct component
+    return html`<div id="outlet"></div>`;
   }
 
   render() {

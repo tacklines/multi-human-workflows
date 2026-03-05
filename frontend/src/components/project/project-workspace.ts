@@ -9,6 +9,8 @@ import { TASK_TYPE_ICONS, TASK_TYPE_COLORS, STATUS_LABELS, STATUS_VARIANTS, PRIO
 import { store, type SessionView } from '../../state/app-state.js';
 import { connectSession } from '../../state/session-connection.js';
 import { authStore } from '../../state/auth-state.js';
+import { navigateTo } from '../../router.js';
+import type { RouterLocation } from '@vaadin/router';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -547,6 +549,9 @@ export class ProjectWorkspace extends LitElement {
     }
   `;
 
+  // Set by @vaadin/router
+  location!: RouterLocation;
+
   @property({ attribute: 'project-id' }) projectId = '';
   @property() initialTab = '';
 
@@ -580,6 +585,21 @@ export class ProjectWorkspace extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    // Read route params from @vaadin/router location
+    if (this.location?.params) {
+      const params = this.location.params as Record<string, string>;
+      if (params.id) this.projectId = params.id;
+      if (params.tab) {
+        const valid = ['overview', 'graph', 'settings', 'tasks', 'plans', 'sessions', 'agents'];
+        if (valid.includes(params.tab)) {
+          this._activeTab = params.tab;
+        }
+      }
+      if (params.planId) {
+        this._activeTab = 'plans';
+        this._selectedPlanId = params.planId;
+      }
+    }
     this._loadProject();
     this._appUnsub = store.subscribe((event) => {
       if (event.type === 'session-connected') {
@@ -662,7 +682,7 @@ export class ProjectWorkspace extends LitElement {
       const data = await res.json();
       store.setSession(data.session.code, data.session.participants[0]?.id, data.session, data.agent_code);
       connectSession(data.session.code);
-      window.location.hash = `#session/${data.session.code}`;
+      navigateTo(`/sessions/${data.session.code}`);
       this._newSessionName = '';
       this._showNewSession = false;
     } catch (err) {
@@ -688,7 +708,7 @@ export class ProjectWorkspace extends LitElement {
       const data = await res.json();
       store.setSession(code, data.participant_id, data.session, data.agent_code);
       connectSession(code);
-      window.location.hash = `#session/${code}`;
+      navigateTo(`/sessions/${code}`);
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to join session';
     }
@@ -772,8 +792,8 @@ export class ProjectWorkspace extends LitElement {
     return html`
       <div class="project-header">
         <span class="back-link" role="button" tabindex="0"
-              @click=${() => { window.location.hash = '#projects'; }}
-              @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') window.location.hash = '#projects'; }}>
+              @click=${() => { navigateTo('/projects'); }}
+              @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') navigateTo('/projects'); }}>
           <sl-icon name="arrow-left"></sl-icon> Projects
         </span>
         <h1>${p.name}</h1>
@@ -1004,13 +1024,13 @@ export class ProjectWorkspace extends LitElement {
     `;
   }
 
-  private _switchTab(tab: string, updateHash = true) {
+  private _switchTab(tab: string, updateUrl = true) {
     this._activeTab = tab;
-    if (updateHash) {
-      const hash = tab === 'overview'
-        ? `#project/${this.projectId}`
-        : `#project/${this.projectId}/${tab}`;
-      window.history.replaceState(null, '', hash);
+    if (updateUrl) {
+      const path = tab === 'overview'
+        ? `/projects/${this.projectId}`
+        : `/projects/${this.projectId}/${tab}`;
+      window.history.replaceState(null, '', path);
     }
     if (tab === 'settings') {
       this._initSettingsForm();

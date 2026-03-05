@@ -63,6 +63,21 @@ For local dev, set `MCP_AUTH_DISABLED=true` (or use `just dev-noauth`) to skip a
 
 After connecting, agents call `join_session` with their agent code to enter a session. Authenticated agents get a persistent identity via the `agents` table (upserted on join).
 
+## Frontend Routing
+
+Uses `@vaadin/router` (History API, not hash-based). Route config in `frontend/src/router.ts`.
+
+- `/projects` — project list
+- `/projects/:id` — project workspace (overview)
+- `/projects/:id/:tab` — project workspace tab (graph, settings, tasks, plans, agents)
+- `/projects/:id/tasks/:ticketId` — deep-link to task
+- `/projects/:id/plans/:planId` — deep-link to plan
+- `/sessions/:code` — session lobby
+- `/sessions/:code/tasks/:ticketId` — in-session task deep-link
+
+Navigation: use `navigateTo('/path')` from `router.ts`, never `window.location.hash`.
+Router sets `location` property on routed components (params available via `this.location.params`).
+
 ## Conventions
 
 - Frontend API calls go through Vite proxy (`/api` → `:3002`, `/ws` → WebSocket)

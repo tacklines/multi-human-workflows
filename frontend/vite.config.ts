@@ -25,10 +25,13 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3002',
       '/mcp': 'http://localhost:3002',
+      '/.well-known': 'http://localhost:3002',
       '/ws': {
         target: 'ws://localhost:3002',
         ws: true,
       },
     },
   },
+  // History API fallback so /projects/xyz resolves to index.html
+  appType: 'spa',
 });

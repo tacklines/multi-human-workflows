@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import { store } from '../../state/app-state.js';
 import { fetchTasks, fetchProjectTasks, createTask, updateTask, deleteTask } from '../../state/task-api.js';
+import { navigateTo } from '../../router.js';
 import {
   type TaskView, type TaskType, type TaskStatus, type TaskPriority, type TaskComplexity,
   TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
@@ -553,18 +554,18 @@ export class TaskBoard extends LitElement {
     }
   };
 
-  private _boundHashHandler = () => this._onHashChange();
+  private _boundPopstateHandler = () => this._onNavigate();
 
   connectedCallback() {
     super.connectedCallback();
-    this._loadTasks().then(() => this._restoreTaskFromHash());
+    this._loadTasks().then(() => this._restoreTaskFromUrl());
     this._storeUnsub = store.subscribe((event) => {
       if (event.type === 'tasks-changed') {
         this._loadTasks();
       }
     });
     document.addEventListener('keydown', this._keyHandler);
-    window.addEventListener('hashchange', this._boundHashHandler);
+    window.addEventListener('popstate', this._boundPopstateHandler);
   }
 
   disconnectedCallback() {
@@ -572,7 +573,7 @@ export class TaskBoard extends LitElement {
     this._storeUnsub?.();
     this._storeUnsub = null;
     document.removeEventListener('keydown', this._keyHandler);
-    window.removeEventListener('hashchange', this._boundHashHandler);
+    window.removeEventListener('popstate', this._boundPopstateHandler);
   }
 
   /** True when viewing project tasks outside a session (read-only mode). */
@@ -608,18 +609,18 @@ export class TaskBoard extends LitElement {
   }
 
   private _getTaskTicketMatch(): string | null {
-    const m = window.location.hash.match(/\/task\/([A-Z]+-\d+)$/i);
+    const m = window.location.pathname.match(/\/tasks\/([A-Z]+-\d+)$/i);
     return m ? m[1].toUpperCase() : null;
   }
 
-  private _restoreTaskFromHash() {
+  private _restoreTaskFromUrl() {
     const ticketId = this._getTaskTicketMatch();
     if (!ticketId) return;
     const task = this._tasks.find(t => t.ticket_id === ticketId);
     if (task) this._selectedTaskId = task.id;
   }
 
-  private _onHashChange() {
+  private _onNavigate() {
     const ticketId = this._getTaskTicketMatch();
     if (ticketId) {
       const task = this._tasks.find(t => t.ticket_id === ticketId);
@@ -627,7 +628,7 @@ export class TaskBoard extends LitElement {
         this._selectedTaskId = task.id;
       }
     } else if (this._selectedTaskId) {
-      // Hash no longer has a task — user pressed back
+      // URL no longer has a task — user pressed back
       this._selectedTaskId = null;
       this._loadTasks();
     }
@@ -638,9 +639,9 @@ export class TaskBoard extends LitElement {
     const task = this._tasks.find(t => t.id === taskId);
     if (task) {
       if (this.sessionCode) {
-        window.location.hash = `session/${this.sessionCode}/task/${task.ticket_id}`;
+        navigateTo(`/sessions/${this.sessionCode}/tasks/${task.ticket_id}`);
       } else if (this.projectId) {
-        window.location.hash = `project/${this.projectId}/task/${task.ticket_id}`;
+        navigateTo(`/projects/${this.projectId}/tasks/${task.ticket_id}`);
       }
     }
   }
@@ -648,9 +649,9 @@ export class TaskBoard extends LitElement {
   private _deselectTask() {
     this._selectedTaskId = null;
     if (this.sessionCode) {
-      window.location.hash = `session/${this.sessionCode}`;
+      navigateTo(`/sessions/${this.sessionCode}`);
     } else if (this.projectId) {
-      window.location.hash = `project/${this.projectId}`;
+      navigateTo(`/projects/${this.projectId}`);
     }
     this._loadTasks();
   }
