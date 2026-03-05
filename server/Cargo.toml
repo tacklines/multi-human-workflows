@@ -35,6 +35,8 @@ http-body = "1"
 http-body-util = "0.1"
 schemars = "1"
 regex = "1"
+sha2 = "0.10"
+hex = "0.4"
 
 [dev-dependencies]
 axum-test = "16"

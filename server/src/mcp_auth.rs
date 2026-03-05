@@ -5,22 +5,48 @@ use futures::future::BoxFuture;
 use http::{Request, Response, StatusCode};
 use http_body::Body;
 use http_body_util::{Full, combinators::BoxBody, BodyExt};
+use sqlx::PgPool;
+use uuid::Uuid;
 
+use crate::agent_token;
 use crate::auth::JwksCache;
 
-/// Tower layer that validates Bearer JWTs on incoming requests.
+/// Authenticated MCP caller identity, injected into request extensions.
+/// Tool handlers access this via `Extension(parts)` → `parts.extensions.get::<Arc<McpIdentity>>()`.
+#[derive(Debug, Clone)]
+pub struct McpIdentity {
+    /// Keycloak subject (for JWT) or user's external_id (for agent token)
+    pub subject: String,
+    /// Human-readable name
+    pub display_name: String,
+    /// The user ID in our DB
+    pub user_id: Option<Uuid>,
+    /// If authenticated via agent token, the session it's scoped to
+    pub session_id: Option<Uuid>,
+    /// Which auth method was used
+    pub auth_method: AuthMethod,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AuthMethod {
+    Jwt,
+    AgentToken,
+}
+
+/// Tower layer that validates Bearer tokens (JWT or opaque agent token).
 ///
-/// Injects validated `Claims` into request extensions so MCP tool handlers
+/// Injects `Arc<McpIdentity>` into request extensions so MCP tool handlers
 /// can access them via `Extension(parts): Extension<http::request::Parts>`.
 #[derive(Clone)]
 pub struct McpAuthLayer {
     jwks: JwksCache,
+    db: PgPool,
     enabled: bool,
 }
 
 impl McpAuthLayer {
-    pub fn new(jwks: JwksCache, enabled: bool) -> Self {
-        Self { jwks, enabled }
+    pub fn new(jwks: JwksCache, db: PgPool, enabled: bool) -> Self {
+        Self { jwks, db, enabled }
     }
 }
 
@@ -31,6 +57,7 @@ impl<S> tower::Layer<S> for McpAuthLayer {
         McpAuthService {
             inner,
             jwks: self.jwks.clone(),
+            db: self.db.clone(),
             enabled: self.enabled,
         }
     }
@@ -40,6 +67,7 @@ impl<S> tower::Layer<S> for McpAuthLayer {
 pub struct McpAuthService<S> {
     inner: S,
     jwks: JwksCache,
+    db: PgPool,
     enabled: bool,
 }
 
@@ -86,6 +114,7 @@ where
         }
 
         let jwks = self.jwks.clone();
+        let db = self.db.clone();
         let mut inner = self.inner.clone();
 
         Box::pin(async move {
@@ -102,18 +131,43 @@ where
                 ));
             };
 
-            // Validate JWT against Keycloak JWKS
-            match jwks.validate_token(token).await {
-                Ok(claims) => {
-                    // Inject claims into request extensions for tool handlers.
-                    // rmcp's StreamableHttpService calls req.into_parts() and injects
-                    // the Parts (including extensions) into the MCP context, so tool
-                    // handlers can access Arc<Claims> via Extension(parts).
-                    req.extensions_mut().insert(Arc::new(claims));
-                    inner.call(req).await
+            // Dual-path auth: agent token (sat_ prefix) or JWT
+            let identity = if agent_token::is_agent_token(token) {
+                match agent_token::validate_token(&db, token).await {
+                    Ok(Some(info)) => McpIdentity {
+                        subject: info.user_external_id,
+                        display_name: info.display_name,
+                        user_id: Some(info.user_id),
+                        session_id: info.session_id,
+                        auth_method: AuthMethod::AgentToken,
+                    },
+                    Ok(None) => return Ok(unauthorized_response("Invalid or expired agent token")),
+                    Err(e) => {
+                        tracing::error!("Agent token validation failed: {e}");
+                        return Ok(unauthorized_response("Authentication service error"));
+                    }
                 }
-                Err(_) => Ok(unauthorized_response("Invalid or expired token")),
-            }
+            } else {
+                match jwks.validate_token(token).await {
+                    Ok(claims) => McpIdentity {
+                        subject: claims.sub.clone(),
+                        display_name: claims.preferred_username.clone()
+                            .or(claims.name.clone())
+                            .unwrap_or_else(|| claims.sub.clone()),
+                        user_id: None, // JWT doesn't carry our internal user_id
+                        session_id: None,
+                        auth_method: AuthMethod::Jwt,
+                    },
+                    Err(_) => return Ok(unauthorized_response("Invalid or expired token")),
+                }
+            };
+
+            // Inject identity into request extensions for tool handlers.
+            // rmcp's StreamableHttpService calls req.into_parts() and injects
+            // the Parts (including extensions) into the MCP context, so tool
+            // handlers can access Arc<McpIdentity> via Extension(parts).
+            req.extensions_mut().insert(Arc::new(identity));
+            inner.call(req).await
         })
     }
 }

@@ -1,3 +1,4 @@
+mod agent_token;
 mod auth;
 mod coder;
 mod db;
@@ -99,6 +100,7 @@ async fn main() {
         .route("/api/projects/{project_id}/sessions", get(routes::projects::list_project_sessions))
         .route("/api/projects/{project_id}/tasks", get(routes::tasks::list_project_tasks))
         .route("/api/projects/{project_id}/tasks/{task_id}", get(routes::tasks::get_project_task))
+        .route("/api/projects/{project_id}/graph", get(routes::tasks::get_project_dependency_graph))
         // Plans
         .route("/api/projects/{project_id}/plans", get(routes::plans::list_plans).post(routes::plans::create_plan))
         .route("/api/projects/{project_id}/plans/{plan_id}", get(routes::plans::get_plan).patch(routes::plans::update_plan))
@@ -138,6 +140,7 @@ async fn main() {
         .route("/api/projects/{project_id}/events", get(routes::events::list_events))
         // Agent API
         .route("/api/agent/join", post(routes::agent::agent_join))
+        .route("/api/sessions/{code}/agents", post(routes::agents::launch_agent))
         // WebSocket
         .route("/ws", get(ws::handler::ws_upgrade))
         // OAuth discovery for MCP clients
@@ -161,7 +164,7 @@ async fn main() {
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );
-    let auth_layer = mcp_auth::McpAuthLayer::new(state.jwks.clone(), mcp_auth_enabled);
+    let auth_layer = mcp_auth::McpAuthLayer::new(state.jwks.clone(), state.db.clone(), mcp_auth_enabled);
     let authed_mcp = auth_layer.layer(mcp_service);
     let app = app.nest_service("/mcp", authed_mcp);
     tracing::info!(auth_enabled = mcp_auth_enabled, "MCP Streamable HTTP endpoint available at /mcp");
