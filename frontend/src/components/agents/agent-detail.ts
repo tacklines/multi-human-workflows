@@ -11,6 +11,7 @@ import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 
 import '../shared/markdown-content.js';
+import './agent-activity-panel.js';
 
 const WS_STATUS_VARIANT: Record<string, string> = {
   running: 'success',
@@ -409,6 +410,19 @@ export class AgentDetail extends LitElement {
 
       ${this._renderTask(agent)}
       ${this._renderWorkspace(agent)}
+
+      ${isOnline ? html`
+        <div class="section">
+          <div class="section-title">
+            <sl-icon name="terminal"></sl-icon> Live Activity
+          </div>
+          <agent-activity-panel
+            .sessionCode=${agent.session_code}
+            .participantId=${agent.id}
+          ></agent-activity-panel>
+        </div>
+      ` : nothing}
+
       ${this._renderActivity(recent_activity)}
       ${this._renderComments(recent_comments)}
     `;
