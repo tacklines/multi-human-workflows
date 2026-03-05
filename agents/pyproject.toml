@@ -9,6 +9,7 @@ dependencies = [
     "langchain>=0.3",
     "langchain-ollama>=0.3",
     "langchain-anthropic>=0.3",
+    "langchain-openai>=0.3",
     "langchain-core>=0.3",
     "langfuse>=2.50",
     "mcp>=1.0",

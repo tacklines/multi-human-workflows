@@ -80,6 +80,24 @@ KNOWN_PROFILES: dict[str, ModelProfile] = {
         tok_per_sec=52.0,
     ),
 
+    # llama.cpp models (OpenAI-compatible API)
+    "qwen3-coder-30b": ModelProfile(
+        name="qwen3-coder-30b",
+        provider="llamacpp",
+        capabilities={
+            Capability.CODING: 0.9,
+            Capability.REASONING: 0.85,
+            Capability.TOOL_USE: 0.8,
+            Capability.LONG_CONTEXT: 0.95,
+            Capability.SPEED: 0.6,
+            Capability.CREATIVE: 0.7,
+            Capability.INSTRUCTION_FOLLOWING: 0.85,
+        },
+        budget=Budget.FREE,
+        context_window=131072,
+        tok_per_sec=30.0,
+    ),
+
     # API models — available only when API keys are configured
     "claude-opus-4-6": ModelProfile(
         name="claude-opus-4-6",
@@ -137,6 +155,8 @@ MODEL_ALIASES: dict[str, str] = {
     "haiku": "claude-haiku-4-5",
     "qwen": "qwen35-tuned",
     "devstral": "devstral-tuned",
+    "qwen3-coder": "qwen3-coder-30b",
+    "qwen-coder": "qwen3-coder-30b",
     "qwen3.5:35b": "qwen35-tuned",
     "devstral-small-2:latest": "devstral-tuned",
     "devstral-small-2": "devstral-tuned",

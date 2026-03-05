@@ -1,7 +1,13 @@
-"""MCP client that connects to the Coder MCP server for workspace management."""
+"""MCP client that connects to the Coder MCP server for workspace management.
+
+Uses a dedicated background thread for the async event loop, same pattern
+as SeamMCPClient.
+"""
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -13,12 +19,34 @@ from seam_agents.config import settings
 
 @dataclass
 class CoderMCPClient:
-    """Wraps the Coder MCP server (coder exp mcp server) as an async context manager."""
+    """Wraps the Coder MCP server (coder exp mcp server) with a background event loop."""
 
     _session: ClientSession | None = field(default=None, repr=False)
     _stdio_cm: Any = field(default=None, repr=False)
+    _loop: asyncio.AbstractEventLoop | None = field(default=None, repr=False)
+    _thread: threading.Thread | None = field(default=None, repr=False)
 
-    async def connect(self) -> "CoderMCPClient":
+    def _start_loop(self):
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(
+            target=self._loop.run_forever,
+            daemon=True,
+            name="coder-mcp-event-loop",
+        )
+        self._thread.start()
+
+    def _run(self, coro) -> Any:
+        if self._loop is None:
+            raise RuntimeError("Background loop not started")
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        return future.result()
+
+    def connect(self) -> "CoderMCPClient":
+        self._start_loop()
+        self._run(self._async_connect())
+        return self
+
+    async def _async_connect(self):
         server_params = StdioServerParameters(
             command=settings.coder_binary,
             args=["exp", "mcp", "server"],
@@ -33,9 +61,21 @@ class CoderMCPClient:
         self._session = ClientSession(self._read, self._write)
         await self._session.__aenter__()
         await self._session.initialize()
-        return self
 
-    async def disconnect(self):
+    def disconnect(self):
+        if self._loop is None:
+            return
+        try:
+            self._run(self._async_disconnect())
+        except RuntimeError:
+            pass
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        if self._thread:
+            self._thread.join(timeout=5)
+        self._loop = None
+        self._thread = None
+
+    async def _async_disconnect(self):
         if self._session:
             await self._session.__aexit__(None, None, None)
             self._session = None
@@ -48,8 +88,10 @@ class CoderMCPClient:
             raise RuntimeError("Not connected — call connect() first")
         return self._session
 
-    async def list_tools(self) -> list[dict]:
-        """List available Coder MCP tools."""
+    def list_tools(self) -> list[dict]:
+        return self._run(self._async_list_tools())
+
+    async def _async_list_tools(self) -> list[dict]:
         result = await self._require_session().list_tools()
         return [
             {
@@ -60,17 +102,13 @@ class CoderMCPClient:
             for tool in result.tools
         ]
 
-    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> str:
-        """Call a Coder MCP tool and return the text result."""
+    def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> str:
+        return self._run(self._async_call_tool(name, arguments))
+
+    async def _async_call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> str:
         result = await self._require_session().call_tool(name, arguments or {})
         parts = []
         for content in result.content:
             if hasattr(content, "text"):
                 parts.append(content.text)
         return "\n".join(parts)
-
-    async def __aenter__(self):
-        return await self.connect()
-
-    async def __aexit__(self, *exc):
-        await self.disconnect()

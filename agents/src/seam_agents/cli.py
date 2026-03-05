@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import sys
 
 from seam_agents.coder_client import CoderMCPClient
@@ -61,28 +60,30 @@ def main():
     )
     args = parser.parse_args()
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     client = SeamMCPClient(agent_code=args.agent_code, agent_name=args.name)
     cli_requirement = _parse_requirement(args)
 
     # Optionally connect to Coder MCP
     coder_client = None
     if not args.no_coder:
-        from seam_agents.agents.session_agent import _try_connect_coder
-        coder_client = loop.run_until_complete(_try_connect_coder())
+        coder_client = _try_connect_coder()
         if coder_client:
             print("Coder workspace management enabled")
 
     try:
-        loop.run_until_complete(client.connect())
+        client.connect()
         print(f"Connected to Seam MCP at {client._seam_url}")
 
-        # Join the session using the agent code
-        join_result = loop.run_until_complete(client.call_tool(
-            "join_session",
-            {"code": args.agent_code, "display_name": args.name},
-        ))
+        # Join the session using the agent code with composition metadata
+        join_params: dict = {
+            "code": args.agent_code,
+            "display_name": args.name,
+            "client_name": "seam-agent",
+            "client_version": "0.1.0",
+        }
+        if args.model:
+            join_params["model"] = args.model
+        join_result = client.call_tool("join_session", join_params)
         print(f"Joined session: {join_result}")
 
         if args.workflow:
@@ -113,10 +114,23 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        loop.run_until_complete(client.disconnect())
+        client.disconnect()
         if coder_client:
-            loop.run_until_complete(coder_client.disconnect())
-        loop.close()
+            coder_client.disconnect()
+
+
+def _try_connect_coder() -> CoderMCPClient | None:
+    """Connect to Coder MCP server if configured. Returns None if unavailable."""
+    from seam_agents.config import settings
+    if not settings.coder_url or not settings.coder_session_token:
+        return None
+    try:
+        client = CoderMCPClient()
+        client.connect()
+        return client
+    except Exception as e:
+        print(f"Coder MCP unavailable: {e}")
+        return None
 
 
 def _repl(

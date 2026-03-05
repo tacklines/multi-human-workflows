@@ -2,25 +2,17 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
-import nest_asyncio
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from seam_agents.mcp_client import SeamMCPClient
 
-# Allow nested event loop usage — needed because LangGraph's ToolNode
-# calls sync tool functions from within an already-running event loop.
-nest_asyncio.apply()
 
-
-def mcp_tools_from_client(client: SeamMCPClient, loop: asyncio.AbstractEventLoop | None = None) -> list[StructuredTool]:
+def mcp_tools_from_client(client: SeamMCPClient) -> list[StructuredTool]:
     """Convert MCP tool definitions into LangChain StructuredTools."""
-    if loop is None:
-        loop = asyncio.get_event_loop()
-    mcp_tools = loop.run_until_complete(client.list_tools())
+    mcp_tools = client.list_tools()
 
     lc_tools = []
     for tool_def in mcp_tools:
@@ -45,7 +37,7 @@ def mcp_tools_from_client(client: SeamMCPClient, loop: asyncio.AbstractEventLoop
         def _make_fn(tool_name: str):
             def fn(**kwargs) -> str:
                 args = {k: v for k, v in kwargs.items() if v is not None}
-                return loop.run_until_complete(client.call_tool(tool_name, args))
+                return client.call_tool(tool_name, args)
             return fn
 
         lc_tools.append(

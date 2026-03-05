@@ -60,6 +60,14 @@ def _build_llm(requirement: ModelRequirement | None = None) -> tuple[BaseChatMod
             model=profile.name,
             base_url=settings.ollama_base_url,
         )
+    elif profile.provider == "llamacpp":
+        from langchain_openai import ChatOpenAI
+        llm = ChatOpenAI(
+            model=profile.name,
+            base_url=settings.llamacpp_base_url,
+            api_key="not-needed",
+            max_tokens=4096,
+        )
     elif profile.provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
         llm = ChatAnthropic(
@@ -73,13 +81,13 @@ def _build_llm(requirement: ModelRequirement | None = None) -> tuple[BaseChatMod
     return llm, profile
 
 
-async def _try_connect_coder() -> CoderMCPClient | None:
+def _try_connect_coder() -> CoderMCPClient | None:
     """Connect to Coder MCP server if configured. Returns None if unavailable."""
     if not settings.coder_url or not settings.coder_session_token:
         return None
     try:
         client = CoderMCPClient()
-        await client.connect()
+        client.connect()
         return client
     except Exception as e:
         log.warning("Coder MCP unavailable: %s", e)
@@ -91,7 +99,10 @@ def build_session_agent(
     coder_client: CoderMCPClient | None = None,
     requirement: ModelRequirement | None = None,
 ):
-    """Build a compiled LangGraph agent wired to Seam and optionally Coder MCP tools."""
+    """Build a compiled LangGraph agent wired to Seam and optionally Coder MCP tools.
+
+    Returns (compiled_graph, model_profile).
+    """
 
     # Convert MCP tools to LangChain tools
     tools = mcp_tools_from_client(mcp_client)
@@ -139,7 +150,7 @@ def build_session_agent(
     graph.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
     graph.add_edge("tools", "agent")
 
-    return graph.compile()
+    return graph.compile(), profile
 
 
 def _run_workflow(
@@ -225,7 +236,13 @@ def run_agent(
                 mcp_client, requirement, coder_client,
             )
 
-    agent = build_session_agent(mcp_client, coder_client=coder_client, requirement=requirement)
+    agent, profile = build_session_agent(mcp_client, coder_client=coder_client, requirement=requirement)
+
+    # Report the resolved model back to Seam
+    try:
+        mcp_client.call_tool("update_composition", {"model": profile.name})
+    except Exception:
+        log.debug("Failed to report model to Seam (update_composition not available)")
 
     # If a skill is specified, prepend its system prompt
     if skill_name:

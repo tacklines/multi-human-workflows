@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     llm_provider: str = "ollama"  # ollama | anthropic
     default_model: str = "qwen35-tuned"
     ollama_base_url: str = "http://localhost:11434"
+    llamacpp_base_url: str = "http://192.168.1.14:8080/v1"
     anthropic_api_key: str = ""
 
     # Seam MCP (Streamable HTTP)
@@ -50,6 +51,11 @@ def build_model_registry():
     # Register local ollama models
     for name, profile in KNOWN_PROFILES.items():
         if profile.provider == "ollama":
+            registry.register(profile)
+
+    # Register llama.cpp models (always available — local server)
+    for name, profile in KNOWN_PROFILES.items():
+        if profile.provider == "llamacpp":
             registry.register(profile)
 
     # Register Anthropic models if API key is set
