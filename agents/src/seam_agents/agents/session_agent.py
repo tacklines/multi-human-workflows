@@ -16,6 +16,11 @@ from seam_agents.models import ModelProfile, ModelRequirement, ModelRouter
 from seam_agents.skills import get_skill, list_skills
 from seam_agents.tools import mcp_tools_from_client
 from seam_agents.tracing import get_langfuse_handler
+from seam_agents.workflows.skills_bridge import WORKFLOW_MARKER
+from seam_agents.workflows.composer import PIPELINES, compose_pipeline
+from seam_agents.workflows.primitives import PRIMITIVES
+from seam_agents.workflows.router import run_workflow
+from seam_agents.workflows.memory import store_learning
 
 log = logging.getLogger(__name__)
 
@@ -137,6 +142,60 @@ def build_session_agent(
     return graph.compile()
 
 
+def _run_workflow(
+    skill_prompt: str,
+    message: str,
+    mcp_client: SeamMCPClient,
+    requirement: ModelRequirement | None = None,
+    coder_client: CoderMCPClient | None = None,
+) -> str:
+    """Execute a workflow skill (primitive or pipeline) via the workflow engine."""
+    # Parse the workflow dispatch marker
+    # Format: "[WORKFLOW_DISPATCH] type:name"
+    dispatch = skill_prompt.replace(WORKFLOW_MARKER, "").strip()
+    workflow_type, name = dispatch.split(":", 1)
+
+    llm_raw, profile = _build_llm(requirement)
+    log.info("Workflow using model: %s (%s)", profile.name, profile.provider)
+
+    # Gather available tools
+    tools = mcp_tools_from_client(mcp_client)
+    if coder_client is not None:
+        coder_tools = mcp_tools_from_client(coder_client)
+        for tool in coder_tools:
+            tool.name = f"coder_{tool.name}"
+        tools.extend(coder_tools)
+
+    # Build and run the workflow
+    if workflow_type == "pipeline" and name in PIPELINES:
+        graph = PIPELINES[name]["builder"](llm_raw, tools)
+    elif name in PRIMITIVES:
+        graph = PRIMITIVES[name](llm=llm_raw, tools=tools)
+    else:
+        return f"Unknown workflow: {workflow_type}:{name}"
+
+    result = graph.invoke({
+        "messages": [],
+        "goal": message,
+        "criteria": None,
+        "pipe_output": None,
+        "tools": tools,
+    })
+
+    # Store the learning
+    pipe_output = result.get("pipe_output")
+    if pipe_output:
+        store_learning(
+            agent_id=mcp_client.agent_code,
+            session_id=f"seam-{mcp_client.agent_code}",
+            workflow_name=name,
+            pipe_output=pipe_output,
+        )
+        return pipe_output.as_context()
+
+    return "(workflow produced no output)"
+
+
 def run_agent(
     mcp_client: SeamMCPClient,
     message: str,
@@ -156,6 +215,15 @@ def run_agent(
         skill = get_skill(skill_name)
         if skill and skill.model_requirement:
             requirement = skill.model_requirement
+
+    # Check if this is a workflow skill (dispatches to workflow engine)
+    if skill_name:
+        skill = get_skill(skill_name)
+        if skill and skill.system_prompt.startswith(WORKFLOW_MARKER):
+            return _run_workflow(
+                skill.system_prompt, message,
+                mcp_client, requirement, coder_client,
+            )
 
     agent = build_session_agent(mcp_client, coder_client=coder_client, requirement=requirement)
 

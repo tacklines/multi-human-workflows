@@ -13,6 +13,7 @@ from seam_agents.models import Budget, ModelRequirement
 # Import built-in skills so they register
 import seam_agents.skills.builtin  # noqa: F401
 from seam_agents.skills import list_skills
+from seam_agents.workflows.skills_bridge import register_workflow_skills
 from seam_agents.agents.session_agent import run_agent
 
 
@@ -28,6 +29,9 @@ def _parse_requirement(args) -> ModelRequirement | None:
 
 
 def main():
+    # Register workflow-backed skills alongside builtin skills
+    register_workflow_skills()
+
     parser = argparse.ArgumentParser(
         prog="seam-agent",
         description="LangGraph-powered agent for Seam collaborative sessions",
@@ -51,6 +55,10 @@ def main():
         action="store_true",
         help="Disable Coder workspace integration even if configured",
     )
+    parser.add_argument(
+        "--workflow",
+        help="Run a goal-routed workflow (auto-selects best primitive/pipeline)",
+    )
     args = parser.parse_args()
 
     loop = asyncio.new_event_loop()
@@ -70,7 +78,21 @@ def main():
         loop.run_until_complete(client.connect())
         print(f"Connected to Seam session via agent code {args.agent_code}")
 
-        if args.message:
+        if args.workflow:
+            # Workflow mode: route goal to best workflow
+            from seam_agents.workflows.router import run_workflow as run_wf
+            from seam_agents.agents.session_agent import _build_llm
+            from seam_agents.tools import mcp_tools_from_client
+            llm_raw, profile = _build_llm(cli_requirement)
+            tools = mcp_tools_from_client(client)
+            print(f"Routing workflow with {profile.name}...")
+            result = run_wf(args.workflow, llm_raw, tools)
+            pipe_output = result.get("pipe_output")
+            if pipe_output:
+                print(pipe_output.as_context())
+            else:
+                print("(workflow produced no output)")
+        elif args.message:
             # Single-shot mode
             result = run_agent(
                 client, args.message,
@@ -112,7 +134,8 @@ def _repl(
             print("Commands:")
             print("  /skills          — List available skills")
             print("  /models          — Show available models")
-            print("  /<skill_name>    — Run a skill (e.g. /triage)")
+            print("  /workflow <goal>  — Route goal to best workflow")
+            print("  /<skill_name>    — Run a skill (e.g. /triage, /w:research)")
             print("  /quit            — Exit")
             print("  <anything else>  — Send to agent")
             continue
@@ -136,6 +159,26 @@ def _repl(
 
         if user_input == "/quit":
             break
+
+        # Check for workflow routing command
+        if user_input.startswith("/workflow "):
+            goal = user_input[len("/workflow "):].strip()
+            if goal:
+                from seam_agents.workflows.router import run_workflow as run_wf
+                from seam_agents.agents.session_agent import _build_llm
+                from seam_agents.tools import mcp_tools_from_client
+                llm_raw, profile = _build_llm(cli_requirement)
+                tools = mcp_tools_from_client(client)
+                print(f"Routing with {profile.name}...")
+                result = run_wf(goal, llm_raw, tools)
+                pipe_output = result.get("pipe_output")
+                if pipe_output:
+                    print(f"\n{pipe_output.as_context()}\n")
+                else:
+                    print("(workflow produced no output)")
+            else:
+                print("Usage: /workflow <goal description>")
+            continue
 
         # Check if it's a skill invocation
         skill_name = None
