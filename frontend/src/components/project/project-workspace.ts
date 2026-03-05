@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { fetchProject, fetchProjectSessions, type ProjectView } from '../../state/project-api.js';
 import { fetchProjectTasks } from '../../state/task-api.js';
 import { fetchPlans, type PlanListView } from '../../state/plan-api.js';
+import { fetchWorkspaces, type WorkspaceView } from '../../state/workspace-api.js';
 import type { TaskView, TaskStatus } from '../../state/task-types.js';
 import { TASK_TYPE_ICONS, TASK_TYPE_COLORS, STATUS_LABELS, STATUS_VARIANTS, PRIORITY_ICONS, PRIORITY_COLORS } from '../../state/task-types.js';
 import { store, type SessionView } from '../../state/app-state.js';
@@ -337,6 +338,59 @@ export class ProjectWorkspace extends LitElement {
       font-size: 0.7rem;
     }
 
+    /* ── Workspace list ── */
+    .workspace-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--sl-border-radius-medium);
+      overflow: hidden;
+    }
+
+    .workspace-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 1rem;
+      background: var(--surface-card);
+      font-size: 0.875rem;
+    }
+
+    .workspace-row:not(:last-child) {
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .ws-name {
+      font-family: var(--sl-font-mono);
+      font-size: 0.8rem;
+      color: var(--sl-color-primary-400);
+      min-width: 8rem;
+    }
+
+    .ws-template {
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+    }
+
+    .ws-branch {
+      font-family: var(--sl-font-mono);
+      font-size: 0.75rem;
+      background: var(--surface-active);
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      color: var(--text-secondary);
+    }
+
+    .ws-error {
+      font-size: 0.75rem;
+      color: var(--sl-color-danger-500);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 20rem;
+    }
+
     .empty-state {
       text-align: center;
       padding: 2rem;
@@ -366,6 +420,7 @@ export class ProjectWorkspace extends LitElement {
   @state() private _taskCounts = { open: 0, in_progress: 0, done: 0, closed: 0, total: 0 };
   @state() private _plans: PlanListView[] = [];
   @state() private _planCount = 0;
+  @state() private _workspaces: WorkspaceView[] = [];
   @state() private _selectedPlanId: string | null = null;
   @state() private _loading = true;
   @state() private _error = '';
@@ -401,16 +456,18 @@ export class ProjectWorkspace extends LitElement {
     this._loading = true;
     this._error = '';
     try {
-      const [project, sessions, allTasks, plans] = await Promise.all([
+      const [project, sessions, allTasks, plans, workspaces] = await Promise.all([
         fetchProject(this.projectId),
         fetchProjectSessions(this.projectId),
         fetchProjectTasks(this.projectId),
         fetchPlans(this.projectId),
+        fetchWorkspaces(this.projectId).catch(() => [] as WorkspaceView[]),
       ]);
       this._project = project;
       this._sessions = sessions;
       this._plans = plans;
       this._planCount = plans.length;
+      this._workspaces = workspaces;
 
       // Compute counts from all tasks
       const counts = { open: 0, in_progress: 0, done: 0, closed: 0, total: allTasks.length };
@@ -519,6 +576,7 @@ export class ProjectWorkspace extends LitElement {
           ${this._error ? html`<sl-alert variant="danger" open style="margin-bottom: 1rem;">${this._error}</sl-alert>` : nothing}
           ${this._renderSessions()}
           ${this._renderPlans()}
+          ${this._renderWorkspaces()}
           ${this._renderTasks()}
         </div>
       </div>
@@ -642,6 +700,57 @@ export class ProjectWorkspace extends LitElement {
             @plan-select=${(e: CustomEvent) => { this._selectedPlanId = e.detail.planId; }}
           ></plan-list>
         `}
+      </div>
+    `;
+  }
+
+  private _wsStatusVariant(status: string): string {
+    switch (status) {
+      case 'running': return 'success';
+      case 'creating': case 'pending': return 'warning';
+      case 'failed': return 'danger';
+      case 'stopped': case 'stopping': return 'neutral';
+      case 'destroyed': return 'neutral';
+      default: return 'neutral';
+    }
+  }
+
+  private _renderWorkspaces() {
+    // Only show if there are workspaces (Coder might not be configured)
+    const active = this._workspaces.filter(w => w.status !== 'destroyed');
+    if (active.length === 0) return nothing;
+
+    return html`
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">
+            <sl-icon name="terminal"></sl-icon>
+            Workspaces
+            <sl-badge variant="neutral" pill>${active.length}</sl-badge>
+          </span>
+        </div>
+
+        <div class="workspace-list">
+          ${active.map(w => html`
+            <div class="workspace-row">
+              <span class="ws-name">${w.coder_workspace_name ?? w.id.slice(0, 8)}</span>
+              <sl-badge variant=${this._wsStatusVariant(w.status)}>${w.status}</sl-badge>
+              <span class="ws-template">${w.template_name}</span>
+              ${w.branch ? html`<span class="ws-branch">${w.branch}</span>` : nothing}
+              ${w.error_message ? html`
+                <sl-tooltip content=${w.error_message}>
+                  <span class="ws-error">${w.error_message}</span>
+                </sl-tooltip>
+              ` : nothing}
+              <span style="flex: 1;"></span>
+              ${w.started_at ? html`
+                <span style="font-size: 0.75rem; color: var(--text-tertiary);">
+                  Started ${this._relativeTime(w.started_at)}
+                </span>
+              ` : nothing}
+            </div>
+          `)}
+        </div>
       </div>
     `;
   }

@@ -7,3 +7,4 @@ pub mod projects;
 pub mod questions;
 pub mod sessions;
 pub mod tasks;
+pub mod workspaces;
