@@ -1854,6 +1854,13 @@ impl SeamMcp {
         .await
         .map_err(|e| format!("Database error: {e}"))?;
 
+        // Upsert persistent agent identity
+        let agent_id = self.upsert_agent(
+            agent_code.user_id,
+            session.project_id,
+            display_name.unwrap_or("Agent"),
+        ).await.ok();
+
         let participant_id = if let Some(existing) = existing_agent {
             // Update display_name if a new one was provided
             if let Some(new_name) = display_name {
@@ -1863,6 +1870,16 @@ impl SeamMcp {
                     .execute(&self.db)
                     .await;
             }
+            // Link to agent identity if not already linked
+            if existing.agent_id.is_none() {
+                if let Some(aid) = agent_id {
+                    let _ = sqlx::query("UPDATE participants SET agent_id = $1 WHERE id = $2")
+                        .bind(aid)
+                        .bind(existing.id)
+                        .execute(&self.db)
+                        .await;
+                }
+            }
             existing.id
         } else {
             let name = display_name
@@ -1871,14 +1888,15 @@ impl SeamMcp {
             let pid = Uuid::new_v4();
 
             sqlx::query(
-                "INSERT INTO participants (id, session_id, user_id, display_name, participant_type, sponsor_id, joined_at)
-                 VALUES ($1, $2, $3, $4, 'agent', $5, NOW())",
+                "INSERT INTO participants (id, session_id, user_id, display_name, participant_type, sponsor_id, joined_at, agent_id)
+                 VALUES ($1, $2, $3, $4, 'agent', $5, NOW(), $6)",
             )
             .bind(pid)
             .bind(session.id)
             .bind(agent_code.user_id)
             .bind(&name)
             .bind(sponsor.id)
+            .bind(agent_id)
             .execute(&self.db)
             .await
             .map_err(|e| format!("Failed to create participant: {e}"))?;
@@ -1918,6 +1936,39 @@ impl SeamMcp {
             "participant_id": participant_id,
             "sponsor_name": sponsor_user.display_name,
         }))
+    }
+
+    /// Upsert a persistent agent identity. Resolves org from project.
+    async fn upsert_agent(
+        &self,
+        user_id: Uuid,
+        project_id: Uuid,
+        display_name: &str,
+    ) -> Result<Uuid, String> {
+        // Resolve org_id from project
+        let org_id: Uuid = sqlx::query_scalar("SELECT org_id FROM projects WHERE id = $1")
+            .bind(project_id)
+            .fetch_one(&self.db)
+            .await
+            .map_err(|e| format!("Failed to resolve org: {e}"))?;
+
+        // Upsert agent record
+        let agent_id: Uuid = sqlx::query_scalar(
+            r#"INSERT INTO agents (user_id, display_name, organization_id, last_seen_at)
+               VALUES ($1, $2, $3, now())
+               ON CONFLICT (user_id, organization_id) DO UPDATE
+                 SET last_seen_at = now(),
+                     display_name = EXCLUDED.display_name
+               RETURNING id"#,
+        )
+        .bind(user_id)
+        .bind(display_name)
+        .bind(org_id)
+        .fetch_one(&self.db)
+        .await
+        .map_err(|e| format!("Failed to upsert agent: {e}"))?;
+
+        Ok(agent_id)
     }
 
     async fn fetch_session(&self, code: &str) -> Result<serde_json::Value, String> {

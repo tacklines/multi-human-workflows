@@ -103,6 +103,8 @@ pub struct Participant {
     /// For agents: the human user who spawned them
     pub sponsor_id: Option<Uuid>,
     pub joined_at: DateTime<Utc>,
+    /// For agents: persistent agent identity across sessions
+    pub agent_id: Option<Uuid>,
 }
 
 /// Join code for humans to enter a session
