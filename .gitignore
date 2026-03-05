@@ -26,6 +26,12 @@ Thumbs.db
 # Data
 data/
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+
 # Claude
 .claude/debug/
 memory/scratch/
+**/memory/sessions/

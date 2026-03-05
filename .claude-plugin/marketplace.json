@@ -1,0 +1,24 @@
+{
+  "name": "seam",
+  "owner": {
+    "name": "ty"
+  },
+  "metadata": {
+    "description": "Collaborative session skills for Seam"
+  },
+  "plugins": [
+    {
+      "name": "seam",
+      "source": "./",
+      "description": "Collaborative session skills for Seam: join sessions, manage tasks, drive autonomous implementation, plan work, triage bugs, review code, and post standups — all through Seam MCP tools.",
+      "version": "0.1.0",
+      "author": {
+        "name": "ty"
+      },
+      "repository": "https://github.com/tyevans/seam",
+      "license": "MIT",
+      "keywords": ["seam", "collaboration", "tasks", "agent", "session", "mcp"],
+      "category": "productivity"
+    }
+  ]
+}
