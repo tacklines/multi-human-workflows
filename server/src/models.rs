@@ -504,6 +504,10 @@ pub struct Invocation {
     pub triggered_by: String,
     pub reaction_id: Option<Uuid>,
 
+    // Session continuity (claude -p --resume)
+    pub claude_session_id: Option<String>,
+    pub resume_session_id: Option<String>,
+
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

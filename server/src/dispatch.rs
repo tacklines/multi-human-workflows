@@ -318,6 +318,7 @@ struct InvocationRow {
     agent_perspective: String,
     prompt: String,
     system_prompt_append: Option<String>,
+    resume_session_id: Option<String>,
 }
 
 /// A line tagged with its file descriptor.
@@ -355,20 +356,21 @@ pub async fn dispatch_invocation(
     // 1. Load invocation
     let inv: Option<InvocationRow> = sqlx::query_as(
         "SELECT id, workspace_id, session_id, participant_id,
-                agent_perspective, prompt, system_prompt_append
+                agent_perspective, prompt, system_prompt_append, resume_session_id
          FROM invocations WHERE id = $1",
     )
     .bind(invocation_id)
     .fetch_optional(db)
     .await?
     .map(
-        |(id, workspace_id, session_id, participant_id, agent_perspective, prompt, system_prompt_append): (
+        |(id, workspace_id, session_id, participant_id, agent_perspective, prompt, system_prompt_append, resume_session_id): (
             Uuid,
             Uuid,
             Option<Uuid>,
             Option<Uuid>,
             String,
             String,
+            Option<String>,
             Option<String>,
         )| InvocationRow {
             id,
@@ -378,6 +380,7 @@ pub async fn dispatch_invocation(
             agent_perspective,
             prompt,
             system_prompt_append,
+            resume_session_id,
         },
     );
 
@@ -427,16 +430,31 @@ pub async fn dispatch_invocation(
     }
 
     // 5. Build the bash command string
-    let mut claude_cmd = format!(
-        "cd /workspace && claude -p \
-         --agent '{}' \
-         --dangerously-skip-permissions \
-         --output-format json \
-         --max-turns 50 \
-         '{}'",
-        bash_single_quote_escape(&inv.agent_perspective),
-        bash_single_quote_escape(&inv.prompt),
-    );
+    let mut claude_cmd = if let Some(ref session_id) = inv.resume_session_id {
+        format!(
+            "cd /workspace && claude -p \
+             --resume '{}' \
+             --agent '{}' \
+             --dangerously-skip-permissions \
+             --output-format json \
+             --max-turns 50 \
+             '{}'",
+            bash_single_quote_escape(session_id),
+            bash_single_quote_escape(&inv.agent_perspective),
+            bash_single_quote_escape(&inv.prompt),
+        )
+    } else {
+        format!(
+            "cd /workspace && claude -p \
+             --agent '{}' \
+             --dangerously-skip-permissions \
+             --output-format json \
+             --max-turns 50 \
+             '{}'",
+            bash_single_quote_escape(&inv.agent_perspective),
+            bash_single_quote_escape(&inv.prompt),
+        )
+    };
 
     if let Some(ref spa) = inv.system_prompt_append {
         claude_cmd.push_str(&format!(
@@ -533,6 +551,13 @@ pub async fn dispatch_invocation(
     // 9. Parse result JSON from stdout (last valid JSON line wins)
     let result_json = parse_claude_json_output(&all_stdout_lines);
 
+    // Extract claude_session_id from result JSON for session continuity
+    let claude_session_id: Option<String> = result_json
+        .as_ref()
+        .and_then(|v| v.get("session_id"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
     // 10. Update invocation to completed or failed
     let final_status = if exit_status.success() {
         "completed"
@@ -551,6 +576,7 @@ pub async fn dispatch_invocation(
              exit_code = $3,
              result_json = $4,
              error_message = $5,
+             claude_session_id = $6,
              completed_at = NOW(),
              updated_at = NOW()
          WHERE id = $1",
@@ -560,6 +586,7 @@ pub async fn dispatch_invocation(
     .bind(exit_code)
     .bind(&result_json)
     .bind(&error_message)
+    .bind(&claude_session_id)
     .execute(db)
     .await?;
 
@@ -586,6 +613,7 @@ pub async fn dispatch_invocation(
             "workspace_id": inv.workspace_id,
             "exit_code": exit_code,
             "status": final_status,
+            "claude_session_id": claude_session_id,
         }),
     );
     if let Err(e) = crate::events::emit(db, &event).await {

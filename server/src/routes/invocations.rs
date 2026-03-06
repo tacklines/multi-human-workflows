@@ -27,6 +27,8 @@ pub struct CreateInvocationRequest {
     pub session_id: Option<Uuid>,
     /// Branch for workspace pool resolution (used when workspace_id is None).
     pub branch: Option<String>,
+    /// If set, resume a prior Claude session (claude_session_id from a completed invocation).
+    pub resume_session_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,6 +58,8 @@ pub struct InvocationView {
     pub completed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub claude_session_id: Option<String>,
+    pub resume_session_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -85,6 +89,8 @@ fn to_view(inv: Invocation) -> InvocationView {
         completed_at: inv.completed_at,
         created_at: inv.created_at,
         updated_at: inv.updated_at,
+        claude_session_id: inv.claude_session_id,
+        resume_session_id: inv.resume_session_id,
     }
 }
 
@@ -164,8 +170,9 @@ pub async fn create_invocation(
     let inv = sqlx::query_as::<_, Invocation>(
         "INSERT INTO invocations
             (workspace_id, project_id, session_id, task_id,
-             agent_perspective, prompt, system_prompt_append, triggered_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual')
+             agent_perspective, prompt, system_prompt_append, triggered_by,
+             resume_session_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual', $8)
          RETURNING *",
     )
     .bind(workspace_id)
@@ -175,6 +182,7 @@ pub async fn create_invocation(
     .bind(&req.agent_perspective)
     .bind(&req.prompt)
     .bind(&req.system_prompt_append)
+    .bind(&req.resume_session_id)
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
