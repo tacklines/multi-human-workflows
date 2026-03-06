@@ -1097,6 +1097,19 @@ impl SeamMcp {
         &self,
         Parameters(params): Parameters<CloseTaskParams>,
     ) -> Result<CallToolResult, McpError> {
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
         let task_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
@@ -1142,6 +1155,29 @@ impl SeamMcp {
                 Ok(CallToolResult::error(vec![Content::text("Task not found")]))
             }
             Ok(_) => {
+                // Record activity + domain event
+                let prefix = self.get_ticket_prefix();
+                let ticket_id = format!("{}-{}", prefix, current.ticket_number);
+                self.record_activity(
+                    project_id, Some(session_id), participant_id,
+                    "task_closed", "task", task_id,
+                    &format!("closed {}", ticket_id),
+                    serde_json::json!({ "ticket_id": ticket_id }),
+                ).await;
+
+                let event = crate::events::DomainEvent::new(
+                    "task.closed", "task", task_id, None,
+                    serde_json::json!({
+                        "project_id": project_id,
+                        "ticket_id": ticket_id,
+                        "commit_hashes": merged_hashes,
+                        "no_code_change": no_code_change,
+                    }),
+                );
+                if let Err(e) = crate::events::emit(&self.db, &event).await {
+                    tracing::warn!("Failed to emit task_closed domain event: {e}");
+                }
+
                 self.notify_agent_state("idle", &format!("Closed task {}", params.id)).await;
                 let task = self.fetch_task(task_id).await;
                 match task {
