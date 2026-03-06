@@ -1,36 +1,39 @@
-# ADR-004: TLS Termination at Nginx on .14
+# ADR-004: Ingress and TLS via AWS ALB + ACM
 
-**Status**: Accepted
-**Date**: 2026-03-05
+**Status**: Accepted (supersedes previous Nginx decision)
+**Date**: 2026-03-06
 **Deciders**: ty
 
 ## Context
 
-External HTTPS access requires TLS termination somewhere in the request path. Two options:
+External HTTPS access requires TLS termination and ingress routing. On EKS, the primary options are:
 
-1. **Nginx on .14** — .14 already runs Nginx with Let's Encrypt certs for `*.poorlythoughtout.com`. Add upstream blocks to proxy to k3s Traefik.
-2. **cert-manager inside k3s** — Install cert-manager, create ClusterIssuer for Let's Encrypt, annotate Ingress resources. Requires port 80/443 forwarded directly to k3s nodes.
+1. **AWS ALB + ACM** — Managed load balancer with free, auto-renewing TLS certificates via AWS Certificate Manager
+2. **Nginx Ingress Controller + cert-manager** — Self-managed ingress with Let's Encrypt certificates
+3. **Traefik + cert-manager** — Similar to Nginx but with different feature set
 
 ## Decision
 
-Terminate TLS at **Nginx on .14**, proxying to k3s Traefik via NodePort.
+Use **AWS Application Load Balancer (ALB)** with **ACM certificates** via the **aws-load-balancer-controller**.
 
 ## Rationale
 
-- **Reuses existing infrastructure**: .14 already has Nginx, certs, and renewal automation in place
-- **One less component inside k3s**: No cert-manager, no ClusterIssuer, no cert-related debugging
-- **Separation of concerns**: External TLS at the network edge (.14), internal routing at the cluster (Traefik)
-- **WebSocket support**: Nginx config explicitly handles `/ws` upgrade headers for Seam's real-time features
+- **Zero cert management**: ACM certificates are free, auto-renewing, and require no in-cluster certificate infrastructure
+- **Native integration**: aws-load-balancer-controller maps Ingress resources directly to ALB target groups
+- **WebSocket support**: ALB natively handles WebSocket upgrade for Seam's `/ws` endpoint
+- **WAF integration**: AWS WAF can be attached to the ALB for additional protection (rate limiting, geo-blocking, bot mitigation)
+- **Health checks**: ALB health checks integrate with EKS pod readiness, enabling zero-downtime deployments
+- Nginx/Traefik would work but add operational overhead (cert-manager, ingress controller updates, TLS config) for no clear benefit on AWS
 
 ## Traffic Path
 
 ```
-Internet -> pfSense :443 -> .14 Nginx (TLS termination) -> k3s Traefik (NodePort on .12/.13) -> Service
+Internet -> Route 53 -> ALB (TLS termination, ACM cert) -> Target Group -> Pod
 ```
 
 ## Consequences
 
-- .14 becomes a single point of ingress — if it goes down, no external access (acceptable for current scale)
-- Internal cluster traffic is unencrypted (Nginx to Traefik is HTTP within the trusted LAN)
-- Nginx config on .14 must be maintained manually (not managed by k8s)
-- Adding new subdomains (e.g., `coder.poorlythoughtout.com`) requires an Nginx server block update on .14
+- ALB cost (~$16/mo base + $5-8/LCU-hour for traffic)
+- One ALB can serve multiple hostnames via Ingress rules (seam, auth, coder subdomains)
+- AWS-specific ingress — portable k8s Ingress annotations, but ALB-specific features (WAF, Cognito auth) don't transfer
+- Internal cluster traffic is unencrypted (ALB to pod is HTTP within VPC — acceptable for private subnets)

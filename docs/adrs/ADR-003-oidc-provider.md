@@ -17,7 +17,7 @@ Keycloak is heavyweight: Java-based, high memory footprint (~512MB-1GB), complex
 | Keycloak | Self-hosted | High (Java, ~1GB RAM) | Free | Feature-rich but heavy; current dev setup |
 | Zitadel | Self-hosted | Low (Go binary, ~128MB) | Free | OIDC-native, Postgres-backed, lightweight |
 | Authentik | Self-hosted | Medium (Python/Django) | Free | Good UI, broader feature set than needed |
-| Authelia | Self-hosted | Low (Go binary) | Free | Primarily an auth proxy; OIDC support is newer |
+| Amazon Cognito | Managed | None (SaaS) | Free tier (50k MAU) | Zero infra, but limited customization and AWS-specific |
 | Cloudflare Access | Managed | None (SaaS) | Free tier (50 users) | Zero infra, but locks into Cloudflare ecosystem |
 
 ## Decision
@@ -28,14 +28,14 @@ Use **Zitadel** as the production OIDC provider.
 
 - **Lightweight**: Single Go binary, ~128MB RAM — fraction of Keycloak's footprint
 - **OIDC-native**: Built for OIDC/OAuth2 from the ground up, not bolted on
-- **Postgres-backed**: Shares our existing Postgres instance (separate database), no additional storage infrastructure
-- **Self-hosted**: No vendor lock-in, no external dependency for auth
-- **Migration path**: Standard OIDC — if Zitadel proves insufficient, any other provider can replace it without Seam server changes
-- Cloudflare Access was tempting (zero infra) but creates an external dependency for a security-critical service and complicates local development
+- **Postgres-backed**: Uses the existing RDS instance (separate database), no additional storage infrastructure
+- **Portable**: No vendor lock-in to any cloud provider
+- **Migration path**: Standard OIDC — if Zitadel proves insufficient, any other provider (including Cognito) can replace it without Seam server changes
+- Cognito was tempting (zero infra) but its OIDC customization is limited and creates an AWS-specific dependency for a security-critical service
 
 ## Consequences
 
-- Must create Zitadel deployment manifests (replaces Keycloak manifests)
+- Must create Zitadel k8s deployment manifests
 - Realm/client configuration from `infra/keycloak/realm-export.json` must be translated to Zitadel project/application config
-- Dev environment can continue using Keycloak or switch to Zitadel — the Seam server doesn't care as long as JWKS works
-- Zitadel shares the Postgres instance: simpler infrastructure, but backup/restore must account for both databases
+- Dev environment can continue using Keycloak — the Seam server doesn't care as long as JWKS works
+- Zitadel shares the RDS instance: simpler infrastructure, but backup/restore must account for both databases

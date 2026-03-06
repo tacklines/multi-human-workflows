@@ -1,31 +1,36 @@
-# ADR-002: Self-Hosted Deployment on Home Network
+# ADR-002: Managed Services for Stateful Infrastructure
 
-**Status**: Accepted
-**Date**: 2026-03-05
+**Status**: Accepted (supersedes previous self-hosted decision)
+**Date**: 2026-03-06
 **Deciders**: ty
 
 ## Context
 
-Seam needs a deployment target beyond local dev. Available options:
+Seam depends on PostgreSQL, an OIDC provider, and RabbitMQ. Each can be self-managed in k8s (StatefulSets) or offloaded to managed services. The tradeoff is cost vs operational burden.
 
-1. **Self-hosted** on existing home network hardware (.12: 64GB/12 vCPU, .13: 96GB/18 vCPU) — both idle or underutilized
-2. **Cloud (AWS/GCP)** — managed infrastructure with built-in external access
+Agent workspaces are the primary cost driver — stateful infrastructure should be reliable and low-maintenance so operational attention stays on the security-critical workspace layer.
 
 ## Decision
 
-Deploy to **self-hosted home network** hardware. Add external access later via Cloudflare Tunnel or Tailscale.
+Use **managed services** where the operational savings justify the cost:
+
+| Component | Approach | Service |
+|-----------|----------|---------|
+| PostgreSQL | Managed | RDS (or Aurora Serverless v2) |
+| OIDC | Self-managed in k8s | See [ADR-003](ADR-003-oidc-provider.md) |
+| RabbitMQ | Self-managed in k8s | Bitnami Helm chart |
+| Coder | Self-managed in k8s | Coder Helm chart |
 
 ## Rationale
 
-- **Cost**: $0/month vs ~$150-200/month for comparable cloud compute (t3.xlarge or larger for Coder workloads)
-- **Hardware**: 160GB combined RAM and 30 vCPUs available — massively overprovisioned vs what cloud budget would buy
-- **Coder support**: Native Docker/k8s on bare metal; cloud requires additional Docker socket configuration on VMs
-- **Network latency**: Local access is sub-millisecond; sufficient for current single-team use
-- External accessibility is additive — Cloudflare Tunnel or Tailscale can be layered on without changing the deployment architecture
+- **RDS for Postgres**: Automated backups, point-in-time recovery, encryption at rest, minor version upgrades. Running Postgres in k8s is possible but backup/restore and HA add significant operational complexity.
+- **OIDC in k8s**: Lightweight enough to self-manage (see ADR-003). No managed OIDC service fits our requirements without vendor lock-in.
+- **RabbitMQ in k8s**: Amazon MQ exists but adds cost for a component that's simple to run via Helm chart. Acceptable to self-manage at current scale.
+- **Coder in k8s**: Must run in-cluster to use the Kubernetes provisioner for workspace pods.
 
 ## Consequences
 
-- No built-in external access; requires additional work when remote access is needed
-- Hardware maintenance is on us (power, networking, OS updates)
-- No managed backups — must implement our own (see Phase 5 in deployment plan)
-- Acceptable tradeoff: the hardware exists, is idle, and the cost savings fund other priorities
+- RDS cost (~$15-50/mo for db.t4g.small) added to infrastructure bill
+- RDS handles backups, but we must configure retention and test restores
+- RabbitMQ and Coder require monitoring and upgrade attention
+- If RabbitMQ operational burden grows, migration to Amazon MQ is straightforward

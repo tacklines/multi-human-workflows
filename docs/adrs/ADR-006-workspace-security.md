@@ -18,14 +18,13 @@ Resource exploits have **compounding costs** — unlike a simple data breach, on
 
 ## Decision
 
-Implement defense-in-depth across five layers: network isolation, resource limits, token lifecycle, rate limiting, and egress control.
+Implement defense-in-depth across six layers: network isolation, resource limits, token lifecycle, rate limiting, egress control, and audit/detection.
 
-## Layer 1: Network Isolation (NetworkPolicy)
+## Layer 1: Network Isolation
 
-Workspace pods in `seam-coder` namespace are denied all traffic by default, with explicit allowances:
+Workspace pods run in a dedicated `seam-coder` namespace with default-deny networking:
 
 ```yaml
-# Default deny all ingress and egress in seam-coder
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -39,12 +38,14 @@ spec:
 **Allowed egress from workspace pods:**
 - Seam MCP endpoint (`seam-server.seam-core.svc:3002`) — required for agent operation
 - DNS (`kube-dns.kube-system.svc:53`) — required for service resolution
-- External allowlist (see Layer 5) — required for package installs and API calls
+- External allowlist (see Layer 5)
 
 **Blocked:**
 - All access to `seam-core` namespace except the MCP endpoint
 - Direct access to Postgres, OIDC provider, or any other platform service
 - Pod-to-pod communication within `seam-coder` (workspace isolation)
+
+On EKS, VPC security groups per pod (via SecurityGroupPolicy) provide an additional isolation layer at the VPC level.
 
 ## Layer 2: Resource Limits
 
@@ -77,7 +78,7 @@ spec:
     pods: "8"
 ```
 
-Per-pod limits prevent any single workspace from claiming the whole quota. The namespace quota prevents total workspace resource consumption from starving the node.
+Per-pod limits prevent any single workspace from claiming the whole quota. The namespace quota caps total workspace compute cost. Workspace node groups use separate instance types with cost alarms.
 
 ## Layer 3: Token Lifecycle
 
@@ -101,7 +102,7 @@ Rate limits on the `/mcp` endpoint prevent tool-call abuse:
 | Per-token | 500 requests | 1 hour |
 | Global (all agents) | 300 requests | 1 minute |
 
-Implementation: Tower middleware in `mcp_auth.rs` using in-memory token bucket (or Redis if scaling beyond single-server). Returns `429 Too Many Requests` with `Retry-After` header.
+Implementation: Tower middleware in `mcp_auth.rs` using in-memory token bucket (or Redis/ElastiCache if scaling beyond single-server). Returns `429 Too Many Requests` with `Retry-After` header.
 
 Alerts fire when any token sustains >80% of its rate limit for >5 minutes (indicates possible abuse or runaway agent loop).
 
@@ -118,25 +119,28 @@ Workspace pods may only reach a curated allowlist of external hosts:
 | `crates.io`, `static.crates.io` | 443 | Cargo dependency fetches |
 | `pypi.org`, `files.pythonhosted.org` | 443 | pip installs |
 
-Implementation: Kubernetes NetworkPolicy cannot filter by hostname (only IP/CIDR). Options:
-- **Cilium** (replaces kube-proxy, supports FQDN-based policies) — preferred
-- **Istio egress gateway** — heavier, more operational overhead
-- **Squid proxy** — transparent HTTP proxy with domain allowlist, workspace pods route through it
+Standard Kubernetes NetworkPolicy cannot filter by hostname (only IP/CIDR). Implementation options:
 
-Decision: Deploy **Cilium** as the k3s CNI (replaces default Flannel) for FQDN-based egress policies. This is a Phase 1 decision — must be configured at cluster bootstrap time.
+- **Cilium** (EKS add-on, supports FQDN-based policies) — preferred
+- **Calico Enterprise** (FQDN policies via DNS policy)
+- **NAT Gateway + VPC egress filtering** — coarser-grained but no CNI change required
+
+Decision: Use **Cilium** as the EKS CNI for FQDN-based egress policies. Must be configured at cluster creation time.
 
 ## Layer 6: Audit and Detection
 
 Reactive controls complement preventive ones:
 
 - **Tool invocation logging**: All MCP tool calls are stored in `tool_invocations` table with participant_id, tool_name, timestamp, and duration
-- **Cost tracking**: LLM API calls through injected credentials should be tracked (see seam-31 in backlog)
+- **Cost tracking**: LLM API calls through injected credentials should be tracked (see backlog)
 - **Anomaly alerts**: Workspace running >2 hours without MCP activity, sustained high CPU without tool calls, unusual egress volume
 - **Workspace auto-stop**: Idle workspaces (no MCP calls for 30 minutes) are automatically stopped, revoking their token
+- **CloudTrail**: All AWS API calls logged for forensic analysis
+- **VPC Flow Logs**: Network traffic visibility for workspace subnets
 
 ## Consequences
 
-- Cilium CNI must be chosen at k3s bootstrap (Phase 1) — cannot be retrofitted easily
+- Cilium CNI must be chosen at EKS cluster creation — cannot be retrofitted easily
 - Per-pod resource limits may need tuning as we learn actual agent workload profiles
 - Rate limits may need adjustment — too aggressive blocks legitimate agent work, too loose allows abuse
 - Egress allowlist will need maintenance as agents require new external services

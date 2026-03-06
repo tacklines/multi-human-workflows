@@ -1,6 +1,6 @@
-# ADR-005: Secrets Management
+# ADR-005: Secrets Management via AWS Secrets Manager
 
-**Status**: Proposed
+**Status**: Accepted (supersedes previous SOPS+age decision)
 **Date**: 2026-03-06
 **Deciders**: ty
 
@@ -18,35 +18,30 @@ Seam manages several categories of secrets:
 
 The `CREDENTIAL_MASTER_KEY` is the crown jewel — compromise means all stored credentials are exposed. It must never appear in git, environment variable logs, or k8s manifest files.
 
-## Options Evaluated
-
-1. **Kubernetes Secrets (base64)** — Built-in, no additional tooling. Not encrypted at rest by default.
-2. **Sealed Secrets (Bitnami)** — Encrypt secrets in git, decrypt only in-cluster. Controller manages lifecycle.
-3. **SOPS + age** — Encrypt secret files with age keys before committing. Decrypt at deploy time.
-4. **External Secrets Operator + Infisical** — Pull secrets from Infisical (running on .40) into k8s Secrets automatically.
-
 ## Decision
 
-Use **SOPS + age** for secret encryption in git, with k8s Secrets as the runtime delivery mechanism. Evaluate External Secrets Operator with Infisical as a future upgrade.
+Use **AWS Secrets Manager** with the **External Secrets Operator (ESO)** to sync secrets into k8s.
 
 ## Rationale
 
-- **SOPS + age** is simple: one age key per environment, encrypt YAML files in-place, decrypt during `kubectl apply`
-- No additional in-cluster controller (unlike Sealed Secrets or External Secrets Operator)
-- Secrets are version-controlled (encrypted) alongside manifests — deployment is self-contained
-- age keys are small and easy to back up securely (single file)
-- Infisical on .40 exists but adding External Secrets Operator increases cluster complexity for marginal benefit at current scale
+- **Encryption at rest**: Secrets Manager encrypts with KMS — no plaintext secrets anywhere in the deployment pipeline
+- **Automatic rotation**: Native rotation support for RDS credentials; custom rotation lambdas for other secrets
+- **Audit trail**: Every secret access is logged in CloudTrail — critical for incident response
+- **IRSA access control**: Pods access secrets via IAM roles (no static credentials), scoped per-service
+- **ESO bridge**: External Secrets Operator syncs Secrets Manager values into k8s Secrets automatically, keeping k8s manifests secret-free
+- SOPS+age is simpler but lacks rotation, audit logging, and centralized management
 
 ## Implementation
 
-- Generate an age key pair for production: `age-keygen -o infra/k8s/age.key` (this file is .gitignored)
-- Encrypt secret manifests: `sops --encrypt --age <public-key> secrets.yaml > secrets.enc.yaml`
-- Deploy script decrypts and applies: `sops --decrypt secrets.enc.yaml | kubectl apply -f -`
-- `CREDENTIAL_MASTER_KEY` stored in a dedicated Secret, mounted as a volume (not an env var) to reduce exposure in process listings and crash dumps
+- `CREDENTIAL_MASTER_KEY` stored in its own Secrets Manager secret with restricted IAM policy (only seam-server pod role)
+- Mounted as a volume via ESO SecretStore, not as an env var — reduces exposure in process listings and crash dumps
+- RDS credentials managed via Secrets Manager native rotation (rotates every 30 days)
+- All secret access requires IRSA — no k8s ServiceAccount can read secrets without an explicit IAM role binding
 
 ## Consequences
 
-- The age private key becomes a critical backup item — loss means re-creating all secrets
-- Developers must have `sops` and `age` installed locally to update secrets
-- Secret rotation requires re-encrypting and redeploying — no automatic rotation
-- Upgrade path: External Secrets Operator + Infisical if secret count or rotation frequency grows
+- Secrets Manager cost (~$0.40/secret/month + $0.05/10k API calls) — negligible
+- External Secrets Operator adds a cluster component to maintain
+- Secret rotation requires testing to ensure dependent services handle credential changes gracefully
+- CloudTrail logs provide forensic capability for secret access audits
+- Developers need AWS credentials to manage secrets (no local-only workflow)
