@@ -65,7 +65,18 @@ seam.${domain_name} {
 
 auth.seam.${domain_name} {
 	tls ${acme_email}
-	reverse_proxy localhost:8080
+
+	# Login V2 UI (Next.js container)
+	handle /ui/v2/login/* {
+		reverse_proxy localhost:3100
+	}
+
+	# Zitadel API + Console + OIDC
+	handle {
+		reverse_proxy h2c://localhost:8080 {
+			header_up -TE
+		}
+	}
 }
 CADDYFILE
 
