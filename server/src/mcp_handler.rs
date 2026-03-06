@@ -882,9 +882,10 @@ impl SeamMcp {
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
         };
 
-        // Fetch current task
-        let task: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+        // Fetch current task (scoped to project for cross-project security)
+        let task: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND project_id = $2")
             .bind(task_id)
+            .bind(project_id)
             .fetch_optional(&self.db)
             .await
         {
@@ -979,7 +980,7 @@ impl SeamMcp {
         };
 
         match sqlx::query(
-            "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, commit_hashes = $8, no_code_change = $9, closed_at = COALESCE($10, closed_at), updated_at = NOW() WHERE id = $11"
+            "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, commit_hashes = $8, no_code_change = $9, closed_at = COALESCE($10, closed_at), updated_at = NOW() WHERE id = $11 AND project_id = $12"
         )
         .bind(title)
         .bind(description)
@@ -992,6 +993,7 @@ impl SeamMcp {
         .bind(no_code_change)
         .bind(closed_at)
         .bind(task_id)
+        .bind(project_id)
         .execute(&self.db)
         .await {
             Ok(_) => {
@@ -1147,9 +1149,10 @@ impl SeamMcp {
         let no_code_change = params.no_code_change.unwrap_or(false);
         let new_hashes = params.commit_hashes.unwrap_or_default();
 
-        // Fetch current task to merge commit_hashes
-        let current: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+        // Fetch current task to merge commit_hashes (scoped to project for cross-project security)
+        let current: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND project_id = $2")
             .bind(task_id)
+            .bind(project_id)
             .fetch_optional(&self.db)
             .await
         {
@@ -1173,11 +1176,12 @@ impl SeamMcp {
         }
 
         match sqlx::query(
-            "UPDATE tasks SET status = 'closed', commit_hashes = $1, no_code_change = $2, closed_at = NOW(), updated_at = NOW() WHERE id = $3"
+            "UPDATE tasks SET status = 'closed', commit_hashes = $1, no_code_change = $2, closed_at = NOW(), updated_at = NOW() WHERE id = $3 AND project_id = $4"
         )
         .bind(&merged_hashes)
         .bind(no_code_change)
         .bind(task_id)
+        .bind(project_id)
         .execute(&self.db)
         .await {
             Ok(result) if result.rows_affected() == 0 => {
@@ -1243,9 +1247,10 @@ impl SeamMcp {
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
         };
 
-        // Check task exists and isn't already claimed by someone else
-        let task: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+        // Check task exists and isn't already claimed by someone else (scoped to project)
+        let task: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND project_id = $2")
             .bind(task_id)
+            .bind(project_id)
             .fetch_optional(&self.db)
             .await
         {
@@ -1264,9 +1269,10 @@ impl SeamMcp {
             )]));
         }
 
-        match sqlx::query("UPDATE tasks SET assigned_to = $1, updated_at = NOW() WHERE id = $2")
+        match sqlx::query("UPDATE tasks SET assigned_to = $1, updated_at = NOW() WHERE id = $2 AND project_id = $3")
             .bind(participant_id)
             .bind(task_id)
+            .bind(project_id)
             .execute(&self.db)
             .await
         {
@@ -1317,8 +1323,9 @@ impl SeamMcp {
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
         };
 
-        let task: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
+        let task: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND project_id = $2")
             .bind(task_id)
+            .bind(project_id)
             .fetch_optional(&self.db)
             .await
         {
@@ -1331,8 +1338,9 @@ impl SeamMcp {
             return Ok(CallToolResult::error(vec![Content::text("You are not assigned to this task")]));
         }
 
-        match sqlx::query("UPDATE tasks SET assigned_to = NULL, updated_at = NOW() WHERE id = $1")
+        match sqlx::query("UPDATE tasks SET assigned_to = NULL, updated_at = NOW() WHERE id = $1 AND project_id = $2")
             .bind(task_id)
+            .bind(project_id)
             .execute(&self.db)
             .await
         {
