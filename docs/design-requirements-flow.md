@@ -132,17 +132,17 @@ Could be:
 ### 2. Domain event triggers agent dispatch
 
 ```
-request.created → event_reactions → launch_agent (blossom skill)
+request.created → event_reactions → invoke_agent (blossom prompt)
 ```
 
 The event reaction is a per-project configuration:
 ```json
 {
     "event_type": "request.created",
-    "action_type": "launch_agent",
+    "action_type": "invoke_agent",
     "action_config": {
-        "skill": "blossom",
-        "prompt_template": "Analyze this feature request against the project's existing requirements and features. Decompose into requirements and tasks.\n\nRequest: {{body}}\n\nUse list_requirements to see existing requirements. Use create_requirement to add new ones. Link them with link_requirement_task."
+        "agent_perspective": "planner",
+        "prompt": "Analyze this feature request against the project's existing requirements and features. Decompose into requirements and tasks.\n\nRequest: {{body}}\n\nUse list_requirements to see existing requirements. Use create_requirement to add new ones. Link them with link_requirement_task."
     }
 }
 ```
@@ -234,7 +234,7 @@ Add to the existing project detail page (`/projects/:id/:tab`):
 
 ### Event Reactions (already built)
 
-The `event_reactions` table + worker reaction engine already supports `launch_agent` actions. We just need:
+The `event_reactions` table + worker reaction engine supports `invoke_agent` actions (ephemeral invocations). We just need:
 1. Emit `request.created` domain event
 2. Configure a default reaction per project (or let users configure it)
 
@@ -292,7 +292,7 @@ Requests are created in sessions but live at the project level. The session_id o
 - Request submission UI (in session or project-level)
 
 ### Phase 4: Automated Blossom Dispatch
-- Wire request.created event to launch_agent reaction
+- Wire request.created event to invoke_agent reaction
 - Blossom skill enhancement: awareness of existing requirements, gap analysis
 - Agent writes analysis back to request entity
 

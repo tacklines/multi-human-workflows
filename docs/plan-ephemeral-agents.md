@@ -144,11 +144,11 @@ New: `dispatch_invocation` → find/create workspace → execute `claude -p` ins
 
 ## Migration Path
 
-1. Build invocation system alongside existing agent launch
-2. Both coexist — `launch_agent` still works for interactive sessions
-3. New `invoke_agent` reaction action uses the invocation system
-4. Gradually migrate UI to invocation-centric views
-5. Deprecate interactive agent launch when invocation model is proven
+1. ~~Build invocation system alongside existing agent launch~~ **DONE**
+2. ~~Both coexist — `launch_agent` still works for interactive sessions~~ **DONE** — `launch_agent` deprecated with warning
+3. ~~New `invoke_agent` reaction action uses the invocation system~~ **DONE**
+4. ~~Gradually migrate UI to invocation-centric views~~ **DONE** — invocation list/detail with Continue button
+5. ~~Deprecate interactive agent launch when invocation model is proven~~ **IN PROGRESS** — `launch_agent` emits deprecation warning, session continuity via `--resume` proven
 
 ## Open Questions
 
