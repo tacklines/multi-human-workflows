@@ -104,6 +104,15 @@ data "coder_parameter" "workspace_id" {
   default      = ""
 }
 
+data "coder_parameter" "credentials_json" {
+  name         = "credentials_json"
+  display_name = "Credentials JSON"
+  description  = "JSON object of env var name to value pairs, injected from org credential store."
+  type         = "string"
+  mutable      = false
+  default      = "{}"
+}
+
 data "coder_parameter" "cpu_limit" {
   name         = "cpu_limit"
   display_name = "CPU Cores"
@@ -234,6 +243,15 @@ resource "coder_agent" "dev" {
         ) &
         echo "Log forwarder PID: $!"
       fi
+    fi
+
+    # Inject org credentials as environment variables
+    CREDS_JSON='${data.coder_parameter.credentials_json.value}'
+    if [ "$CREDS_JSON" != "{}" ] && [ -n "$CREDS_JSON" ]; then
+      echo "Injecting org credentials..."
+      echo "$CREDS_JSON" | jq -r 'to_entries[] | "export \(.key)=\(.value | @sh)"' >> /etc/profile.d/seam-creds.sh
+      source /etc/profile.d/seam-creds.sh
+      echo "Injected $(echo "$CREDS_JSON" | jq 'length') credential(s)"
     fi
 
     echo "Workspace ready."

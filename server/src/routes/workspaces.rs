@@ -142,6 +142,20 @@ pub async fn create_workspace(
     Ok((StatusCode::CREATED, Json(workspace_view(&workspace))))
 }
 
+/// Look up the org_id for a workspace's project.
+async fn org_id_for_workspace(db: &sqlx::PgPool, workspace_id: Uuid) -> Option<Uuid> {
+    let row: Option<(Uuid,)> = sqlx::query_as(
+        "SELECT p.org_id FROM workspaces w
+         JOIN projects p ON p.id = w.project_id
+         WHERE w.id = $1",
+    )
+    .bind(workspace_id)
+    .fetch_optional(db)
+    .await
+    .ok()?;
+    row.map(|(id,)| id)
+}
+
 /// Background task: resolve template, create Coder workspace, update DB.
 async fn provision_workspace(
     db: &sqlx::PgPool,
@@ -216,6 +230,27 @@ async fn provision_workspace(
             name: "branch".to_string(),
             value: b.to_string(),
         });
+    }
+
+    // Inject org credentials as JSON
+    if let Some(org_id) = org_id_for_workspace(db, workspace_id).await {
+        match crate::credentials::decrypt_org_credentials(db, org_id).await {
+            Ok(creds) if !creds.is_empty() => {
+                let creds_map: serde_json::Map<String, serde_json::Value> = creds
+                    .into_iter()
+                    .map(|(k, v)| (k, serde_json::Value::String(v)))
+                    .collect();
+                params.push(coder::RichParameterValue {
+                    name: "credentials_json".to_string(),
+                    value: serde_json::Value::Object(creds_map).to_string(),
+                });
+                tracing::info!(workspace_id = %workspace_id, "Injected org credentials into workspace");
+            }
+            Ok(_) => {} // no credentials
+            Err(e) => {
+                tracing::warn!(workspace_id = %workspace_id, "Failed to decrypt org credentials (continuing without): {e}");
+            }
+        }
     }
 
     let req = coder::CreateWorkspaceRequest {
