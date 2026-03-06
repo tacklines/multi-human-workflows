@@ -22,6 +22,9 @@ export default defineConfig({
     },
   },
   server: {
+    headers: {
+      'Cache-Control': 'no-store',
+    },
     proxy: {
       '/api': 'http://localhost:3002',
       '/mcp': 'http://localhost:3002',

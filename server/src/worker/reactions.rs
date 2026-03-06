@@ -6,6 +6,7 @@ use uuid::Uuid;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct BridgedEvent {
     id: i64,
     event_type: String,

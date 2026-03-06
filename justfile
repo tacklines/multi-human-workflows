@@ -22,7 +22,7 @@ dev: infra-up
     echo "✓ Keycloak ready"
 
     echo "🚀 Starting backend + frontend..."
-    cd server && cargo run --bin seam-server 2>&1 | sed 's/^/[server] /' &
+    cd server && cargo watch -x 'run --bin seam-server' 2>&1 | sed 's/^/[server] /' &
     sleep 2
     cd frontend && npx vite 2>&1 | sed 's/^/[frontend] /' &
     wait
@@ -32,7 +32,7 @@ dev-no-infra:
     #!/usr/bin/env bash
     set -e
     trap 'kill 0' EXIT
-    cd server && cargo run --bin seam-server 2>&1 | sed 's/^/[server] /' &
+    cd server && cargo watch -x 'run --bin seam-server' 2>&1 | sed 's/^/[server] /' &
     sleep 2
     cd frontend && npx vite 2>&1 | sed 's/^/[frontend] /' &
     wait
@@ -53,18 +53,18 @@ dev-noauth: infra-up
 
     echo "🚀 Starting backend (MCP auth disabled) + frontend..."
     export MCP_AUTH_DISABLED=true
-    cd server && cargo run --bin seam-server 2>&1 | sed 's/^/[server] /' &
+    cd server && cargo watch -x 'run --bin seam-server' 2>&1 | sed 's/^/[server] /' &
     sleep 2
     cd frontend && npx vite 2>&1 | sed 's/^/[frontend] /' &
     wait
 
-# Backend only
+# Backend only (hot reload)
 server:
-    cd server && cargo run --bin seam-server
+    cd server && cargo watch -x 'run --bin seam-server'
 
 # Backend with MCP auth disabled (for local MCP clients without OAuth)
 server-noauth:
-    export MCP_AUTH_DISABLED=true && cd server && cargo run --bin seam-server
+    export MCP_AUTH_DISABLED=true && cd server && cargo watch -x 'run --bin seam-server'
 
 # Frontend only
 frontend:

@@ -57,6 +57,7 @@ pub async fn validate_token(db: &PgPool, raw_token: &str) -> Result<Option<Agent
 }
 
 /// Revoke a token by ID.
+#[allow(dead_code)]
 pub async fn revoke_token(db: &PgPool, token_id: Uuid) -> Result<bool, sqlx::Error> {
     let result = sqlx::query(
         "UPDATE agent_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL",
@@ -69,6 +70,7 @@ pub async fn revoke_token(db: &PgPool, token_id: Uuid) -> Result<bool, sqlx::Err
 }
 
 /// Revoke all tokens for a session (e.g., when session closes).
+#[allow(dead_code)]
 pub async fn revoke_session_tokens(db: &PgPool, session_id: Uuid) -> Result<u64, sqlx::Error> {
     let result = sqlx::query(
         "UPDATE agent_tokens SET revoked_at = now() WHERE session_id = $1 AND revoked_at IS NULL",
@@ -92,6 +94,7 @@ pub fn is_agent_token(token: &str) -> bool {
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
+#[allow(dead_code)]
 pub struct AgentTokenInfo {
     pub id: Uuid,
     pub user_id: Uuid,

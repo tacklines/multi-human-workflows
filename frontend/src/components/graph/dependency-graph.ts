@@ -620,8 +620,39 @@ export class DependencyGraph extends LitElement {
       }
 
       await this.updateComplete;
+
+      // Wait for the container to have non-zero dimensions (layout may not be ready on hard refresh)
+      const container = this.renderRoot.querySelector('.graph-container') as HTMLDivElement;
+      if (!container || container.clientWidth === 0 || container.clientHeight === 0) {
+        await new Promise<void>(resolve => {
+          const ro = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+              if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+                ro.disconnect();
+                resolve();
+                return;
+              }
+            }
+          });
+          if (container) {
+            ro.observe(container);
+          } else {
+            // Container not in DOM yet — poll briefly
+            const interval = setInterval(() => {
+              const el = this.renderRoot.querySelector('.graph-container') as HTMLDivElement;
+              if (el && el.clientWidth > 0 && el.clientHeight > 0) {
+                clearInterval(interval);
+                resolve();
+              }
+            }, 50);
+            setTimeout(() => { clearInterval(interval); resolve(); }, 3000);
+          }
+        });
+      }
+
       this._initThree();
       this._buildGraph(data);
+      this._zoomToFit();
       this._animate();
     } catch (err) {
       console.error('Failed to load dependency graph:', err);
@@ -654,7 +685,7 @@ export class DependencyGraph extends LitElement {
       0.1, 2000,
     );
     this._orthoCamera.position.set(0, 0, 500);
-    this._orthoCamera.zoom = 1;
+    this._orthoCamera.zoom = 0.01;
 
     // Default to 2D
     this._camera = this._is2D ? this._orthoCamera : this._perspCamera;
@@ -1353,7 +1384,7 @@ export class DependencyGraph extends LitElement {
     }
 
     this._cameraTarget.copy(center);
-    this._cameraTargetDist = Math.max(maxDist * 2.5, 40);
+    this._cameraTargetDist = Math.max(maxDist * 5, 120);
     this._animatingCamera = true;
   }
 
