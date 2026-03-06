@@ -3,6 +3,7 @@ FROM node:22-bookworm-slim AS frontend
 
 ARG VITE_AUTH_AUTHORITY=http://localhost:8081
 ARG VITE_APP_URL=http://localhost:5173
+ARG VITE_CLIENT_ID=web-app
 
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
@@ -10,6 +11,7 @@ RUN npm ci
 COPY frontend/ ./
 ENV VITE_AUTH_AUTHORITY=$VITE_AUTH_AUTHORITY
 ENV VITE_APP_URL=$VITE_APP_URL
+ENV VITE_CLIENT_ID=$VITE_CLIENT_ID
 RUN npm run build
 
 # ─── Stage 2: Rust Builder ────────────────────────────────────────────────────
