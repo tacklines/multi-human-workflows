@@ -113,7 +113,9 @@ async fn dispatch_launch_agent(
         "agent_type": agent_type,
     });
     if let Some(instructions) = &config.instructions {
-        body["instructions"] = serde_json::Value::String(instructions.clone());
+        // Interpolate {{key}} placeholders from event payload
+        let rendered = interpolate_template(instructions, ctx.event_payload.as_ref());
+        body["instructions"] = serde_json::Value::String(rendered);
     }
 
     // The worker needs a valid auth token to call the API.
@@ -154,6 +156,38 @@ async fn dispatch_launch_agent(
     }
 
     Ok(())
+}
+
+/// Replace `{{key}}` placeholders in a template with values from event payload.
+/// Supports nested keys via dot notation: `{{nested.key}}`.
+/// Missing keys are left as-is.
+fn interpolate_template(template: &str, payload: Option<&serde_json::Value>) -> String {
+    let Some(payload) = payload else {
+        return template.to_string();
+    };
+    let mut result = template.to_string();
+    // Find all {{...}} patterns
+    let re = regex::Regex::new(r"\{\{(\w+(?:\.\w+)*)\}\}").unwrap();
+    for cap in re.captures_iter(template) {
+        let full_match = &cap[0];
+        let key_path = &cap[1];
+        let mut current = payload;
+        let mut found = true;
+        for part in key_path.split('.') {
+            match current.get(part) {
+                Some(v) => current = v,
+                None => { found = false; break; }
+            }
+        }
+        if found {
+            let replacement = match current {
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            result = result.replace(full_match, &replacement);
+        }
+    }
+    result
 }
 
 async fn dispatch_webhook(

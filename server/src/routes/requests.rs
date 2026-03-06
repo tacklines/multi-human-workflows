@@ -271,7 +271,9 @@ pub async fn create_request(
         Some(user.id),
         serde_json::json!({
             "project_id": project_id,
+            "request_id": req.id,
             "title": req.title,
+            "body": req.body,
             "session_id": req.session_id,
         }),
     );

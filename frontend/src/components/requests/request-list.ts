@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchRequests, createRequest, type RequestListView, type RequestStatusType } from '../../state/requirement-api.js';
+import { fetchReactions, createReaction, updateReaction, type EventReaction } from '../../state/automation-api.js';
 import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
@@ -11,6 +12,8 @@ import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
 import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
+import '@shoelace-style/shoelace/dist/components/switch/switch.js';
+import '@shoelace-style/shoelace/dist/components/alert/alert.js';
 
 const STATUS_VARIANTS: Record<RequestStatusType, string> = {
   pending: 'neutral',
@@ -116,6 +119,8 @@ export class RequestList extends LitElement {
   @state() private _newTitle = '';
   @state() private _newBody = '';
   @state() private _creating = false;
+  @state() private _autoAnalysis: EventReaction | null = null;
+  @state() private _autoAnalysisLoading = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -133,11 +138,44 @@ export class RequestList extends LitElement {
     this._loading = true;
     this._error = '';
     try {
-      this._requests = await fetchRequests(this.projectId);
+      const [requests, reactions] = await Promise.all([
+        fetchRequests(this.projectId),
+        fetchReactions(this.projectId).catch(() => [] as EventReaction[]),
+      ]);
+      this._requests = requests;
+      this._autoAnalysis = reactions.find(
+        r => r.aggregate_type === 'request' && r.event_type === 'request_created' && r.action_type === 'launch_agent',
+      ) ?? null;
     } catch (err) {
       this._error = err instanceof Error ? err.message : t('requestList.errorLoad');
     } finally {
       this._loading = false;
+    }
+  }
+
+  private async _toggleAutoAnalysis() {
+    this._autoAnalysisLoading = true;
+    try {
+      if (this._autoAnalysis) {
+        this._autoAnalysis = await updateReaction(this.projectId, this._autoAnalysis.id, {
+          enabled: !this._autoAnalysis.enabled,
+        });
+      } else {
+        this._autoAnalysis = await createReaction(this.projectId, {
+          name: 'Auto-analyze requests',
+          event_type: 'request_created',
+          aggregate_type: 'request',
+          action_type: 'launch_agent',
+          action_config: {
+            skill: 'blossom',
+            instructions: 'Analyze this feature request against the project\'s existing requirements and features. Decompose into requirements and tasks.\n\nRequest: {{title}}\n\n{{body}}\n\nUse list_requirements to see existing requirements. Use create_requirement to add new ones. Link them with link_requirement_task and link_request_requirement.',
+          },
+        });
+      }
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Failed to update auto-analysis';
+    } finally {
+      this._autoAnalysisLoading = false;
     }
   }
 
@@ -184,24 +222,29 @@ export class RequestList extends LitElement {
     return html`
       ${this._error ? html`<sl-alert variant="danger" open style="margin-bottom: 0.75rem;">${this._error}</sl-alert>` : nothing}
 
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+        <sl-tooltip content=${t('requestList.autoAnalysisHelp')}>
+          <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);">
+            <sl-switch size="small"
+              ?checked=${this._autoAnalysis?.enabled ?? false}
+              ?disabled=${this._autoAnalysisLoading}
+              @sl-change=${() => void this._toggleAutoAnalysis()}
+            ></sl-switch>
+            ${t('requestList.autoAnalysis')}
+          </div>
+        </sl-tooltip>
+        <sl-button size="small" variant="primary" @click=${() => { this._showNew = true; }}>
+          <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+          ${t('requestList.newRequest')}
+        </sl-button>
+      </div>
+
       ${this._requests.length === 0 ? html`
         <div class="empty-state">
           <sl-icon name="chat-square-text"></sl-icon>
           ${t('requestList.empty')}
-          <div style="margin-top: 0.5rem;">
-            <sl-button size="small" variant="primary" @click=${() => { this._showNew = true; }}>
-              <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-              ${t('requestList.newRequest')}
-            </sl-button>
-          </div>
         </div>
       ` : html`
-        <div style="margin-bottom: 0.75rem; text-align: right;">
-          <sl-button size="small" variant="primary" @click=${() => { this._showNew = true; }}>
-            <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-            ${t('requestList.newRequest')}
-          </sl-button>
-        </div>
         <div class="request-list">
           ${this._requests.map(r => html`
             <div class="request-row" role="button" tabindex="0"

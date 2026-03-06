@@ -372,6 +372,8 @@ export const messagesEn: Record<string, string> = {
   'requestList.status.decomposed': 'Decomposed',
   'requestList.status.archived': 'Archived',
   'requestList.requirements': '{{count}} req{{suffix}}',
+  'requestList.autoAnalysis': 'Auto-analyze',
+  'requestList.autoAnalysisHelp': 'When enabled, new requests are automatically analyzed by a blossom agent that decomposes them into requirements and tasks.',
 
   // ── request-detail ──
   'requestDetail.notFound': 'Request not found',
