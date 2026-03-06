@@ -587,6 +587,10 @@ impl SeamMcp {
             Err(e) => return Ok(e),
         };
 
+        if params.title.trim().is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text("Title cannot be empty")]));
+        }
+
         let valid_types = ["epic", "story", "task", "subtask", "bug"];
         if !valid_types.contains(&params.task_type.as_str()) {
             return Ok(CallToolResult::error(vec![Content::text(
@@ -1018,6 +1022,10 @@ impl SeamMcp {
             Err(e) => return Ok(e),
         };
 
+        if params.content.trim().is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text("Comment content cannot be empty")]));
+        }
+
         let task_id = match Uuid::parse_str(&params.task_id) {
             Ok(id) => id,
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task_id")])),
@@ -1396,6 +1404,10 @@ impl SeamMcp {
             Err(e) => return Ok(e),
         };
 
+        if params.question.trim().is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text("Question cannot be empty")]));
+        }
+
         let directed_to = match &params.directed_to {
             Some(id_str) => match Uuid::parse_str(id_str) {
                 Ok(id) => Some(id),
@@ -1741,6 +1753,16 @@ impl SeamMcp {
             Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
         };
 
+        // Fetch task data before deleting for the domain event payload
+        let task: Option<(String, i32)> = sqlx::query_as(
+            "SELECT title, ticket_number FROM tasks WHERE id = $1"
+        )
+        .bind(task_id)
+        .fetch_optional(&self.db)
+        .await
+        .ok()
+        .flatten();
+
         match sqlx::query("DELETE FROM tasks WHERE id = $1")
             .bind(task_id)
             .execute(&self.db)
@@ -1749,7 +1771,32 @@ impl SeamMcp {
             Ok(result) if result.rows_affected() == 0 => {
                 Ok(CallToolResult::error(vec![Content::text("Task not found")]))
             }
-            Ok(_) => Ok(CallToolResult::success(vec![Content::text("Task deleted")])),
+            Ok(_) => {
+                // Emit domain event after successful delete
+                if let Some((title, ticket_number)) = task {
+                    let (session_id, participant_id) = self.state.lock()
+                        .map(|s| (s.session_id, s.participant_id))
+                        .unwrap_or((None, None));
+                    if let Some(sid) = session_id {
+                        let event = crate::events::DomainEvent::new(
+                            "task_deleted",
+                            "task",
+                            task_id,
+                            participant_id,
+                            serde_json::json!({
+                                "task_id": task_id,
+                                "title": title,
+                                "ticket_number": ticket_number,
+                                "session_id": sid,
+                            }),
+                        );
+                        if let Err(e) = crate::events::emit(&self.db, &event).await {
+                            tracing::warn!("Failed to emit task_deleted event: {e}");
+                        }
+                    }
+                }
+                Ok(CallToolResult::success(vec![Content::text("Task deleted")]))
+            }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Delete failed: {e}"))])),
         }
     }
@@ -1772,7 +1819,7 @@ impl SeamMcp {
             return Ok(CallToolResult::error(vec![Content::text("A task cannot block itself")]));
         }
 
-        // Check for circular dependency
+        // Check for circular dependency: walk blockers of blocked_id to see if blocker_id is already upstream
         let would_cycle: bool = sqlx::query_scalar(
             "WITH RECURSIVE chain AS (
                 SELECT blocker_id FROM task_dependencies WHERE blocked_id = $1
@@ -1781,8 +1828,8 @@ impl SeamMcp {
             )
             SELECT EXISTS(SELECT 1 FROM chain WHERE blocker_id = $2)"
         )
-        .bind(blocker_id)
         .bind(blocked_id)
+        .bind(blocker_id)
         .fetch_one(&self.db)
         .await
         .unwrap_or(false);
