@@ -1819,7 +1819,8 @@ impl SeamMcp {
             return Ok(CallToolResult::error(vec![Content::text("A task cannot block itself")]));
         }
 
-        // Check for circular dependency: walk blockers of blocked_id to see if blocker_id is already upstream
+        // Check for circular dependency: walk upstream from the proposed blocker
+        // to see if the proposed blocked task is already in the blocker's ancestry
         let would_cycle: bool = sqlx::query_scalar(
             "WITH RECURSIVE chain AS (
                 SELECT blocker_id FROM task_dependencies WHERE blocked_id = $1
@@ -1828,8 +1829,8 @@ impl SeamMcp {
             )
             SELECT EXISTS(SELECT 1 FROM chain WHERE blocker_id = $2)"
         )
-        .bind(blocked_id)
-        .bind(blocker_id)
+        .bind(blocker_id)   // $1 — walk upstream from the proposed blocker
+        .bind(blocked_id)   // $2 — check if proposed blocked is already upstream
         .fetch_one(&self.db)
         .await
         .unwrap_or(false);
