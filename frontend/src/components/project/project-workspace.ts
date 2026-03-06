@@ -24,6 +24,7 @@ import '../plans/plan-detail.js';
 import '../agents/agent-list.js';
 import '../agents/agent-detail.js';
 import '../tasks/task-board.js';
+import '../automations/automation-panel.js';
 // Lazy-loaded when graph tab is shown (Three.js is ~800KB)
 const ensureGraphLoaded = () => import('../graph/dependency-graph.js');
 
@@ -505,7 +506,7 @@ export class ProjectWorkspace extends LitElement {
       const params = this.location.params as Record<string, string>;
       if (params.id) this.projectId = params.id;
       if (params.tab) {
-        const valid = ['overview', 'graph', 'settings', 'tasks', 'plans', 'sessions', 'agents'];
+        const valid = ['overview', 'graph', 'settings', 'tasks', 'plans', 'sessions', 'agents', 'automations'];
         if (valid.includes(params.tab)) {
           this._activeTab = params.tab;
         }
@@ -537,7 +538,7 @@ export class ProjectWorkspace extends LitElement {
       this._loadProject();
     }
     if (changed.has('initialTab') && this.initialTab) {
-      const valid = ['overview', 'tasks', 'graph', 'settings', 'agents'];
+      const valid = ['overview', 'tasks', 'graph', 'settings', 'agents', 'automations'];
       if (valid.includes(this.initialTab)) {
         this._switchTab(this.initialTab, false);
       }
@@ -672,6 +673,7 @@ export class ProjectWorkspace extends LitElement {
             ` : nothing}
             ${this._activeTab === 'plans' ? this._renderPlans() : nothing}
             ${this._activeTab === 'agents' ? this._renderAgents() : nothing}
+            ${this._activeTab === 'automations' ? html`<automation-panel .projectId=${this._project!.id}></automation-panel>` : nothing}
             ${this._activeTab === 'settings' ? this._renderSettings() : nothing}
           </div>
         `}
@@ -865,6 +867,7 @@ export class ProjectWorkspace extends LitElement {
         ${tab('plans', 'Plans', 'file-earmark-text')}
         ${tab('agents', 'Agents', 'robot')}
         ${tab('graph', 'Graph', 'diagram-3')}
+        ${tab('automations', 'Automations', 'lightning-charge')}
         ${tab('settings', 'Settings', 'gear')}
       </nav>
     `;
