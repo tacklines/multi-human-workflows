@@ -402,3 +402,49 @@ async fn dispatch_mcp_tool(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_interpolate_simple() {
+        let payload = serde_json::json!({"title": "Bug fix", "status": "open"});
+        let result = interpolate_template("Task: {{title}} ({{status}})", Some(&payload));
+        assert_eq!(result, "Task: Bug fix (open)");
+    }
+
+    #[test]
+    fn test_interpolate_nested() {
+        let payload = serde_json::json!({"task": {"title": "Nested"}});
+        let result = interpolate_template("{{task.title}}", Some(&payload));
+        assert_eq!(result, "Nested");
+    }
+
+    #[test]
+    fn test_interpolate_missing_key_unchanged() {
+        let payload = serde_json::json!({"title": "Hello"});
+        let result = interpolate_template("{{title}} {{missing}}", Some(&payload));
+        assert_eq!(result, "Hello {{missing}}");
+    }
+
+    #[test]
+    fn test_interpolate_no_payload() {
+        let result = interpolate_template("{{title}}", None);
+        assert_eq!(result, "{{title}}");
+    }
+
+    #[test]
+    fn test_interpolate_non_string_value() {
+        let payload = serde_json::json!({"count": 42, "active": true});
+        let result = interpolate_template("{{count}} {{active}}", Some(&payload));
+        assert_eq!(result, "42 true");
+    }
+
+    #[test]
+    fn test_interpolate_no_placeholders() {
+        let payload = serde_json::json!({"title": "Hello"});
+        let result = interpolate_template("No placeholders here", Some(&payload));
+        assert_eq!(result, "No placeholders here");
+    }
+}
