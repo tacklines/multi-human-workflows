@@ -1,44 +1,57 @@
-import { LitElement, html, css, nothing } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
-import { fetchProject, fetchProjectSessions, updateProject, type ProjectView } from '../../state/project-api.js';
-import { fetchPlans, type PlanListView } from '../../state/plan-api.js';
-import { fetchWorkspaces, fetchCoderStatus, type WorkspaceView, type CoderStatus } from '../../state/workspace-api.js';
-import { store, type SessionView } from '../../state/app-state.js';
-import { connectSession } from '../../state/session-connection.js';
-import { authStore } from '../../state/auth-state.js';
-import { navigateTo } from '../../router.js';
-import type { RouterLocation } from '@vaadin/router';
-import { t } from '../../lib/i18n.js';
+import { LitElement, html, css, nothing } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
+import {
+  fetchProject,
+  fetchProjectSessions,
+  updateProject,
+  type ProjectView,
+} from "../../state/project-api.js";
+import { fetchPlans, type PlanListView } from "../../state/plan-api.js";
+import {
+  fetchWorkspaces,
+  fetchCoderStatus,
+  type WorkspaceView,
+  type CoderStatus,
+} from "../../state/workspace-api.js";
+import { store, type SessionView } from "../../state/app-state.js";
+import { connectSession } from "../../state/session-connection.js";
+import { authStore } from "../../state/auth-state.js";
+import { navigateTo } from "../../router.js";
+import type { RouterLocation } from "@vaadin/router";
+import { t } from "../../lib/i18n.js";
 
-import '@shoelace-style/shoelace/dist/components/button/button.js';
-import '@shoelace-style/shoelace/dist/components/input/input.js';
-import '@shoelace-style/shoelace/dist/components/icon/icon.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import '@shoelace-style/shoelace/dist/components/badge/badge.js';
-import '@shoelace-style/shoelace/dist/components/divider/divider.js';
-import '@shoelace-style/shoelace/dist/components/alert/alert.js';
-import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
-import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
+import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/input/input.js";
+import "@shoelace-style/shoelace/dist/components/icon/icon.js";
+import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
+import "@shoelace-style/shoelace/dist/components/badge/badge.js";
+import "@shoelace-style/shoelace/dist/components/divider/divider.js";
+import "@shoelace-style/shoelace/dist/components/alert/alert.js";
+import "@shoelace-style/shoelace/dist/components/dialog/dialog.js";
+import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
 
-import '../plans/plan-list.js';
-import '../plans/plan-detail.js';
-import '../requirements/requirement-list.js';
-import '../requirements/requirement-detail.js';
-import '../requests/request-list.js';
-import '../requests/request-detail.js';
-import '../agents/agent-list.js';
-import '../agents/agent-detail.js';
-import '../tasks/task-board.js';
-import '../automations/automation-panel.js';
+import "../plans/plan-list.js";
+import "../plans/plan-detail.js";
+import "../requirements/requirement-list.js";
+import "../requirements/requirement-detail.js";
+import "../requests/request-list.js";
+import "../requests/request-detail.js";
+import "../agents/agent-list.js";
+import "../agents/agent-detail.js";
+import "../tasks/task-board.js";
+import "../automations/automation-panel.js";
 // Lazy-loaded when graph tab is shown (Three.js is ~800KB)
-const ensureGraphLoaded = () => import('../graph/dependency-graph.js');
+const ensureGraphLoaded = () => import("../graph/dependency-graph.js");
 
-const API_BASE = '';
+const API_BASE = "";
 
-@customElement('project-workspace')
+@customElement("project-workspace")
 export class ProjectWorkspace extends LitElement {
   static styles = css`
-    :host { display: block; flex: 1; }
+    :host {
+      display: block;
+      flex: 1;
+    }
 
     .container {
       min-height: 100%;
@@ -95,7 +108,9 @@ export class ProjectWorkspace extends LitElement {
       text-decoration: none;
       flex-shrink: 0;
     }
-    .back-link:hover { color: var(--sl-color-primary-400); }
+    .back-link:hover {
+      color: var(--sl-color-primary-400);
+    }
 
     .project-header h1 {
       margin: 0;
@@ -198,7 +213,10 @@ export class ProjectWorkspace extends LitElement {
       padding: 1.25rem;
       background: var(--surface-card);
       box-shadow: var(--shadow-xs);
-      transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+      transition:
+        border-color 0.2s,
+        box-shadow 0.2s,
+        transform 0.15s;
     }
 
     .session-card:hover {
@@ -270,7 +288,9 @@ export class ProjectWorkspace extends LitElement {
       justify-content: center;
       gap: 0.5rem;
       color: var(--text-tertiary);
-      transition: border-color 0.2s, color 0.2s;
+      transition:
+        border-color 0.2s,
+        color 0.2s;
       min-height: 100px;
     }
 
@@ -376,7 +396,9 @@ export class ProjectWorkspace extends LitElement {
       font-size: 0.85rem;
       font-weight: 500;
       cursor: pointer;
-      transition: color 0.15s, border-color 0.15s;
+      transition:
+        color 0.15s,
+        border-color 0.15s;
     }
 
     .tab-btn:hover {
@@ -474,8 +496,8 @@ export class ProjectWorkspace extends LitElement {
   // Set by @vaadin/router
   location!: RouterLocation;
 
-  @property({ attribute: 'project-id' }) projectId = '';
-  @property() initialTab = '';
+  @property({ attribute: "project-id" }) projectId = "";
+  @property() initialTab = "";
 
   @state() private _project: ProjectView | null = null;
   @state() private _sessions: SessionView[] = [];
@@ -487,20 +509,20 @@ export class ProjectWorkspace extends LitElement {
   @state() private _selectedRequestId: string | null = null;
   @state() private _selectedAgentId: string | null = null;
   @state() private _loading = true;
-  @state() private _error = '';
+  @state() private _error = "";
   @state() private _showNewSession = false;
-  @state() private _newSessionName = '';
+  @state() private _newSessionName = "";
   @state() private _creatingSess = false;
-  @state() private _activeTab = 'overview';
+  @state() private _activeTab = "overview";
 
   /* Settings state */
-  @state() private _settingsName = '';
-  @state() private _settingsPrefix = '';
-  @state() private _settingsRepoUrl = '';
-  @state() private _settingsDefaultBranch = '';
+  @state() private _settingsName = "";
+  @state() private _settingsPrefix = "";
+  @state() private _settingsRepoUrl = "";
+  @state() private _settingsDefaultBranch = "";
   @state() private _settingsSaving = false;
-  @state() private _settingsMsg = '';
-  @state() private _settingsMsgVariant: 'success' | 'danger' = 'success';
+  @state() private _settingsMsg = "";
+  @state() private _settingsMsgVariant: "success" | "danger" = "success";
   @state() private _coderStatus: CoderStatus | null = null;
   @state() private _coderLoading = false;
 
@@ -513,31 +535,42 @@ export class ProjectWorkspace extends LitElement {
       const params = this.location.params as Record<string, string>;
       if (params.id) this.projectId = params.id;
       if (params.tab) {
-        const valid = ['overview', 'graph', 'settings', 'tasks', 'requirements', 'requests', 'plans', 'sessions', 'agents', 'automations'];
+        const valid = [
+          "overview",
+          "graph",
+          "settings",
+          "tasks",
+          "requirements",
+          "requests",
+          "plans",
+          "sessions",
+          "agents",
+          "automations",
+        ];
         if (valid.includes(params.tab)) {
           this._activeTab = params.tab;
         }
       }
       if (params.planId) {
-        this._activeTab = 'plans';
+        this._activeTab = "plans";
         this._selectedPlanId = params.planId;
       }
       if (params.requirementId) {
-        this._activeTab = 'requirements';
+        this._activeTab = "requirements";
         this._selectedRequirementId = params.requirementId;
       }
       if (params.requestId) {
-        this._activeTab = 'requests';
+        this._activeTab = "requests";
         this._selectedRequestId = params.requestId;
       }
       if (params.agentId) {
-        this._activeTab = 'agents';
+        this._activeTab = "agents";
         this._selectedAgentId = params.agentId;
       }
     }
     this._loadProject();
     this._appUnsub = store.subscribe((event) => {
-      if (event.type === 'session-connected') {
+      if (event.type === "session-connected") {
         // app-shell handles the switch
       }
     });
@@ -549,11 +582,20 @@ export class ProjectWorkspace extends LitElement {
   }
 
   updated(changed: Map<string, unknown>) {
-    if (changed.has('projectId') && this.projectId) {
+    if (changed.has("projectId") && this.projectId) {
       this._loadProject();
     }
-    if (changed.has('initialTab') && this.initialTab) {
-      const valid = ['overview', 'tasks', 'requirements', 'requests', 'graph', 'settings', 'agents', 'automations'];
+    if (changed.has("initialTab") && this.initialTab) {
+      const valid = [
+        "overview",
+        "tasks",
+        "requirements",
+        "requests",
+        "graph",
+        "settings",
+        "agents",
+        "automations",
+      ];
       if (valid.includes(this.initialTab)) {
         this._switchTab(this.initialTab, false);
       }
@@ -563,7 +605,7 @@ export class ProjectWorkspace extends LitElement {
   private async _loadProject() {
     if (!this.projectId) return;
     this._loading = true;
-    this._error = '';
+    this._error = "";
     try {
       const [project, sessions, plans, workspaces] = await Promise.all([
         fetchProject(this.projectId),
@@ -577,7 +619,8 @@ export class ProjectWorkspace extends LitElement {
       this._planCount = plans.length;
       this._workspaces = workspaces;
     } catch (err) {
-      this._error = err instanceof Error ? err.message : t('workspace.errorLoad');
+      this._error =
+        err instanceof Error ? err.message : t("workspace.errorLoad");
     } finally {
       this._loading = false;
     }
@@ -585,29 +628,35 @@ export class ProjectWorkspace extends LitElement {
 
   private async _createSession() {
     this._creatingSess = true;
-    this._error = '';
+    this._error = "";
     try {
       const token = authStore.getAccessToken();
       const res = await fetch(`${API_BASE}/api/sessions`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
         body: JSON.stringify({
           project_id: this.projectId,
           name: this._newSessionName.trim() || undefined,
         }),
       });
-      if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
+      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
       const data = await res.json();
-      store.setSession(data.session.code, data.session.participants[0]?.id, data.session, data.agent_code);
+      store.setSession(
+        data.session.code,
+        data.session.participants[0]?.id,
+        data.session,
+        data.agent_code,
+      );
       connectSession(data.session.code);
       navigateTo(`/sessions/${data.session.code}`);
-      this._newSessionName = '';
+      this._newSessionName = "";
       this._showNewSession = false;
     } catch (err) {
-      this._error = err instanceof Error ? err.message : t('workspace.errorCreateSession');
+      this._error =
+        err instanceof Error ? err.message : t("workspace.errorCreateSession");
     } finally {
       this._creatingSess = false;
     }
@@ -618,97 +667,146 @@ export class ProjectWorkspace extends LitElement {
     const user = authStore.user;
     try {
       const res = await fetch(`${API_BASE}/api/sessions/${code}/join`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
-        body: JSON.stringify({ display_name: user?.name ?? 'Participant' }),
+        body: JSON.stringify({ display_name: user?.name ?? "Participant" }),
       });
-      if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
+      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
       const data = await res.json();
-      store.setSession(code, data.participant_id, data.session, data.agent_code);
+      store.setSession(
+        code,
+        data.participant_id,
+        data.session,
+        data.agent_code,
+      );
       connectSession(code);
       navigateTo(`/sessions/${code}`);
     } catch (err) {
-      this._error = err instanceof Error ? err.message : t('workspace.errorJoinSession');
+      this._error =
+        err instanceof Error ? err.message : t("workspace.errorJoinSession");
     }
   }
 
   private _formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
   }
 
   private _onlineCount(session: SessionView): number {
-    return session.participants.filter(p => p.is_online).length;
+    return session.participants.filter((p) => p.is_online).length;
   }
 
   private _relativeTime(iso: string): string {
     const diff = Date.now() - new Date(iso).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t('time.justNow');
-    if (mins < 60) return t('time.minutesAgo', { count: mins });
+    if (mins < 1) return t("time.justNow");
+    if (mins < 60) return t("time.minutesAgo", { count: mins });
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
+    if (hrs < 24) return t("time.hoursAgo", { count: hrs });
     const days = Math.floor(hrs / 24);
-    return t('time.daysAgo', { count: days });
+    return t("time.daysAgo", { count: days });
   }
 
   render() {
     if (this._loading) {
-      return html`<div class="loading"><sl-spinner style="font-size: 2rem;"></sl-spinner></div>`;
+      return html`<div class="loading">
+        <sl-spinner style="font-size: 2rem;"></sl-spinner>
+      </div>`;
     }
 
     if (!this._project) {
-      return html`<div class="empty-state">${t('workspace.notFound')}</div>`;
+      return html`<div class="empty-state">${t("workspace.notFound")}</div>`;
     }
 
-    const isGraph = this._activeTab === 'graph';
+    const isGraph = this._activeTab === "graph";
 
     return html`
-      <div class="container ${isGraph ? 'graph-mode' : ''}">
-        ${isGraph ? html`
-          <div class="graph-header">
-            ${this._renderHeader()}
-            ${this._renderTabNav()}
-          </div>
-          <dependency-graph project-id=${this.projectId}></dependency-graph>
-        ` : html`
-          <div class="inner">
-            ${this._renderHeader()}
-            ${this._renderTabNav()}
-            ${this._error ? html`<sl-alert variant="danger" open style="margin-bottom: 1rem;">${this._error}</sl-alert>` : nothing}
-            ${this._activeTab === 'overview' ? html`
-              ${this._renderRepo()}
-              ${this._renderSessions()}
-              ${this._renderWorkspaces()}
-            ` : nothing}
-            ${this._activeTab === 'tasks' ? html`
-              <task-board project-id=${this.projectId} .sessions=${this._sessions}></task-board>
-            ` : nothing}
-            ${this._activeTab === 'requirements' ? this._renderRequirements() : nothing}
-            ${this._activeTab === 'requests' ? this._renderRequests() : nothing}
-            ${this._activeTab === 'plans' ? this._renderPlans() : nothing}
-            ${this._activeTab === 'agents' ? this._renderAgents() : nothing}
-            ${this._activeTab === 'automations' ? html`<automation-panel .projectId=${this._project!.id}></automation-panel>` : nothing}
-            ${this._activeTab === 'settings' ? this._renderSettings() : nothing}
-          </div>
-        `}
+      <div class="container ${isGraph ? "graph-mode" : ""}">
+        ${isGraph
+          ? html`
+              <div class="graph-header">
+                ${this._renderHeader()} ${this._renderTabNav()}
+              </div>
+              <dependency-graph project-id=${this.projectId}></dependency-graph>
+            `
+          : html`
+              <div class="inner">
+                ${this._renderHeader()} ${this._renderTabNav()}
+                ${this._error
+                  ? html`<sl-alert
+                      variant="danger"
+                      open
+                      style="margin-bottom: 1rem;"
+                      >${this._error}</sl-alert
+                    >`
+                  : nothing}
+                ${this._activeTab === "overview"
+                  ? html`
+                      ${this._renderRepo()} ${this._renderSessions()}
+                      ${this._renderWorkspaces()}
+                    `
+                  : nothing}
+                ${this._activeTab === "tasks"
+                  ? html`
+                      <task-board
+                        project-id=${this.projectId}
+                        .sessions=${this._sessions}
+                      ></task-board>
+                    `
+                  : nothing}
+                ${this._activeTab === "requirements"
+                  ? this._renderRequirements()
+                  : nothing}
+                ${this._activeTab === "requests"
+                  ? this._renderRequests()
+                  : nothing}
+                ${this._activeTab === "plans" ? this._renderPlans() : nothing}
+                ${this._activeTab === "agents" ? this._renderAgents() : nothing}
+                ${this._activeTab === "automations"
+                  ? html`<automation-panel
+                      .projectId=${this._project!.id}
+                    ></automation-panel>`
+                  : nothing}
+                ${this._activeTab === "settings"
+                  ? this._renderSettings()
+                  : nothing}
+              </div>
+            `}
       </div>
 
-      <sl-dialog label=${t('workspace.newSession')} ?open=${this._showNewSession}
-                 @sl-after-hide=${() => { this._showNewSession = false; }}>
+      <sl-dialog
+        label=${t("workspace.newSession")}
+        ?open=${this._showNewSession}
+        @sl-after-hide=${() => {
+          this._showNewSession = false;
+        }}
+      >
         <div class="dialog-form">
-          <sl-input label=${t('workspace.newSession.nameLabel')} placeholder=${t('workspace.newSession.namePlaceholder')}
-                    help-text=${t('workspace.newSession.nameHelp')}
-                    value=${this._newSessionName}
-                    @sl-input=${(e: CustomEvent) => { this._newSessionName = (e.target as HTMLInputElement).value; }}
-                    @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createSession(); }}
+          <sl-input
+            label=${t("workspace.newSession.nameLabel")}
+            placeholder=${t("workspace.newSession.namePlaceholder")}
+            help-text=${t("workspace.newSession.nameHelp")}
+            value=${this._newSessionName}
+            @sl-input=${(e: CustomEvent) => {
+              this._newSessionName = (e.target as HTMLInputElement).value;
+            }}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key === "Enter") void this._createSession();
+            }}
           ></sl-input>
         </div>
-        <sl-button slot="footer" variant="primary" ?loading=${this._creatingSess}
-                   @click=${() => void this._createSession()}>
-          ${t('workspace.newSession.create')}
+        <sl-button
+          slot="footer"
+          variant="primary"
+          ?loading=${this._creatingSess}
+          @click=${() => void this._createSession()}
+        >
+          ${t("workspace.newSession.create")}
         </sl-button>
       </sl-dialog>
     `;
@@ -718,10 +816,18 @@ export class ProjectWorkspace extends LitElement {
     const p = this._project!;
     return html`
       <div class="project-header">
-        <span class="back-link" role="button" tabindex="0"
-              @click=${() => { navigateTo('/projects'); }}
-              @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') navigateTo('/projects'); }}>
-          <sl-icon name="arrow-left"></sl-icon> ${t('workspace.backToProjects')}
+        <span
+          class="back-link"
+          role="button"
+          tabindex="0"
+          @click=${() => {
+            navigateTo("/projects");
+          }}
+          @keydown=${(e: KeyboardEvent) => {
+            if (e.key === "Enter") navigateTo("/projects");
+          }}
+        >
+          <sl-icon name="arrow-left"></sl-icon> ${t("workspace.backToProjects")}
         </span>
         <h1>${p.name}</h1>
         <span class="prefix-badge">${p.ticket_prefix}</span>
@@ -735,35 +841,54 @@ export class ProjectWorkspace extends LitElement {
     return html`
       <div class="repo-info">
         <sl-icon name="github"></sl-icon>
-        <a class="repo-link" href=${p.repo_url} target="_blank" rel="noopener noreferrer">${p.repo_url}</a>
-        ${p.default_branch ? html`<span class="branch-badge">${p.default_branch}</span>` : nothing}
+        <a
+          class="repo-link"
+          href=${p.repo_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          >${p.repo_url}</a
+        >
+        ${p.default_branch
+          ? html`<span class="branch-badge">${p.default_branch}</span>`
+          : nothing}
       </div>
     `;
   }
 
   private _renderSessions() {
-    const active = this._sessions.filter(s => this._onlineCount(s) > 0);
-    const inactive = this._sessions.filter(s => this._onlineCount(s) === 0);
+    const active = this._sessions.filter((s) => this._onlineCount(s) > 0);
+    const inactive = this._sessions.filter((s) => this._onlineCount(s) === 0);
 
     return html`
       <div class="section">
         <div class="section-header">
           <span class="section-title">
             <sl-icon name="people-fill"></sl-icon>
-            ${t('workspace.sessions')}
+            ${t("workspace.sessions")}
             <sl-badge variant="neutral" pill>${this._sessions.length}</sl-badge>
           </span>
         </div>
 
         <div class="sessions-grid">
-          ${active.map(s => this._renderSessionCard(s, true))}
-          ${inactive.slice(0, 8).map(s => this._renderSessionCard(s, false))}
+          ${active.map((s) => this._renderSessionCard(s, true))}
+          ${inactive.slice(0, 8).map((s) => this._renderSessionCard(s, false))}
 
-          <div class="new-session-card" role="button" tabindex="0"
-               @click=${() => { this._showNewSession = true; }}
-               @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._showNewSession = true; } }}>
+          <div
+            class="new-session-card"
+            role="button"
+            tabindex="0"
+            @click=${() => {
+              this._showNewSession = true;
+            }}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                this._showNewSession = true;
+              }
+            }}
+          >
             <sl-icon name="plus-lg"></sl-icon>
-            <span>${t('workspace.newSession')}</span>
+            <span>${t("workspace.newSession")}</span>
           </div>
         </div>
       </div>
@@ -773,20 +898,32 @@ export class ProjectWorkspace extends LitElement {
   private _renderSessionCard(s: SessionView, hasOnline: boolean) {
     const online = this._onlineCount(s);
     return html`
-      <div class="session-card" role="button" tabindex="0"
-           @click=${() => void this._joinSession(s.code)}
-           @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void this._joinSession(s.code); } }}>
+      <div
+        class="session-card"
+        role="button"
+        tabindex="0"
+        @click=${() => void this._joinSession(s.code)}
+        @keydown=${(e: KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            void this._joinSession(s.code);
+          }
+        }}
+      >
         <div class="card-top">
           <span class="code">${s.code}</span>
           <span class="date">${this._formatDate(s.created_at)}</span>
         </div>
-        <div class="name">${s.name || t('workspace.untitledSession')}</div>
+        <div class="name">${s.name || t("workspace.untitledSession")}</div>
         <div class="participants">
           ${hasOnline ? html`<span class="online-dot"></span>` : nothing}
           <sl-icon name="people"></sl-icon>
           ${hasOnline
-            ? html`${t('workspace.online', { count: online })}`
-            : html`${t('workspace.participants', { count: s.participants.length, suffix: s.participants.length !== 1 ? 's' : '' })}`}
+            ? html`${t("workspace.online", { count: online })}`
+            : html`${t("workspace.participants", {
+                count: s.participants.length,
+                suffix: s.participants.length !== 1 ? "s" : "",
+              })}`}
         </div>
       </div>
     `;
@@ -798,22 +935,38 @@ export class ProjectWorkspace extends LitElement {
         <div class="section-header">
           <span class="section-title">
             <sl-icon name="bullseye"></sl-icon>
-            ${t('workspace.tab.requirements')}
+            ${t("workspace.tab.requirements")}
           </span>
         </div>
 
-        ${this._selectedRequirementId ? html`
-          <requirement-detail
-            .projectId=${this.projectId}
-            .requirementId=${this._selectedRequirementId}
-            @requirement-back=${() => { this._selectedRequirementId = null; window.history.replaceState(null, '', `/projects/${this.projectId}/requirements`); }}
-          ></requirement-detail>
-        ` : html`
-          <requirement-list
-            .projectId=${this.projectId}
-            @requirement-select=${(e: CustomEvent) => { this._selectedRequirementId = e.detail.requirementId; window.history.replaceState(null, '', `/projects/${this.projectId}/requirements/${e.detail.requirementId}`); }}
-          ></requirement-list>
-        `}
+        ${this._selectedRequirementId
+          ? html`
+              <requirement-detail
+                .projectId=${this.projectId}
+                .requirementId=${this._selectedRequirementId}
+                @requirement-back=${() => {
+                  this._selectedRequirementId = null;
+                  window.history.replaceState(
+                    null,
+                    "",
+                    `/projects/${this.projectId}/requirements`,
+                  );
+                }}
+              ></requirement-detail>
+            `
+          : html`
+              <requirement-list
+                .projectId=${this.projectId}
+                @requirement-select=${(e: CustomEvent) => {
+                  this._selectedRequirementId = e.detail.requirementId;
+                  window.history.replaceState(
+                    null,
+                    "",
+                    `/projects/${this.projectId}/requirements/${e.detail.requirementId}`,
+                  );
+                }}
+              ></requirement-list>
+            `}
       </div>
     `;
   }
@@ -824,22 +977,38 @@ export class ProjectWorkspace extends LitElement {
         <div class="section-header">
           <span class="section-title">
             <sl-icon name="chat-square-text"></sl-icon>
-            ${t('workspace.tab.requests')}
+            ${t("workspace.tab.requests")}
           </span>
         </div>
 
-        ${this._selectedRequestId ? html`
-          <request-detail
-            .projectId=${this.projectId}
-            .requestId=${this._selectedRequestId}
-            @request-back=${() => { this._selectedRequestId = null; window.history.replaceState(null, '', `/projects/${this.projectId}/requests`); }}
-          ></request-detail>
-        ` : html`
-          <request-list
-            .projectId=${this.projectId}
-            @request-select=${(e: CustomEvent) => { this._selectedRequestId = e.detail.requestId; window.history.replaceState(null, '', `/projects/${this.projectId}/requests/${e.detail.requestId}`); }}
-          ></request-list>
-        `}
+        ${this._selectedRequestId
+          ? html`
+              <request-detail
+                .projectId=${this.projectId}
+                .requestId=${this._selectedRequestId}
+                @request-back=${() => {
+                  this._selectedRequestId = null;
+                  window.history.replaceState(
+                    null,
+                    "",
+                    `/projects/${this.projectId}/requests`,
+                  );
+                }}
+              ></request-detail>
+            `
+          : html`
+              <request-list
+                .projectId=${this.projectId}
+                @request-select=${(e: CustomEvent) => {
+                  this._selectedRequestId = e.detail.requestId;
+                  window.history.replaceState(
+                    null,
+                    "",
+                    `/projects/${this.projectId}/requests/${e.detail.requestId}`,
+                  );
+                }}
+              ></request-list>
+            `}
       </div>
     `;
   }
@@ -850,41 +1019,55 @@ export class ProjectWorkspace extends LitElement {
         <div class="section-header">
           <span class="section-title">
             <sl-icon name="file-earmark-text"></sl-icon>
-            ${t('workspace.tab.plans')}
+            ${t("workspace.tab.plans")}
             <sl-badge variant="neutral" pill>${this._planCount}</sl-badge>
           </span>
         </div>
 
-        ${this._selectedPlanId ? html`
-          <plan-detail
-            .projectId=${this.projectId}
-            .planId=${this._selectedPlanId}
-            @plan-back=${() => { this._selectedPlanId = null; }}
-          ></plan-detail>
-        ` : html`
-          <plan-list
-            .projectId=${this.projectId}
-            @plan-select=${(e: CustomEvent) => { this._selectedPlanId = e.detail.planId; }}
-          ></plan-list>
-        `}
+        ${this._selectedPlanId
+          ? html`
+              <plan-detail
+                .projectId=${this.projectId}
+                .planId=${this._selectedPlanId}
+                @plan-back=${() => {
+                  this._selectedPlanId = null;
+                }}
+              ></plan-detail>
+            `
+          : html`
+              <plan-list
+                .projectId=${this.projectId}
+                @plan-select=${(e: CustomEvent) => {
+                  this._selectedPlanId = e.detail.planId;
+                }}
+              ></plan-list>
+            `}
       </div>
     `;
   }
 
   private _wsStatusVariant(status: string): string {
     switch (status) {
-      case 'running': return 'success';
-      case 'creating': case 'pending': return 'warning';
-      case 'failed': return 'danger';
-      case 'stopped': case 'stopping': return 'neutral';
-      case 'destroyed': return 'neutral';
-      default: return 'neutral';
+      case "running":
+        return "success";
+      case "creating":
+      case "pending":
+        return "warning";
+      case "failed":
+        return "danger";
+      case "stopped":
+      case "stopping":
+        return "neutral";
+      case "destroyed":
+        return "neutral";
+      default:
+        return "neutral";
     }
   }
 
   private _renderWorkspaces() {
     // Only show if there are workspaces (Coder might not be configured)
-    const active = this._workspaces.filter(w => w.status !== 'destroyed');
+    const active = this._workspaces.filter((w) => w.status !== "destroyed");
     if (active.length === 0) return nothing;
 
     return html`
@@ -892,31 +1075,47 @@ export class ProjectWorkspace extends LitElement {
         <div class="section-header">
           <span class="section-title">
             <sl-icon name="terminal"></sl-icon>
-            ${t('workspace.workspaces')}
+            ${t("workspace.workspaces")}
             <sl-badge variant="neutral" pill>${active.length}</sl-badge>
           </span>
         </div>
 
         <div class="workspace-list">
-          ${active.map(w => html`
-            <div class="workspace-row">
-              <span class="ws-name">${w.coder_workspace_name ?? w.id.slice(0, 8)}</span>
-              <sl-badge variant=${this._wsStatusVariant(w.status)}>${w.status}</sl-badge>
-              <span class="ws-template">${w.template_name}</span>
-              ${w.branch ? html`<span class="ws-branch">${w.branch}</span>` : nothing}
-              ${w.error_message ? html`
-                <sl-tooltip content=${w.error_message}>
-                  <span class="ws-error">${w.error_message}</span>
-                </sl-tooltip>
-              ` : nothing}
-              <span style="flex: 1;"></span>
-              ${w.started_at ? html`
-                <span style="font-size: 0.75rem; color: var(--text-tertiary);">
-                  ${t('workspace.started', { time: this._relativeTime(w.started_at) })}
-                </span>
-              ` : nothing}
-            </div>
-          `)}
+          ${active.map(
+            (w) => html`
+              <div class="workspace-row">
+                <span class="ws-name"
+                  >${w.coder_workspace_name ?? w.id.slice(0, 8)}</span
+                >
+                <sl-badge variant=${this._wsStatusVariant(w.status)}
+                  >${w.status}</sl-badge
+                >
+                <span class="ws-template">${w.template_name}</span>
+                ${w.branch
+                  ? html`<span class="ws-branch">${w.branch}</span>`
+                  : nothing}
+                ${w.error_message
+                  ? html`
+                      <sl-tooltip content=${w.error_message}>
+                        <span class="ws-error">${w.error_message}</span>
+                      </sl-tooltip>
+                    `
+                  : nothing}
+                <span style="flex: 1;"></span>
+                ${w.started_at
+                  ? html`
+                      <span
+                        style="font-size: 0.75rem; color: var(--text-tertiary);"
+                      >
+                        ${t("workspace.started", {
+                          time: this._relativeTime(w.started_at),
+                        })}
+                      </span>
+                    `
+                  : nothing}
+              </div>
+            `,
+          )}
         </div>
       </div>
     `;
@@ -924,22 +1123,30 @@ export class ProjectWorkspace extends LitElement {
 
   private _renderTabNav() {
     const tab = (id: string, label: string, icon: string) => html`
-      <button class="tab-btn ${this._activeTab === id ? 'active' : ''}"
-              @click=${() => { this._switchTab(id); }}>
+      <button
+        class="tab-btn ${this._activeTab === id ? "active" : ""}"
+        @click=${() => {
+          this._switchTab(id);
+        }}
+      >
         <sl-icon name=${icon}></sl-icon> ${label}
       </button>
     `;
     return html`
       <nav class="tab-nav">
-        ${tab('overview', t('workspace.tab.overview'), 'grid-1x2')}
-        ${tab('tasks', t('workspace.tab.tasks'), 'kanban')}
-        ${tab('requirements', t('workspace.tab.requirements'), 'bullseye')}
-        ${tab('requests', t('workspace.tab.requests'), 'chat-square-text')}
-        ${tab('plans', t('workspace.tab.plans'), 'file-earmark-text')}
-        ${tab('agents', t('workspace.tab.agents'), 'robot')}
-        ${tab('graph', t('workspace.tab.graph'), 'diagram-3')}
-        ${tab('automations', t('workspace.tab.automations'), 'lightning-charge')}
-        ${tab('settings', t('workspace.tab.settings'), 'gear')}
+        ${tab("overview", t("workspace.tab.overview"), "grid-1x2")}
+        ${tab("tasks", t("workspace.tab.tasks"), "kanban")}
+        ${tab("requirements", t("workspace.tab.requirements"), "bullseye")}
+        ${tab("requests", t("workspace.tab.requests"), "chat-square-text")}
+        ${tab("plans", t("workspace.tab.plans"), "file-earmark-text")}
+        ${tab("agents", t("workspace.tab.agents"), "robot")}
+        ${tab("graph", t("workspace.tab.graph"), "diagram-3")}
+        ${tab(
+          "automations",
+          t("workspace.tab.automations"),
+          "lightning-charge",
+        )}
+        ${tab("settings", t("workspace.tab.settings"), "gear")}
       </nav>
     `;
   }
@@ -947,16 +1154,17 @@ export class ProjectWorkspace extends LitElement {
   private _switchTab(tab: string, updateUrl = true) {
     this._activeTab = tab;
     if (updateUrl) {
-      const path = tab === 'overview'
-        ? `/projects/${this.projectId}`
-        : `/projects/${this.projectId}/${tab}`;
-      window.history.replaceState(null, '', path);
+      const path =
+        tab === "overview"
+          ? `/projects/${this.projectId}`
+          : `/projects/${this.projectId}/${tab}`;
+      window.history.replaceState(null, "", path);
     }
-    if (tab === 'settings') {
+    if (tab === "settings") {
       this._initSettingsForm();
       this._loadCoderStatus();
     }
-    if (tab === 'graph') {
+    if (tab === "graph") {
       void ensureGraphLoaded();
     }
   }
@@ -966,9 +1174,9 @@ export class ProjectWorkspace extends LitElement {
     if (!p) return;
     this._settingsName = p.name;
     this._settingsPrefix = p.ticket_prefix;
-    this._settingsRepoUrl = p.repo_url ?? '';
-    this._settingsDefaultBranch = p.default_branch ?? '';
-    this._settingsMsg = '';
+    this._settingsRepoUrl = p.repo_url ?? "";
+    this._settingsDefaultBranch = p.default_branch ?? "";
+    this._settingsMsg = "";
   }
 
   private async _loadCoderStatus() {
@@ -984,7 +1192,7 @@ export class ProjectWorkspace extends LitElement {
 
   private async _saveSettings() {
     this._settingsSaving = true;
-    this._settingsMsg = '';
+    this._settingsMsg = "";
     try {
       const updated = await updateProject(this.projectId, {
         name: this._settingsName.trim(),
@@ -993,11 +1201,12 @@ export class ProjectWorkspace extends LitElement {
         default_branch: this._settingsDefaultBranch.trim() || undefined,
       });
       this._project = updated;
-      this._settingsMsg = t('workspace.settings.saved');
-      this._settingsMsgVariant = 'success';
+      this._settingsMsg = t("workspace.settings.saved");
+      this._settingsMsgVariant = "success";
     } catch (err) {
-      this._settingsMsg = err instanceof Error ? err.message : t('workspace.settings.errorSave');
-      this._settingsMsgVariant = 'danger';
+      this._settingsMsg =
+        err instanceof Error ? err.message : t("workspace.settings.errorSave");
+      this._settingsMsgVariant = "danger";
     } finally {
       this._settingsSaving = false;
     }
@@ -1009,22 +1218,39 @@ export class ProjectWorkspace extends LitElement {
         <div class="section-header">
           <span class="section-title">
             <sl-icon name="robot"></sl-icon>
-            ${t('workspace.tab.agents')}
+            ${t("workspace.tab.agents")}
           </span>
         </div>
 
-        ${this._selectedAgentId ? html`
-          <agent-detail
-            .projectId=${this.projectId}
-            .agentId=${this._selectedAgentId}
-            @agent-back=${() => { this._selectedAgentId = null; window.history.replaceState(null, '', `/projects/${this.projectId}/agents`); }}
-          ></agent-detail>
-        ` : html`
-          <agent-list
-            .projectId=${this.projectId}
-            @agent-select=${(e: CustomEvent) => { this._selectedAgentId = e.detail.agentId; window.history.replaceState(null, '', `/projects/${this.projectId}/agents/${e.detail.agentId}`); }}
-          ></agent-list>
-        `}
+        ${this._selectedAgentId
+          ? html`
+              <agent-detail
+                .projectId=${this.projectId}
+                .agentId=${this._selectedAgentId}
+                @agent-back=${() => {
+                  this._selectedAgentId = null;
+                  window.history.replaceState(
+                    null,
+                    "",
+                    `/projects/${this.projectId}/agents`,
+                  );
+                }}
+              ></agent-detail>
+            `
+          : html`
+              <agent-list
+                .projectId=${this.projectId}
+                .sessions=${this._sessions}
+                @agent-select=${(e: CustomEvent) => {
+                  this._selectedAgentId = e.detail.agentId;
+                  window.history.replaceState(
+                    null,
+                    "",
+                    `/projects/${this.projectId}/agents/${e.detail.agentId}`,
+                  );
+                }}
+              ></agent-list>
+            `}
       </div>
     `;
   }
@@ -1033,33 +1259,62 @@ export class ProjectWorkspace extends LitElement {
     return html`
       <div class="settings-panel">
         <div class="settings-section">
-          <h3>${t('workspace.settings.title')}</h3>
+          <h3>${t("workspace.settings.title")}</h3>
           <div class="settings-form">
-            <sl-input label=${t('workspace.settings.nameLabel')} value=${this._settingsName}
-              @sl-input=${(e: CustomEvent) => { this._settingsName = (e.target as HTMLInputElement).value; }}
+            <sl-input
+              label=${t("workspace.settings.nameLabel")}
+              value=${this._settingsName}
+              @sl-input=${(e: CustomEvent) => {
+                this._settingsName = (e.target as HTMLInputElement).value;
+              }}
             ></sl-input>
-            <sl-input label=${t('workspace.settings.prefixLabel')} value=${this._settingsPrefix}
-              @sl-input=${(e: CustomEvent) => { this._settingsPrefix = (e.target as HTMLInputElement).value; }}
+            <sl-input
+              label=${t("workspace.settings.prefixLabel")}
+              value=${this._settingsPrefix}
+              @sl-input=${(e: CustomEvent) => {
+                this._settingsPrefix = (e.target as HTMLInputElement).value;
+              }}
             ></sl-input>
-            <sl-input label=${t('workspace.settings.repoLabel')} placeholder=${t('workspace.settings.repoPlaceholder')}
+            <sl-input
+              label=${t("workspace.settings.repoLabel")}
+              placeholder=${t("workspace.settings.repoPlaceholder")}
               value=${this._settingsRepoUrl}
-              @sl-input=${(e: CustomEvent) => { this._settingsRepoUrl = (e.target as HTMLInputElement).value; }}
+              @sl-input=${(e: CustomEvent) => {
+                this._settingsRepoUrl = (e.target as HTMLInputElement).value;
+              }}
             ></sl-input>
-            <sl-input label=${t('workspace.settings.branchLabel')} placeholder=${t('workspace.settings.branchPlaceholder')}
+            <sl-input
+              label=${t("workspace.settings.branchLabel")}
+              placeholder=${t("workspace.settings.branchPlaceholder")}
               value=${this._settingsDefaultBranch}
-              @sl-input=${(e: CustomEvent) => { this._settingsDefaultBranch = (e.target as HTMLInputElement).value; }}
+              @sl-input=${(e: CustomEvent) => {
+                this._settingsDefaultBranch = (
+                  e.target as HTMLInputElement
+                ).value;
+              }}
             ></sl-input>
             <div class="settings-actions">
-              <sl-button variant="primary" ?loading=${this._settingsSaving}
-                @click=${() => void this._saveSettings()}>
-                ${t('workspace.settings.save')}
+              <sl-button
+                variant="primary"
+                ?loading=${this._settingsSaving}
+                @click=${() => void this._saveSettings()}
+              >
+                ${t("workspace.settings.save")}
               </sl-button>
-              ${this._settingsMsg ? html`
-                <sl-alert variant=${this._settingsMsgVariant} open duration="4000"
-                  @sl-after-hide=${() => { this._settingsMsg = ''; }}>
-                  ${this._settingsMsg}
-                </sl-alert>
-              ` : nothing}
+              ${this._settingsMsg
+                ? html`
+                    <sl-alert
+                      variant=${this._settingsMsgVariant}
+                      open
+                      duration="4000"
+                      @sl-after-hide=${() => {
+                        this._settingsMsg = "";
+                      }}
+                    >
+                      ${this._settingsMsg}
+                    </sl-alert>
+                  `
+                : nothing}
             </div>
           </div>
         </div>
@@ -1067,53 +1322,102 @@ export class ProjectWorkspace extends LitElement {
         <sl-divider></sl-divider>
 
         <div class="settings-section">
-          <h3>${t('workspace.coder.title')}</h3>
-          ${this._coderLoading ? html`
-            <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-tertiary); font-size: 0.85rem;">
-              <sl-spinner style="font-size: 1rem;"></sl-spinner> ${t('workspace.coder.loading')}
-            </div>
-          ` : this._coderStatus ? html`
-            <div class="coder-info">
-              <div class="coder-row">
-                <span class="coder-label">${t('workspace.coder.status')}</span>
-                ${this._coderStatus.connected
-                  ? html`<sl-badge variant="success">${t('workspace.coder.connected')}</sl-badge>`
-                  : this._coderStatus.enabled
-                    ? html`<sl-badge variant="warning">${t('workspace.coder.enabledNotConnected')}</sl-badge>`
-                    : html`<sl-badge variant="neutral">${t('workspace.coder.disabled')}</sl-badge>`}
-              </div>
-              ${this._coderStatus.url ? html`
-                <div class="coder-row">
-                  <span class="coder-label">${t('workspace.coder.url')}</span>
-                  <span class="coder-value">${this._coderStatus.url}</span>
+          <h3>${t("workspace.coder.title")}</h3>
+          ${this._coderLoading
+            ? html`
+                <div
+                  style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-tertiary); font-size: 0.85rem;"
+                >
+                  <sl-spinner style="font-size: 1rem;"></sl-spinner> ${t(
+                    "workspace.coder.loading",
+                  )}
                 </div>
-              ` : nothing}
-              ${this._coderStatus.user ? html`
-                <div class="coder-row">
-                  <span class="coder-label">${t('workspace.coder.user')}</span>
-                  <span class="coder-value">${this._coderStatus.user}</span>
-                </div>
-              ` : nothing}
-              ${this._coderStatus.error ? html`
-                <div class="coder-row">
-                  <span class="coder-label">${t('workspace.coder.error')}</span>
-                  <span style="color: var(--sl-color-danger-500); font-size: 0.85rem;">${this._coderStatus.error}</span>
-                </div>
-              ` : nothing}
-              ${this._coderStatus.templates.length > 0 ? html`
-                <div class="coder-row" style="align-items: flex-start;">
-                  <span class="coder-label">${t('workspace.coder.templates')}</span>
-                  <div class="template-list">
-                    ${this._coderStatus.templates.map(tmpl => html`<span class="template-chip">${tmpl}</span>`)}
+              `
+            : this._coderStatus
+              ? html`
+                  <div class="coder-info">
+                    <div class="coder-row">
+                      <span class="coder-label"
+                        >${t("workspace.coder.status")}</span
+                      >
+                      ${this._coderStatus.connected
+                        ? html`<sl-badge variant="success"
+                            >${t("workspace.coder.connected")}</sl-badge
+                          >`
+                        : this._coderStatus.enabled
+                          ? html`<sl-badge variant="warning"
+                              >${t(
+                                "workspace.coder.enabledNotConnected",
+                              )}</sl-badge
+                            >`
+                          : html`<sl-badge variant="neutral"
+                              >${t("workspace.coder.disabled")}</sl-badge
+                            >`}
+                    </div>
+                    ${this._coderStatus.url
+                      ? html`
+                          <div class="coder-row">
+                            <span class="coder-label"
+                              >${t("workspace.coder.url")}</span
+                            >
+                            <span class="coder-value"
+                              >${this._coderStatus.url}</span
+                            >
+                          </div>
+                        `
+                      : nothing}
+                    ${this._coderStatus.user
+                      ? html`
+                          <div class="coder-row">
+                            <span class="coder-label"
+                              >${t("workspace.coder.user")}</span
+                            >
+                            <span class="coder-value"
+                              >${this._coderStatus.user}</span
+                            >
+                          </div>
+                        `
+                      : nothing}
+                    ${this._coderStatus.error
+                      ? html`
+                          <div class="coder-row">
+                            <span class="coder-label"
+                              >${t("workspace.coder.error")}</span
+                            >
+                            <span
+                              style="color: var(--sl-color-danger-500); font-size: 0.85rem;"
+                              >${this._coderStatus.error}</span
+                            >
+                          </div>
+                        `
+                      : nothing}
+                    ${this._coderStatus.templates.length > 0
+                      ? html`
+                          <div
+                            class="coder-row"
+                            style="align-items: flex-start;"
+                          >
+                            <span class="coder-label"
+                              >${t("workspace.coder.templates")}</span
+                            >
+                            <div class="template-list">
+                              ${this._coderStatus.templates.map(
+                                (tmpl) =>
+                                  html`<span class="template-chip"
+                                    >${tmpl}</span
+                                  >`,
+                              )}
+                            </div>
+                          </div>
+                        `
+                      : nothing}
                   </div>
-                </div>
-              ` : nothing}
-            </div>
-          ` : html`
-            <div style="color: var(--text-tertiary); font-size: 0.85rem;">
-              ${t('workspace.coder.loadError')}
-            </div>
-          `}
+                `
+              : html`
+                  <div style="color: var(--text-tertiary); font-size: 0.85rem;">
+                    ${t("workspace.coder.loadError")}
+                  </div>
+                `}
         </div>
       </div>
     `;
@@ -1122,6 +1426,6 @@ export class ProjectWorkspace extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'project-workspace': ProjectWorkspace;
+    "project-workspace": ProjectWorkspace;
   }
 }
