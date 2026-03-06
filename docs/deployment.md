@@ -42,10 +42,11 @@ The Docker image (multi-stage: Node frontend → Rust builder → Debian runtime
 docker build \
   --build-arg VITE_AUTH_AUTHORITY=https://auth.seam.tacklines.com \
   --build-arg VITE_APP_URL=https://seam.tacklines.com \
+  --build-arg VITE_CLIENT_ID=362967076937138180 \
   -f server/Dockerfile .
 ```
 
-**Critical**: `VITE_AUTH_AUTHORITY` and `VITE_APP_URL` are baked into the frontend at build time (Vite inlines env vars). Without these, the frontend falls back to `localhost` defaults.
+**Critical**: `VITE_AUTH_AUTHORITY`, `VITE_APP_URL`, and `VITE_CLIENT_ID` are baked into the frontend at build time (Vite inlines env vars). Without these, the frontend falls back to `localhost` / Keycloak defaults.
 
 ### Build Args
 
@@ -82,6 +83,7 @@ cd /opt/seam/repo && sudo git pull
 sudo docker build \
   --build-arg VITE_AUTH_AUTHORITY=https://auth.seam.tacklines.com \
   --build-arg VITE_APP_URL=https://seam.tacklines.com \
+  --build-arg VITE_CLIENT_ID=362967076937138180 \
   -f server/Dockerfile -t seam-server:latest .
 
 # 4. Tag for compose
@@ -136,16 +138,19 @@ The Rust server reads two env vars for OIDC:
 
 ### Frontend OIDC
 
-The frontend uses `oidc-client-ts` with authority `https://auth.seam.tacklines.com`. This is baked at build time via `VITE_AUTH_AUTHORITY`. The client ID is `web-app` (must exist in Zitadel as a public PKCE client).
+The frontend uses `oidc-client-ts` with authority `https://auth.seam.tacklines.com`. This is baked at build time via `VITE_AUTH_AUTHORITY`. The client ID is set via `VITE_CLIENT_ID` (Zitadel assigns numeric IDs, unlike Keycloak's user-chosen names).
 
 ### Required Zitadel Client
 
-A `web-app` application must be configured in Zitadel with:
-- Type: User Agent (SPA/public)
-- Auth method: PKCE
-- Redirect URIs: `https://seam.tacklines.com/auth/callback`
-- Post-logout redirect: `https://seam.tacklines.com/`
-- Scopes: `openid profile email`
+An application must be configured in Zitadel (Admin Console → Projects → New Application):
+- **Name**: Any (e.g. `seam-frontend`)
+- **Type**: User Agent (SPA/public)
+- **Auth method**: PKCE
+- **Client ID**: `362967076937138180` (assigned by Zitadel, passed as `VITE_CLIENT_ID` build arg)
+- **Redirect URIs**: `https://seam.tacklines.com/auth/callback`
+- **Post-logout redirect**: `https://seam.tacklines.com/`
+- **Scopes**: `openid profile email`
+- **Dev redirect URIs** (optional): `http://localhost:5173/auth/callback`, `http://localhost:5173/`
 
 ## Secrets
 
