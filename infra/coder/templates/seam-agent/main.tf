@@ -397,10 +397,7 @@ AGENT_EOF
     GIT_COMMITTER_NAME   = data.coder_workspace_owner.me.name
     GIT_COMMITTER_EMAIL  = data.coder_workspace_owner.me.email
     SEAM_URL             = data.coder_parameter.seam_url.value
-    SEAM_AGENT_CODE      = data.coder_parameter.agent_code.value
-    SEAM_AGENT_TYPE      = data.coder_parameter.agent_type.value
     SEAM_TOKEN           = data.coder_parameter.seam_token.value
-    SEAM_INSTRUCTIONS    = data.coder_parameter.instructions.value
     SEAM_WORKSPACE_ID    = data.coder_parameter.workspace_id.value
   }
 }
@@ -481,8 +478,5 @@ resource "docker_container" "workspace" {
     label = "seam.managed"
     value = "true"
   }
-  labels {
-    label = "seam.agent_type"
-    value = data.coder_parameter.agent_type.value
-  }
+  # agent_type label removed — ephemeral invocations pass perspective per-call
 }

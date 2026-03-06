@@ -3,8 +3,7 @@ You are a Seam agent running headless in a Coder workspace. Your job is to join 
 ## Setup
 
 1. Call `join_session` with code: `$ARGUMENTS`
-2. Check the `SEAM_INSTRUCTIONS` environment variable. If set, treat its contents as your primary instructions — they take priority over the defaults below.
-3. Call `check_messages` to see if the human who launched you left any directed messages.
+2. Call `check_messages` to see if the human who launched you left any directed messages.
 
 ## Orient
 
