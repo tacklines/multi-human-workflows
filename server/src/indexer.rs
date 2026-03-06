@@ -317,6 +317,11 @@ async fn index_comment(
 }
 
 /// Look up the full plan and upsert title + content chunks.
+///
+/// For long plan content (>1000 chars), splits on markdown H2 boundaries and
+/// stores each section as a separate chunk (`content:section-0`, etc.).
+/// Deletes all existing chunks for the plan before re-inserting so that stale
+/// section chunks from a previous version are removed.
 async fn index_plan(pool: &PgPool, plan_id: Uuid) -> Result<(), anyhow::Error> {
     #[derive(sqlx::FromRow)]
     struct PlanRow {
@@ -340,6 +345,10 @@ async fn index_plan(pool: &PgPool, plan_id: Uuid) -> Result<(), anyhow::Error> {
         return Ok(());
     };
 
+    // Delete all existing chunks before re-inserting so stale section chunks
+    // from a previous version don't linger.
+    delete_chunks_for_source(pool, plan_id).await?;
+
     // Title chunk
     upsert_chunk(
         pool,
@@ -357,28 +366,122 @@ async fn index_plan(pool: &PgPool, plan_id: Uuid) -> Result<(), anyhow::Error> {
     )
     .await?;
 
-    // Content chunk (only if non-empty)
+    // Content chunks (only if non-empty)
     if let Some(content) = plan.content {
-        if !content.trim().is_empty() {
-            upsert_chunk(
-                pool,
-                &ChunkInput {
-                    org_id: plan.org_id,
-                    project_id: Some(plan.project_id),
-                    content_type: "plan".to_string(),
-                    source_id: plan_id,
-                    source_field: Some("content".to_string()),
-                    chunk_hash: sha256_hex(&content),
-                    chunk_text: content,
-                    embedding: None,
-                    metadata: serde_json::json!({ "project_id": plan.project_id }),
-                },
-            )
-            .await?;
+        let trimmed = content.trim();
+        if !trimmed.is_empty() {
+            if trimmed.len() > 1000 {
+                // Long content: split by markdown H2 sections
+                let sections = split_markdown_sections(trimmed, &plan.title);
+                for (idx, (suffix, chunk_text)) in sections.into_iter().enumerate() {
+                    let source_field = format!("content:{suffix}");
+                    upsert_chunk(
+                        pool,
+                        &ChunkInput {
+                            org_id: plan.org_id,
+                            project_id: Some(plan.project_id),
+                            content_type: "plan".to_string(),
+                            source_id: plan_id,
+                            source_field: Some(source_field),
+                            chunk_hash: sha256_hex(&chunk_text),
+                            chunk_text,
+                            embedding: None,
+                            metadata: serde_json::json!({
+                                "project_id": plan.project_id,
+                                "section_index": idx,
+                            }),
+                        },
+                    )
+                    .await?;
+                }
+            } else {
+                // Short content: single chunk (original behavior)
+                upsert_chunk(
+                    pool,
+                    &ChunkInput {
+                        org_id: plan.org_id,
+                        project_id: Some(plan.project_id),
+                        content_type: "plan".to_string(),
+                        source_id: plan_id,
+                        source_field: Some("content".to_string()),
+                        chunk_hash: sha256_hex(trimmed),
+                        chunk_text: trimmed.to_string(),
+                        embedding: None,
+                        metadata: serde_json::json!({ "project_id": plan.project_id }),
+                    },
+                )
+                .await?;
+            }
         }
     }
 
     Ok(())
+}
+
+/// Split markdown text into sections on `## ` (H2) boundaries.
+///
+/// Returns a `Vec<(source_field_suffix, chunk_text)>` where:
+/// - `source_field_suffix` is `section-N` (0-indexed)
+/// - `chunk_text` includes the context prefix (plan title) and current section
+///   header prepended so each chunk is self-contained for retrieval
+///
+/// Edge cases:
+/// - No `## ` headers → returns the whole text as a single `section-0` entry
+/// - Content before the first H2 header is emitted as `section-0`
+/// - Empty sections (after stripping whitespace) are skipped
+pub fn split_markdown_sections(text: &str, context_prefix: &str) -> Vec<(String, String)> {
+    // Split on lines that start with "## " — these are H2 section headers.
+    // We preserve the header line as part of its own section.
+    let mut sections: Vec<(String, String)> = Vec::new();
+
+    // Collect lines, tracking where each new H2 starts.
+    let mut current_header: Option<String> = None;
+    let mut current_lines: Vec<&str> = Vec::new();
+
+    for line in text.lines() {
+        if line.starts_with("## ") {
+            // Flush the accumulated content before this new section.
+            flush_section(
+                &current_header,
+                &current_lines,
+                context_prefix,
+                &mut sections,
+            );
+            current_header = Some(line.to_string());
+            current_lines = Vec::new();
+        } else {
+            current_lines.push(line);
+        }
+    }
+    // Flush the final section.
+    flush_section(
+        &current_header,
+        &current_lines,
+        context_prefix,
+        &mut sections,
+    );
+
+    sections
+}
+
+/// Append a section to `sections` if it has non-empty body text.
+fn flush_section(
+    header: &Option<String>,
+    lines: &[&str],
+    context_prefix: &str,
+    sections: &mut Vec<(String, String)>,
+) {
+    let body = lines.join("\n");
+    let body_trimmed = body.trim();
+    if body_trimmed.is_empty() {
+        return;
+    }
+    let idx = sections.len();
+    let chunk_text = match header {
+        Some(h) => format!("{context_prefix}\n\n{h}\n\n{body_trimmed}"),
+        None => format!("{context_prefix}\n\n{body_trimmed}"),
+    };
+    sections.push((format!("section-{idx}"), chunk_text));
 }
 
 // ---------------------------------------------------------------------------
@@ -447,5 +550,76 @@ impl From<DomainEventRow> for DomainEvent {
             metadata: row.metadata,
             occurred_at: row.occurred_at,
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::split_markdown_sections;
+
+    #[test]
+    fn no_headers_returns_single_section() {
+        let text = "This is just a paragraph with no headers at all.";
+        let sections = split_markdown_sections(text, "My Plan");
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].0, "section-0");
+        assert!(sections[0].1.contains("My Plan"));
+        assert!(sections[0].1.contains("just a paragraph"));
+    }
+
+    #[test]
+    fn splits_on_h2_boundaries() {
+        let text = "# Overview\n\nIntro text.\n\n## Section A\n\nContent A.\n\n## Section B\n\nContent B.";
+        let sections = split_markdown_sections(text, "My Plan");
+        // Intro (before first ##) + Section A + Section B = 3 sections
+        assert_eq!(sections.len(), 3);
+        assert_eq!(sections[0].0, "section-0");
+        assert_eq!(sections[1].0, "section-1");
+        assert_eq!(sections[2].0, "section-2");
+        // Each section should contain the context prefix
+        for (_, chunk_text) in &sections {
+            assert!(chunk_text.contains("My Plan"), "missing prefix in: {chunk_text}");
+        }
+        // Section headers are included in respective chunks
+        assert!(sections[1].1.contains("## Section A"));
+        assert!(sections[2].1.contains("## Section B"));
+        // Section A's content should not bleed into Section B
+        assert!(!sections[1].1.contains("Content B"));
+    }
+
+    #[test]
+    fn empty_sections_are_skipped() {
+        let text = "## Empty\n\n## Has Content\n\nSome text here.";
+        let sections = split_markdown_sections(text, "Plan");
+        // "Empty" has no body text → skipped
+        assert_eq!(sections.len(), 1);
+        assert!(sections[0].1.contains("Has Content"));
+    }
+
+    #[test]
+    fn content_before_first_header_is_section_0() {
+        let text = "Preamble content.\n\n## First Header\n\nBody.";
+        let sections = split_markdown_sections(text, "Plan");
+        assert_eq!(sections.len(), 2);
+        assert!(sections[0].1.contains("Preamble"));
+        assert!(sections[1].1.contains("## First Header"));
+    }
+
+    #[test]
+    fn empty_text_returns_empty_vec() {
+        let sections = split_markdown_sections("   ", "Plan");
+        assert!(sections.is_empty());
+    }
+
+    #[test]
+    fn source_field_suffixes_are_unique() {
+        let text = "## A\n\nContent A.\n\n## B\n\nContent B.\n\n## C\n\nContent C.";
+        let sections = split_markdown_sections(text, "Plan");
+        let suffixes: Vec<&str> = sections.iter().map(|(s, _)| s.as_str()).collect();
+        assert_eq!(suffixes, ["section-0", "section-1", "section-2"]);
     }
 }
