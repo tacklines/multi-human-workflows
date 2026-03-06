@@ -880,6 +880,52 @@ export class DependencyGraph extends LitElement {
 
       this._links.push({ source, target, line, arrow, particles, particleProgress: pProgress, visible: true });
     }
+
+    // Provenance edges (dashed, purple — "derived from" relationships)
+    for (const prov of (data.provenance ?? [])) {
+      const source = taskMap.get(prov.source_id);
+      const target = taskMap.get(prov.derived_id);
+      if (!source || !target) continue;
+
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([source.position, target.position]);
+      const lineMat = new THREE.LineDashedMaterial({
+        color: 0xa855f7,
+        transparent: true,
+        opacity: 0.5,
+        dashSize: 2,
+        gapSize: 1.5,
+      });
+      const line = new THREE.Line(lineGeo, lineMat);
+      line.computeLineDistances();
+      this._graphGroup.add(line);
+
+      const arrowGeo = new THREE.ConeGeometry(1.2, 2.8, 6);
+      const arrowMat = new THREE.MeshBasicMaterial({
+        color: 0xa855f7,
+        transparent: true,
+        opacity: 0.5,
+      });
+      const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+      this._graphGroup.add(arrow);
+
+      const pCount = 3;
+      const pPos = new Float32Array(pCount * 3);
+      const pProgress = new Float32Array(pCount);
+      for (let i = 0; i < pCount; i++) pProgress[i] = i / pCount;
+      const pGeo = new THREE.BufferGeometry();
+      pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+      const pMat = new THREE.PointsMaterial({
+        color: 0xc084fc,
+        size: 0.9,
+        transparent: true,
+        opacity: 0.5,
+        blending: THREE.AdditiveBlending,
+      });
+      const particles = new THREE.Points(pGeo, pMat);
+      this._graphGroup.add(particles);
+
+      this._links.push({ source, target, line, arrow, particles, particleProgress: pProgress, visible: true });
+    }
   }
 
   private _createCardMesh(task: TaskView, statusColor: THREE.Color): { mesh: THREE.Mesh; texture: THREE.CanvasTexture } {
@@ -1004,6 +1050,22 @@ export class DependencyGraph extends LitElement {
     ctx.font = '500 26px -apple-system, "Segoe UI", sans-serif';
     ctx.fillStyle = `rgba(${sr}, ${sg}, ${sb}, 0.7)`;
     ctx.fillText(statusLabel, textX, H - pad - 6);
+
+    // Commit indicator (bottom center)
+    if (task.commit_hashes?.length > 0) {
+      const commitLabel = `${task.commit_hashes.length} commit${task.commit_hashes.length > 1 ? 's' : ''}`;
+      ctx.font = '500 22px monospace';
+      ctx.fillStyle = 'rgba(34, 197, 94, 0.6)';
+      ctx.textAlign = 'center';
+      ctx.fillText(commitLabel, W / 2, H - pad - 6);
+      ctx.textAlign = 'left';
+    } else if (task.no_code_change) {
+      ctx.font = '500 22px monospace';
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.5)';
+      ctx.textAlign = 'center';
+      ctx.fillText('NO CODE', W / 2, H - pad - 6);
+      ctx.textAlign = 'left';
+    }
 
     // Priority label (bottom right)
     const prioLabel = PRIORITY_LABELS[task.priority] ?? task.priority;

@@ -79,6 +79,8 @@ export class TaskDetail extends LitElement {
       display: none;
       margin-left: 0.35rem;
       font-size: 0.8rem;
+      width: 0.8rem;
+      height: 0.8rem;
       color: var(--text-tertiary);
       vertical-align: middle;
     }
@@ -195,6 +197,40 @@ export class TaskDetail extends LitElement {
       padding: 0.1rem 0.35rem;
       border-radius: 4px;
     }
+
+    .commit-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      align-items: center;
+    }
+
+    .commit-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      font-family: var(--sl-font-mono);
+      font-size: 0.7rem;
+      background: var(--surface-card);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      border: 1px solid var(--sl-color-neutral-200);
+    }
+
+    .commit-chip .remove {
+      cursor: pointer;
+      opacity: 0.5;
+      font-size: 0.6rem;
+    }
+    .commit-chip .remove:hover { opacity: 1; }
+
+    .provenance-link {
+      font-size: 0.75rem;
+      color: var(--sl-color-purple-400);
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .provenance-link:hover { text-decoration: underline; }
 
     .link-action {
       font-size: 0.75rem;
@@ -472,6 +508,8 @@ export class TaskDetail extends LitElement {
     .edit-hint {
       display: none;
       font-size: 0.7rem;
+      width: 0.7rem;
+      height: 0.7rem;
       color: var(--text-tertiary);
     }
   `;
@@ -575,6 +613,22 @@ export class TaskDetail extends LitElement {
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to update';
     }
+  }
+
+  private async _addCommit(sha: string) {
+    if (!this._task) return;
+    const hashes = [...this._task.commit_hashes, sha];
+    await this._updateField({ commit_hashes: hashes });
+  }
+
+  private async _removeCommit(sha: string) {
+    if (!this._task) return;
+    const hashes = this._task.commit_hashes.filter((h: string) => h !== sha);
+    await this._updateField({ commit_hashes: hashes });
+  }
+
+  private _navigateToTask(taskId: string) {
+    this.dispatchEvent(new CustomEvent('navigate-task', { detail: taskId, bubbles: true, composed: true }));
   }
 
   private async _handleDelete() {
@@ -1273,33 +1327,63 @@ export class TaskDetail extends LitElement {
 
         <sl-divider style="--spacing: 0.25rem;"></sl-divider>
 
-        <!-- Commit SHA -->
-        ${this._editingField === 'commit'
-          ? html`
-            <div class="meta-row">
+        <!-- Commits -->
+        <div class="meta-row" style="flex-direction: column; align-items: flex-start; gap: 0.25rem;">
+          <span class="meta-label">Commits</span>
+          ${task.commit_hashes.length > 0
+            ? html`
+              <div class="commit-chips">
+                ${task.commit_hashes.map((sha: string) => html`
+                  <span class="commit-chip">
+                    ${sha.substring(0, 8)}
+                    <span class="remove" @click=${() => this._removeCommit(sha)}>x</span>
+                  </span>
+                `)}
+              </div>`
+            : nothing
+          }
+          ${this._editingField === 'commit'
+            ? html`
               <sl-input
                 size="small"
-                placeholder="Enter commit SHA"
-                value=${task.commit_sha ?? ''}
+                placeholder="Enter commit SHA and press Enter"
                 style="width: 100%; font-family: var(--sl-font-mono); font-size: 0.75rem;"
                 @sl-change=${(e: Event) => {
                   const val = (e.target as HTMLInputElement).value.trim();
-                  this._updateField({ commit_sha: val || null });
+                  if (val) this._addCommit(val);
                   this._editingField = null;
                 }}
                 @keydown=${(e: KeyboardEvent) => { if (e.key === 'Escape') this._editingField = null; }}
-              ></sl-input>
-            </div>`
-          : html`
-            <div class="meta-row editable" @click=${() => { this._editingField = 'commit'; }}>
-              <span class="meta-label">Commit</span>
+              ></sl-input>`
+            : html`<span class="link-action" @click=${() => { this._editingField = 'commit'; }}>+ Add commit</span>`
+          }
+        </div>
+
+        <!-- No Code Change -->
+        <div class="meta-row">
+          <span class="meta-label">No code change</span>
+          <sl-switch
+            size="small"
+            ?checked=${task.no_code_change}
+            @sl-change=${(e: Event) => {
+              this._updateField({ no_code_change: (e.target as HTMLInputElement).checked });
+            }}
+          ></sl-switch>
+        </div>
+
+        <!-- Source (provenance) -->
+        ${task.source_task_id
+          ? html`
+            <div class="meta-row">
+              <span class="meta-label">Derived from</span>
               <span class="meta-value">
-                ${task.commit_sha
-                  ? html`<span class="commit-sha">${task.commit_sha}</span>`
-                  : html`<span class="link-action">Link commit</span>`
-                }
+                <a class="provenance-link" @click=${() => this._navigateToTask(task.source_task_id!)}>
+                  <sl-icon name="arrow-return-left" style="font-size: 0.7rem;"></sl-icon>
+                  Source task
+                </a>
               </span>
             </div>`
+          : nothing
         }
       </div>
     `;

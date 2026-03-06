@@ -18,7 +18,9 @@ export interface TaskView {
   complexity: TaskComplexity;
   assigned_to: string | null;
   created_by: string;
-  commit_sha: string | null;
+  commit_hashes: string[];
+  no_code_change: boolean;
+  source_task_id: string | null;
   created_at: string;
   updated_at: string;
   closed_at: string | null;

@@ -67,7 +67,7 @@ export async function fetchProjectTask(projectId: string, taskId: string): Promi
 
 export async function createTask(
   sessionCode: string,
-  data: { task_type: string; title: string; description?: string; parent_id?: string; assigned_to?: string; priority?: string; complexity?: string },
+  data: { task_type: string; title: string; description?: string; parent_id?: string; assigned_to?: string; priority?: string; complexity?: string; source_task_id?: string },
 ): Promise<TaskView> {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/tasks`, {
     method: 'POST',
@@ -80,7 +80,7 @@ export async function createTask(
 export async function updateTask(
   sessionCode: string,
   taskId: string,
-  data: { title?: string; description?: string | null; status?: string; priority?: string; complexity?: string; assigned_to?: string | null; parent_id?: string; commit_sha?: string | null },
+  data: { title?: string; description?: string | null; status?: string; priority?: string; complexity?: string; assigned_to?: string | null; parent_id?: string; commit_hashes?: string[]; no_code_change?: boolean },
 ): Promise<TaskView> {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/tasks/${taskId}`, {
     method: 'PATCH',
@@ -136,9 +136,15 @@ export interface GraphEdge {
   blocked_id: string;
 }
 
+export interface ProvenanceEdge {
+  source_id: string;
+  derived_id: string;
+}
+
 export interface DependencyGraphView {
   tasks: TaskView[];
   edges: GraphEdge[];
+  provenance: ProvenanceEdge[];
 }
 
 export async function fetchDependencyGraph(projectId: string): Promise<DependencyGraphView> {
