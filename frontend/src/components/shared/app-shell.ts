@@ -411,9 +411,14 @@ export class AppShell extends LitElement {
 
   private _leaveSession() {
     const orgSlug = this._currentOrg?.slug;
+    const projectId = this._appState.sessionState?.session.project_id;
     disconnectSession();
     store.clearSession();
-    navigateTo(orgSlug ? `/orgs/${orgSlug}` : '/');
+    if (orgSlug && projectId) {
+      navigateTo(`/orgs/${orgSlug}/projects/${projectId}`);
+    } else {
+      navigateTo(orgSlug ? `/orgs/${orgSlug}` : '/');
+    }
   }
 
   private async _loadUnreadMentions() {
