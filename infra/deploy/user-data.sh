@@ -6,7 +6,11 @@ exec > >(tee /var/log/user-data.log | logger -t user-data) 2>&1
 # 1. System setup: packages
 # ============================================================
 dnf update -y
-dnf install -y amazon-ssm-agent docker curl jq git
+
+# AL2023 ships curl-minimal which conflicts with curl — use --allowerasing
+dnf install -y --allowerasing docker jq git curl
+dnf install -y amazon-ssm-agent 2>/dev/null || true
+
 systemctl enable amazon-ssm-agent
 systemctl start amazon-ssm-agent
 systemctl enable docker

@@ -8,7 +8,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # ─── Stage 2: Rust Builder ────────────────────────────────────────────────────
-FROM rust:1.86-bookworm AS builder
+FROM rust:1-bookworm AS builder
 
 WORKDIR /app
 
