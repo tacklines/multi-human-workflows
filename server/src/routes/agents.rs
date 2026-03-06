@@ -165,6 +165,13 @@ pub async fn launch_agent(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+    // Link workspace to the agent participant now that we have the participant id
+    let _ = sqlx::query("UPDATE workspaces SET participant_id = $2 WHERE id = $1")
+        .bind(workspace.id)
+        .bind(agent_participant_id)
+        .execute(&state.db)
+        .await;
+
     // Broadcast participant joined
     state
         .connections
@@ -582,7 +589,7 @@ pub async fn list_project_agents(
          JOIN sessions s ON s.id = p.session_id
          LEFT JOIN participants sp ON sp.id = p.sponsor_id
          LEFT JOIN tasks t ON t.assigned_to = p.id AND t.status IN ('open', 'in_progress')
-         LEFT JOIN workspaces w ON w.task_id = t.id AND w.status NOT IN ('destroyed')
+         LEFT JOIN workspaces w ON w.participant_id = p.id AND w.status NOT IN ('destroyed')
          WHERE s.project_id = $1
            AND p.participant_type = 'agent'
            {}
@@ -667,7 +674,7 @@ pub async fn get_project_agent(
          JOIN sessions s ON s.id = p.session_id
          LEFT JOIN participants sp ON sp.id = p.sponsor_id
          LEFT JOIN tasks t ON t.assigned_to = p.id AND t.status IN ('open', 'in_progress')
-         LEFT JOIN workspaces w ON w.task_id = t.id AND w.status NOT IN ('destroyed')
+         LEFT JOIN workspaces w ON w.participant_id = p.id AND w.status NOT IN ('destroyed')
          WHERE p.id = $1
            AND s.project_id = $2
            AND p.participant_type = 'agent'",

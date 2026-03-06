@@ -16,6 +16,7 @@ fn workspace_view(w: &Workspace) -> WorkspaceView {
     WorkspaceView {
         id: w.id,
         task_id: w.task_id,
+        participant_id: w.participant_id,
         status: w.status,
         coder_workspace_name: w.coder_workspace_name.clone(),
         template_name: w.template_name.clone(),

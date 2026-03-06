@@ -433,7 +433,8 @@ pub enum WorkspaceStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Workspace {
     pub id: Uuid,
-    pub task_id: Uuid,
+    pub task_id: Option<Uuid>,
+    pub participant_id: Option<Uuid>,
     pub project_id: Uuid,
     pub coder_workspace_id: Option<Uuid>,
     pub coder_workspace_name: Option<String>,
@@ -451,7 +452,8 @@ pub struct Workspace {
 #[derive(Debug, Serialize)]
 pub struct WorkspaceView {
     pub id: Uuid,
-    pub task_id: Uuid,
+    pub task_id: Option<Uuid>,
+    pub participant_id: Option<Uuid>,
     pub status: WorkspaceStatus,
     pub coder_workspace_name: Option<String>,
     pub template_name: String,
@@ -463,7 +465,7 @@ pub struct WorkspaceView {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateWorkspaceRequest {
-    pub task_id: Uuid,
+    pub task_id: Option<Uuid>,
     pub template_name: Option<String>,
     pub branch: Option<String>,
 }
