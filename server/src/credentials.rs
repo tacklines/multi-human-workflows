@@ -68,8 +68,23 @@ async fn ensure_org_dek(pool: &PgPool, org_id: Uuid) -> Result<fernet::Fernet, C
     .execute(pool)
     .await?;
 
-    fernet::Fernet::new(&dek_key)
-        .ok_or_else(|| CredentialError::EncryptionFailed("generated invalid DEK".into()))
+    // Re-fetch to handle race: if another request inserted first, ON CONFLICT DO NOTHING
+    // means our DEK was discarded. We must use the one actually stored in the DB.
+    let stored: (Vec<u8>,) = sqlx::query_as(
+        "SELECT encrypted_dek FROM org_credential_keys WHERE org_id = $1"
+    )
+    .bind(org_id)
+    .fetch_one(pool)
+    .await?;
+
+    let stored_dek_str = String::from_utf8(stored.0)
+        .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
+    let stored_dek_key = master.decrypt(&stored_dek_str)
+        .map_err(|e| CredentialError::DecryptionFailed(format!("{e:?}")))?;
+    let stored_dek_key_str = String::from_utf8(stored_dek_key)
+        .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
+    fernet::Fernet::new(&stored_dek_key_str)
+        .ok_or_else(|| CredentialError::DecryptionFailed("invalid stored DEK".into()))
 }
 
 /// Encrypt a credential value for an org
@@ -175,8 +190,23 @@ async fn ensure_user_dek(pool: &PgPool, user_id: Uuid) -> Result<fernet::Fernet,
     .execute(pool)
     .await?;
 
-    fernet::Fernet::new(&dek_key)
-        .ok_or_else(|| CredentialError::EncryptionFailed("generated invalid DEK".into()))
+    // Re-fetch to handle race: if another request inserted first, ON CONFLICT DO NOTHING
+    // means our DEK was discarded. We must use the one actually stored in the DB.
+    let stored: (Vec<u8>,) = sqlx::query_as(
+        "SELECT encrypted_dek FROM user_credential_keys WHERE user_id = $1"
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+
+    let stored_dek_str = String::from_utf8(stored.0)
+        .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
+    let stored_dek_key = master.decrypt(&stored_dek_str)
+        .map_err(|e| CredentialError::DecryptionFailed(format!("{e:?}")))?;
+    let stored_dek_key_str = String::from_utf8(stored_dek_key)
+        .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
+    fernet::Fernet::new(&stored_dek_key_str)
+        .ok_or_else(|| CredentialError::DecryptionFailed("invalid stored DEK".into()))
 }
 
 /// Encrypt a credential value for a user
