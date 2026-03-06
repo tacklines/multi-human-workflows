@@ -256,11 +256,10 @@ async fn dispatch_mcp_tool(
     let config: McpToolConfig = serde_json::from_value(action_config.clone())?;
 
     // Merge static arguments with event payload if present
-    let _arguments = match (&config.arguments, &ctx.event_payload) {
+    let arguments = match (&config.arguments, &ctx.event_payload) {
         (Some(args), Some(event)) => {
             let mut merged = args.clone();
             if let (Some(m), Some(e)) = (merged.as_object_mut(), event.as_object()) {
-                // Event data available as _event.* keys
                 m.insert("_event".to_string(), serde_json::Value::Object(e.clone()));
             }
             merged
@@ -270,17 +269,136 @@ async fn dispatch_mcp_tool(
         (None, None) => serde_json::json!({}),
     };
 
-    info!(
-        tool_name = %config.tool_name,
-        source = %ctx.source,
-        project_id = %ctx.project_id,
-        "MCP tool invocation requested (direct MCP client not yet wired — logging intent)"
-    );
+    let seam_url = std::env::var("SEAM_URL")
+        .unwrap_or_else(|_| "http://localhost:3002".to_string());
+    let mcp_url = format!("{}/mcp", seam_url);
+    let api_token = std::env::var("WORKER_API_TOKEN").ok();
 
-    // TODO: Wire up actual MCP client call.
-    // For now this is a structured log that confirms the config parses correctly.
-    // Full implementation requires an MCP client in the worker, which is a larger piece.
-    // The webhook action can serve as a workaround by pointing at the MCP HTTP endpoint.
+    let client = Client::new();
+
+    // Step 1: Initialize MCP session (JSON-RPC 2.0)
+    let init_request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {
+                "name": "seam-worker",
+                "version": "0.1.0"
+            }
+        }
+    });
+
+    let mut req = client.post(&mcp_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
+        .json(&init_request);
+    if let Some(token) = &api_token {
+        req = req.header("Authorization", format!("Bearer {}", token));
+    }
+
+    let init_resp = req.send().await?;
+    if !init_resp.status().is_success() {
+        let status = init_resp.status();
+        let body = init_resp.text().await.unwrap_or_default();
+        return Err(format!("MCP initialize failed: {} {}", status, body).into());
+    }
+
+    let session_id = init_resp
+        .headers()
+        .get("mcp-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // Step 2: Send initialized notification
+    let initialized_notification = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+    });
+
+    let mut req = client.post(&mcp_url)
+        .header("Content-Type", "application/json")
+        .json(&initialized_notification);
+    if let Some(token) = &api_token {
+        req = req.header("Authorization", format!("Bearer {}", token));
+    }
+    if let Some(sid) = &session_id {
+        req = req.header("Mcp-Session-Id", sid);
+    }
+    // Notification — fire and forget
+    let _ = req.send().await;
+
+    // Step 3: Call the tool
+    let tool_request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": config.tool_name,
+            "arguments": arguments
+        }
+    });
+
+    let mut req = client.post(&mcp_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
+        .json(&tool_request);
+    if let Some(token) = &api_token {
+        req = req.header("Authorization", format!("Bearer {}", token));
+    }
+    if let Some(sid) = &session_id {
+        req = req.header("Mcp-Session-Id", sid);
+    }
+
+    let tool_resp = req.send().await?;
+    let status = tool_resp.status();
+    let body = tool_resp.text().await.unwrap_or_default();
+
+    if status.is_success() {
+        // Parse JSON-RPC response to check for tool-level errors
+        if let Ok(rpc_resp) = serde_json::from_str::<serde_json::Value>(&body) {
+            if let Some(err) = rpc_resp.get("error") {
+                warn!(
+                    tool_name = %config.tool_name,
+                    error = %err,
+                    source = %ctx.source,
+                    "MCP tool returned JSON-RPC error"
+                );
+                return Err(format!("MCP tool error: {}", err).into());
+            }
+            // Check isError flag in the tool result
+            if rpc_resp.pointer("/result/isError") == Some(&serde_json::Value::Bool(true)) {
+                let content = rpc_resp.pointer("/result/content")
+                    .map(|c| c.to_string())
+                    .unwrap_or_default();
+                warn!(
+                    tool_name = %config.tool_name,
+                    content = %content,
+                    source = %ctx.source,
+                    "MCP tool returned isError=true"
+                );
+                return Err(format!("MCP tool failed: {}", content).into());
+            }
+        }
+
+        info!(
+            tool_name = %config.tool_name,
+            source = %ctx.source,
+            project_id = %ctx.project_id,
+            "MCP tool invocation succeeded"
+        );
+    } else {
+        error!(
+            tool_name = %config.tool_name,
+            status = %status,
+            body = %body,
+            source = %ctx.source,
+            "MCP tool HTTP request failed"
+        );
+        return Err(format!("MCP tool call failed: {} {}", status, body).into());
+    }
 
     Ok(())
 }
