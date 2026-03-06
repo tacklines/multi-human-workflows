@@ -20,6 +20,7 @@ export interface TaskView {
   created_by: string;
   commit_hashes: string[];
   no_code_change: boolean;
+  session_ids: string[];
   source_task_id: string | null;
   created_at: string;
   updated_at: string;

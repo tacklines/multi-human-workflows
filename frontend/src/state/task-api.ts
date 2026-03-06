@@ -129,6 +129,25 @@ export async function removeDependency(
   }
 }
 
+// --- Sprint / Session task membership ---
+
+export async function addTasksToSession(sessionCode: string, taskIds: string[]): Promise<{ added: number }> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/tasks/add`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ task_ids: taskIds }),
+  });
+  return handleResponse<{ added: number }>(res);
+}
+
+export async function removeTaskFromSession(sessionCode: string, taskId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/tasks/${taskId}/membership`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
 // --- Dependency Graph ---
 
 export interface GraphEdge {

@@ -1,7 +1,8 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import { store } from '../../state/app-state.js';
-import { fetchTasks, fetchProjectTasks, createTask, updateTask, deleteTask } from '../../state/task-api.js';
+import { fetchTasks, fetchProjectTasks, createTask, updateTask, deleteTask, addTasksToSession, removeTaskFromSession } from '../../state/task-api.js';
+import { navigateTo } from '../../router.js';
 import {
   type TaskView, type TaskType, type TaskStatus, type TaskPriority, type TaskComplexity,
   TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
@@ -519,6 +520,79 @@ export class TaskBoard extends LitElement {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
     }
+
+    /* ── Sprint planning panel ── */
+    .sprint-panel {
+      margin-bottom: 1rem;
+      border: 1px solid var(--sl-color-primary-200);
+      border-radius: 8px;
+      background: var(--sl-color-primary-50);
+      overflow: hidden;
+    }
+
+    .sprint-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      gap: 0.75rem;
+    }
+
+    .sprint-panel-header sl-input,
+    .sprint-panel-header sl-select {
+      flex: 1;
+      max-width: 280px;
+    }
+
+    .sprint-drop-zone {
+      min-height: 80px;
+      padding: 0.75rem;
+      border-top: 1px dashed var(--sl-color-primary-200);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: flex-start;
+      transition: background 0.15s;
+    }
+
+    .sprint-drop-zone.drag-over {
+      background: var(--sl-color-primary-100);
+    }
+
+    .sprint-drop-zone-empty {
+      width: 100%;
+      text-align: center;
+      color: var(--sl-color-neutral-500);
+      font-size: 0.85rem;
+      padding: 1rem;
+    }
+
+    .sprint-task-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.6rem;
+      background: white;
+      border: 1px solid var(--sl-color-neutral-200);
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .sprint-task-chip:hover {
+      border-color: var(--sl-color-primary-400);
+    }
+
+    .sprint-task-chip .remove-btn {
+      cursor: pointer;
+      opacity: 0.5;
+      font-size: 0.7rem;
+    }
+
+    .sprint-task-chip .remove-btn:hover {
+      opacity: 1;
+      color: var(--sl-color-danger-600);
+    }
   `;
 
   @property({ type: String, attribute: 'session-code' })
@@ -533,7 +607,14 @@ export class TaskBoard extends LitElement {
   @property({ type: Array })
   participants: SessionParticipant[] = [];
 
+  @property({ type: Array })
+  sessions: Array<{ code: string; name: string | null; id: string }> = [];
+
   @state() private _tasks: TaskView[] = [];
+  @state() private _sprintPanelOpen = false;
+  @state() private _sprintSessionCode = '';
+  @state() private _sprintSessionName = '';
+  @state() private _sprintCreating = false;
   @state() private _loading = true;
   @state() private _error = '';
   @state() private _viewMode: 'list' | 'board' = 'board';
@@ -767,6 +848,12 @@ export class TaskBoard extends LitElement {
     return [complete, children.length];
   }
 
+  private _isTaskInSprint(task: TaskView): boolean {
+    if (!this._sprintSessionCode || !this._sprintPanelOpen) return false;
+    const session = this.sessions.find(s => s.code === this._sprintSessionCode);
+    return !!session && task.session_ids?.includes(session.id);
+  }
+
   private _showToast(message: string) {
     this._toastMessage = message;
     setTimeout(() => { this._toastMessage = ''; }, 2500);
@@ -941,7 +1028,13 @@ export class TaskBoard extends LitElement {
           <sl-tooltip content="Refresh">
             <sl-icon-button name="arrow-clockwise" @click=${() => this._loadTasks()}></sl-icon-button>
           </sl-tooltip>
-          ${this._isProjectMode ? nothing : html`
+          ${this._isProjectMode ? html`
+            <sl-button variant=${this._sprintPanelOpen ? 'primary' : 'default'} size="small"
+              @click=${() => { this._sprintPanelOpen = !this._sprintPanelOpen; }}>
+              <sl-icon slot="prefix" name="calendar-week"></sl-icon>
+              Plan Sprint
+            </sl-button>
+          ` : html`
             <sl-button variant="default" size="small" @click=${() => { this._showAgentDialog = true; this._agentError = ''; }}>
               <sl-icon slot="prefix" name="robot"></sl-icon>
               Launch Agent
@@ -1047,6 +1140,8 @@ export class TaskBoard extends LitElement {
           </sl-tooltip>
         ` : nothing}
       </div>
+
+      ${this._renderSprintPanel()}
 
       ${this._error ? html`
         <sl-alert variant="danger" open closable @sl-after-hide=${() => { this._error = ''; }} style="margin-bottom: 1rem;">
@@ -1318,6 +1413,7 @@ export class TaskBoard extends LitElement {
           <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${typeColor}"></sl-icon>
           <span class="kanban-card-title">${task.title}</span>
           ${task.priority !== 'medium' ? html`<sl-icon name=${PRIORITY_ICONS[task.priority]} style="color: ${PRIORITY_COLORS[task.priority]}; font-size: 0.75rem; flex-shrink: 0;"></sl-icon>` : nothing}
+          ${this._isTaskInSprint(task) ? html`<sl-icon name="calendar-week" style="color: var(--sl-color-primary-500); font-size: 0.7rem; flex-shrink: 0;" title="In sprint"></sl-icon>` : nothing}
         </div>
         ${total > 0 ? html`
           <div class="kanban-progress">
@@ -1345,6 +1441,139 @@ export class TaskBoard extends LitElement {
         </div>
       </div>
     `;
+  }
+
+  private _renderSprintPanel() {
+    if (!this._isProjectMode || !this._sprintPanelOpen) return nothing;
+
+    const selectedSession = this.sessions.find(s => s.code === this._sprintSessionCode);
+    const sprintSessionId = selectedSession?.id ?? '';
+    const sprintTasks = sprintSessionId
+      ? this._tasks.filter(t => t.session_ids?.includes(sprintSessionId))
+      : [];
+
+    return html`
+      <div class="sprint-panel">
+        <div class="sprint-panel-header">
+          ${this.sessions.length > 0 ? html`
+            <sl-select
+              placeholder="Select a sprint session..."
+              size="small"
+              clearable
+              value=${this._sprintSessionCode}
+              @sl-change=${(e: Event) => { this._sprintSessionCode = (e.target as HTMLSelectElement).value; }}
+            >
+              ${this.sessions.map(s => html`
+                <sl-option value=${s.code}>${s.name || s.code}</sl-option>
+              `)}
+            </sl-select>
+          ` : nothing}
+
+          <sl-input
+            placeholder="New sprint name..."
+            size="small"
+            value=${this._sprintSessionName}
+            @sl-input=${(e: Event) => { this._sprintSessionName = (e.target as HTMLInputElement).value; }}
+            @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createSprint(); }}
+          ></sl-input>
+          <sl-button size="small" variant="default" ?loading=${this._sprintCreating}
+            ?disabled=${!this._sprintSessionName.trim()}
+            @click=${() => void this._createSprint()}>
+            Create Sprint
+          </sl-button>
+
+          <span style="flex: 1;"></span>
+
+          ${sprintTasks.length > 0 ? html`
+            <sl-badge variant="primary" pill>${sprintTasks.length} task${sprintTasks.length !== 1 ? 's' : ''}</sl-badge>
+          ` : nothing}
+
+          ${this._sprintSessionCode ? html`
+            <sl-button size="small" variant="primary"
+              @click=${() => { navigateTo('/sessions/' + this._sprintSessionCode); }}>
+              <sl-icon slot="prefix" name="play-fill"></sl-icon>
+              Start Sprint
+            </sl-button>
+          ` : nothing}
+        </div>
+
+        <div class="sprint-drop-zone"
+          @dragover=${(e: DragEvent) => {
+            if (!this._sprintSessionCode) return;
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).classList.add('drag-over');
+          }}
+          @dragleave=${(e: DragEvent) => {
+            (e.currentTarget as HTMLElement).classList.remove('drag-over');
+          }}
+          @drop=${(e: DragEvent) => {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).classList.remove('drag-over');
+            void this._handleSprintDrop();
+          }}
+        >
+          ${!this._sprintSessionCode ? html`
+            <div class="sprint-drop-zone-empty">Select or create a sprint session first</div>
+          ` : sprintTasks.length === 0 ? html`
+            <div class="sprint-drop-zone-empty">Drag tasks here to plan your sprint</div>
+          ` : sprintTasks.map(task => html`
+            <div class="sprint-task-chip" @click=${() => { this._selectTask(task.id); }}>
+              <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${TASK_TYPE_COLORS[task.task_type]}; font-size: 0.75rem;"></sl-icon>
+              <span>${task.ticket_id}</span>
+              <span style="max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${task.title}</span>
+              <span class="remove-btn" @click=${(e: Event) => { e.stopPropagation(); void this._removeFromSprint(task.id); }}>
+                <sl-icon name="x-lg"></sl-icon>
+              </span>
+            </div>
+          `)}
+        </div>
+      </div>
+    `;
+  }
+
+  private async _handleSprintDrop() {
+    if (!this._dragTaskId || !this._sprintSessionCode) return;
+    try {
+      await addTasksToSession(this._sprintSessionCode, [this._dragTaskId]);
+      this._showToast('Task added to sprint');
+      await this._loadTasks();
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Failed to add task to sprint';
+    }
+    this._dragTaskId = null;
+  }
+
+  private async _removeFromSprint(taskId: string) {
+    if (!this._sprintSessionCode) return;
+    try {
+      await removeTaskFromSession(this._sprintSessionCode, taskId);
+      this._showToast('Task removed from sprint');
+      await this._loadTasks();
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Failed to remove task from sprint';
+    }
+  }
+
+  private async _createSprint() {
+    this._sprintCreating = true;
+    try {
+      const token = (await import('../../state/auth-state.js')).authStore.getAccessToken();
+      const res = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token && { 'Authorization': `Bearer ${token}` }) },
+        body: JSON.stringify({ project_id: this.projectId, name: this._sprintSessionName.trim() }),
+      });
+      if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
+      const data = await res.json();
+      this.sessions = [...this.sessions, { code: data.session.code, name: data.session.name, id: data.session.id }];
+      this._sprintSessionCode = data.session.code;
+      this._sprintSessionName = '';
+      this._showToast('Sprint session created');
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'Failed to create sprint';
+    } finally {
+      this._sprintCreating = false;
+    }
   }
 
   private _renderCreateDialog() {

@@ -668,7 +668,7 @@ export class ProjectWorkspace extends LitElement {
               ${this._renderWorkspaces()}
             ` : nothing}
             ${this._activeTab === 'tasks' ? html`
-              <task-board project-id=${this.projectId}></task-board>
+              <task-board project-id=${this.projectId} .sessions=${this._sessions}></task-board>
             ` : nothing}
             ${this._activeTab === 'plans' ? this._renderPlans() : nothing}
             ${this._activeTab === 'agents' ? this._renderAgents() : nothing}
