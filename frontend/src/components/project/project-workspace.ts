@@ -24,6 +24,8 @@ import '../plans/plan-list.js';
 import '../plans/plan-detail.js';
 import '../requirements/requirement-list.js';
 import '../requirements/requirement-detail.js';
+import '../requests/request-list.js';
+import '../requests/request-detail.js';
 import '../agents/agent-list.js';
 import '../agents/agent-detail.js';
 import '../tasks/task-board.js';
@@ -482,6 +484,7 @@ export class ProjectWorkspace extends LitElement {
   @state() private _workspaces: WorkspaceView[] = [];
   @state() private _selectedPlanId: string | null = null;
   @state() private _selectedRequirementId: string | null = null;
+  @state() private _selectedRequestId: string | null = null;
   @state() private _selectedAgentId: string | null = null;
   @state() private _loading = true;
   @state() private _error = '';
@@ -510,7 +513,7 @@ export class ProjectWorkspace extends LitElement {
       const params = this.location.params as Record<string, string>;
       if (params.id) this.projectId = params.id;
       if (params.tab) {
-        const valid = ['overview', 'graph', 'settings', 'tasks', 'requirements', 'plans', 'sessions', 'agents', 'automations'];
+        const valid = ['overview', 'graph', 'settings', 'tasks', 'requirements', 'requests', 'plans', 'sessions', 'agents', 'automations'];
         if (valid.includes(params.tab)) {
           this._activeTab = params.tab;
         }
@@ -522,6 +525,10 @@ export class ProjectWorkspace extends LitElement {
       if (params.requirementId) {
         this._activeTab = 'requirements';
         this._selectedRequirementId = params.requirementId;
+      }
+      if (params.requestId) {
+        this._activeTab = 'requests';
+        this._selectedRequestId = params.requestId;
       }
       if (params.agentId) {
         this._activeTab = 'agents';
@@ -546,7 +553,7 @@ export class ProjectWorkspace extends LitElement {
       this._loadProject();
     }
     if (changed.has('initialTab') && this.initialTab) {
-      const valid = ['overview', 'tasks', 'requirements', 'graph', 'settings', 'agents', 'automations'];
+      const valid = ['overview', 'tasks', 'requirements', 'requests', 'graph', 'settings', 'agents', 'automations'];
       if (valid.includes(this.initialTab)) {
         this._switchTab(this.initialTab, false);
       }
@@ -680,6 +687,7 @@ export class ProjectWorkspace extends LitElement {
               <task-board project-id=${this.projectId} .sessions=${this._sessions}></task-board>
             ` : nothing}
             ${this._activeTab === 'requirements' ? this._renderRequirements() : nothing}
+            ${this._activeTab === 'requests' ? this._renderRequests() : nothing}
             ${this._activeTab === 'plans' ? this._renderPlans() : nothing}
             ${this._activeTab === 'agents' ? this._renderAgents() : nothing}
             ${this._activeTab === 'automations' ? html`<automation-panel .projectId=${this._project!.id}></automation-panel>` : nothing}
@@ -810,6 +818,32 @@ export class ProjectWorkspace extends LitElement {
     `;
   }
 
+  private _renderRequests() {
+    return html`
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">
+            <sl-icon name="chat-square-text"></sl-icon>
+            ${t('workspace.tab.requests')}
+          </span>
+        </div>
+
+        ${this._selectedRequestId ? html`
+          <request-detail
+            .projectId=${this.projectId}
+            .requestId=${this._selectedRequestId}
+            @request-back=${() => { this._selectedRequestId = null; window.history.replaceState(null, '', `/projects/${this.projectId}/requests`); }}
+          ></request-detail>
+        ` : html`
+          <request-list
+            .projectId=${this.projectId}
+            @request-select=${(e: CustomEvent) => { this._selectedRequestId = e.detail.requestId; window.history.replaceState(null, '', `/projects/${this.projectId}/requests/${e.detail.requestId}`); }}
+          ></request-list>
+        `}
+      </div>
+    `;
+  }
+
   private _renderPlans() {
     return html`
       <div class="section">
@@ -900,6 +934,7 @@ export class ProjectWorkspace extends LitElement {
         ${tab('overview', t('workspace.tab.overview'), 'grid-1x2')}
         ${tab('tasks', t('workspace.tab.tasks'), 'kanban')}
         ${tab('requirements', t('workspace.tab.requirements'), 'bullseye')}
+        ${tab('requests', t('workspace.tab.requests'), 'chat-square-text')}
         ${tab('plans', t('workspace.tab.plans'), 'file-earmark-text')}
         ${tab('agents', t('workspace.tab.agents'), 'robot')}
         ${tab('graph', t('workspace.tab.graph'), 'diagram-3')}
