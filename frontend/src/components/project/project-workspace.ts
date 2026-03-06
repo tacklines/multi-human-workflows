@@ -22,6 +22,8 @@ import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 
 import '../plans/plan-list.js';
 import '../plans/plan-detail.js';
+import '../requirements/requirement-list.js';
+import '../requirements/requirement-detail.js';
 import '../agents/agent-list.js';
 import '../agents/agent-detail.js';
 import '../tasks/task-board.js';
@@ -479,6 +481,7 @@ export class ProjectWorkspace extends LitElement {
   @state() private _planCount = 0;
   @state() private _workspaces: WorkspaceView[] = [];
   @state() private _selectedPlanId: string | null = null;
+  @state() private _selectedRequirementId: string | null = null;
   @state() private _selectedAgentId: string | null = null;
   @state() private _loading = true;
   @state() private _error = '';
@@ -507,7 +510,7 @@ export class ProjectWorkspace extends LitElement {
       const params = this.location.params as Record<string, string>;
       if (params.id) this.projectId = params.id;
       if (params.tab) {
-        const valid = ['overview', 'graph', 'settings', 'tasks', 'plans', 'sessions', 'agents', 'automations'];
+        const valid = ['overview', 'graph', 'settings', 'tasks', 'requirements', 'plans', 'sessions', 'agents', 'automations'];
         if (valid.includes(params.tab)) {
           this._activeTab = params.tab;
         }
@@ -515,6 +518,10 @@ export class ProjectWorkspace extends LitElement {
       if (params.planId) {
         this._activeTab = 'plans';
         this._selectedPlanId = params.planId;
+      }
+      if (params.requirementId) {
+        this._activeTab = 'requirements';
+        this._selectedRequirementId = params.requirementId;
       }
       if (params.agentId) {
         this._activeTab = 'agents';
@@ -539,7 +546,7 @@ export class ProjectWorkspace extends LitElement {
       this._loadProject();
     }
     if (changed.has('initialTab') && this.initialTab) {
-      const valid = ['overview', 'tasks', 'graph', 'settings', 'agents', 'automations'];
+      const valid = ['overview', 'tasks', 'requirements', 'graph', 'settings', 'agents', 'automations'];
       if (valid.includes(this.initialTab)) {
         this._switchTab(this.initialTab, false);
       }
@@ -632,12 +639,12 @@ export class ProjectWorkspace extends LitElement {
   private _relativeTime(iso: string): string {
     const diff = Date.now() - new Date(iso).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1) return t('time.justNow');
+    if (mins < 60) return t('time.minutesAgo', { count: mins });
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
+    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
     const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
+    return t('time.daysAgo', { count: days });
   }
 
   render() {
@@ -672,6 +679,7 @@ export class ProjectWorkspace extends LitElement {
             ${this._activeTab === 'tasks' ? html`
               <task-board project-id=${this.projectId} .sessions=${this._sessions}></task-board>
             ` : nothing}
+            ${this._activeTab === 'requirements' ? this._renderRequirements() : nothing}
             ${this._activeTab === 'plans' ? this._renderPlans() : nothing}
             ${this._activeTab === 'agents' ? this._renderAgents() : nothing}
             ${this._activeTab === 'automations' ? html`<automation-panel .projectId=${this._project!.id}></automation-panel>` : nothing}
@@ -776,13 +784,39 @@ export class ProjectWorkspace extends LitElement {
     `;
   }
 
+  private _renderRequirements() {
+    return html`
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">
+            <sl-icon name="bullseye"></sl-icon>
+            ${t('workspace.tab.requirements')}
+          </span>
+        </div>
+
+        ${this._selectedRequirementId ? html`
+          <requirement-detail
+            .projectId=${this.projectId}
+            .requirementId=${this._selectedRequirementId}
+            @requirement-back=${() => { this._selectedRequirementId = null; window.history.replaceState(null, '', `/projects/${this.projectId}/requirements`); }}
+          ></requirement-detail>
+        ` : html`
+          <requirement-list
+            .projectId=${this.projectId}
+            @requirement-select=${(e: CustomEvent) => { this._selectedRequirementId = e.detail.requirementId; window.history.replaceState(null, '', `/projects/${this.projectId}/requirements/${e.detail.requirementId}`); }}
+          ></requirement-list>
+        `}
+      </div>
+    `;
+  }
+
   private _renderPlans() {
     return html`
       <div class="section">
         <div class="section-header">
           <span class="section-title">
             <sl-icon name="file-earmark-text"></sl-icon>
-            Plans
+            ${t('workspace.tab.plans')}
             <sl-badge variant="neutral" pill>${this._planCount}</sl-badge>
           </span>
         </div>
@@ -865,6 +899,7 @@ export class ProjectWorkspace extends LitElement {
       <nav class="tab-nav">
         ${tab('overview', t('workspace.tab.overview'), 'grid-1x2')}
         ${tab('tasks', t('workspace.tab.tasks'), 'kanban')}
+        ${tab('requirements', t('workspace.tab.requirements'), 'bullseye')}
         ${tab('plans', t('workspace.tab.plans'), 'file-earmark-text')}
         ${tab('agents', t('workspace.tab.agents'), 'robot')}
         ${tab('graph', t('workspace.tab.graph'), 'diagram-3')}
