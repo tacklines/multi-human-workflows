@@ -433,6 +433,140 @@ async fn test_delete_task_standalone() {
 }
 
 #[tokio::test]
+async fn test_task_multiple_commit_hashes() {
+    let db = setup_db().await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
+
+    let task_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'task', 'Multi-commit task', 'in_progress', $5, NOW(), NOW())"
+    )
+    .bind(task_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
+    .execute(&db).await.unwrap();
+
+    // Append first commit
+    sqlx::query("UPDATE tasks SET commit_hashes = array_append(commit_hashes, $1) WHERE id = $2")
+        .bind("abc123").bind(task_id)
+        .execute(&db).await.unwrap();
+
+    // Append second commit
+    sqlx::query("UPDATE tasks SET commit_hashes = array_append(commit_hashes, $1) WHERE id = $2")
+        .bind("def456").bind(task_id)
+        .execute(&db).await.unwrap();
+
+    let hashes: Vec<String> = sqlx::query_scalar("SELECT commit_hashes FROM tasks WHERE id = $1")
+        .bind(task_id).fetch_one(&db).await.unwrap();
+
+    assert_eq!(hashes, vec!["abc123".to_string(), "def456".to_string()]);
+}
+
+#[tokio::test]
+async fn test_task_no_code_change_flag() {
+    let db = setup_db().await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
+
+    let task_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'task', 'Documentation task', 'in_progress', $5, NOW(), NOW())"
+    )
+    .bind(task_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
+    .execute(&db).await.unwrap();
+
+    // Close with no_code_change instead of commit hashes
+    sqlx::query(
+        "UPDATE tasks SET status = 'done', no_code_change = true, closed_at = NOW(), updated_at = NOW() WHERE id = $1"
+    )
+    .bind(task_id)
+    .execute(&db).await.unwrap();
+
+    let (status, no_code, hashes): (String, bool, Vec<String>) = sqlx::query_as(
+        "SELECT status, no_code_change, commit_hashes FROM tasks WHERE id = $1"
+    )
+    .bind(task_id)
+    .fetch_one(&db).await.unwrap();
+
+    assert_eq!(status, "done");
+    assert!(no_code, "no_code_change should be true");
+    assert!(hashes.is_empty(), "commit_hashes should be empty");
+}
+
+#[tokio::test]
+async fn test_task_source_provenance() {
+    let db = setup_db().await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
+
+    // Create parent task (the source)
+    let source_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'task', 'Investigation task', 'done', $5, NOW(), NOW())"
+    )
+    .bind(source_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
+    .execute(&db).await.unwrap();
+
+    // Create derived task with source provenance
+    let derived_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, source_task_id, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'bug', 'Bug found during investigation', 'open', $5, $6, NOW(), NOW())"
+    )
+    .bind(derived_id).bind(session_id).bind(project_id).bind(next_ticket())
+    .bind(source_id).bind(participant_id)
+    .execute(&db).await.unwrap();
+
+    let source: Option<Uuid> = sqlx::query_scalar(
+        "SELECT source_task_id FROM tasks WHERE id = $1"
+    )
+    .bind(derived_id)
+    .fetch_one(&db).await.unwrap();
+
+    assert_eq!(source, Some(source_id));
+
+    // Query all tasks derived from source
+    let derived: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, title FROM tasks WHERE source_task_id = $1"
+    )
+    .bind(source_id)
+    .fetch_all(&db).await.unwrap();
+
+    assert_eq!(derived.len(), 1);
+    assert_eq!(derived[0].0, derived_id);
+}
+
+#[tokio::test]
+async fn test_task_priority() {
+    let db = setup_db().await;
+    let (session_id, project_id, participant_id) = create_test_session(&db).await;
+
+    let task_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, task_type, title, status, priority, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'bug', 'Critical bug', 'open', 'critical', $5, NOW(), NOW())"
+    )
+    .bind(task_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
+    .execute(&db).await.unwrap();
+
+    let priority: String = sqlx::query_scalar("SELECT priority FROM tasks WHERE id = $1")
+        .bind(task_id).fetch_one(&db).await.unwrap();
+    assert_eq!(priority, "critical");
+
+    // Test all valid priority values
+    for val in &["critical", "high", "medium", "low"] {
+        sqlx::query("UPDATE tasks SET priority = $1 WHERE id = $2")
+            .bind(*val).bind(task_id)
+            .execute(&db).await
+            .unwrap_or_else(|e| panic!("Priority '{val}' should be valid: {e}"));
+    }
+
+    // Invalid priority should fail
+    let result = sqlx::query("UPDATE tasks SET priority = 'invalid' WHERE id = $1")
+        .bind(task_id).execute(&db).await;
+    assert!(result.is_err(), "Invalid priority should be rejected");
+}
+
+#[tokio::test]
 async fn test_delete_nonexistent_task() {
     let db = setup_db().await;
 
