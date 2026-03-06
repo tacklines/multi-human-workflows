@@ -8,7 +8,7 @@
 
 Deploy Seam to Amazon EKS with security as a cross-cutting concern from Phase 1 onward. Agent workspaces execute untrusted code — every phase accounts for isolation, resource control, and blast radius containment.
 
-See [ADR-001](adrs/ADR-001-k3s.md) for the EKS decision, [ADR-002](adrs/ADR-002-self-hosted.md) for managed services strategy.
+See [ADR-001](adrs/ADR-001-eks.md) for the EKS decision, [ADR-002](adrs/ADR-002-managed-services.md) for managed services strategy.
 
 ## Cluster Layout
 
@@ -519,8 +519,8 @@ Implementation tasks (decisions are in ADRs):
 
 | ADR | Decision |
 |-----|----------|
-| [ADR-001](adrs/ADR-001-k3s.md) | EKS for container orchestration |
-| [ADR-002](adrs/ADR-002-self-hosted.md) | Managed services for stateful infrastructure |
+| [ADR-001](adrs/ADR-001-eks.md) | EKS for container orchestration |
+| [ADR-002](adrs/ADR-002-managed-services.md) | Managed services for stateful infrastructure |
 | [ADR-003](adrs/ADR-003-oidc-provider.md) | Zitadel as OIDC provider |
 | [ADR-004](adrs/ADR-004-tls-termination.md) | ALB + ACM for ingress and TLS |
 | [ADR-005](adrs/ADR-005-secrets-management.md) | AWS Secrets Manager + External Secrets Operator |
