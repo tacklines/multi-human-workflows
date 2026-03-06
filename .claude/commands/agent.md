@@ -37,3 +37,13 @@ Repeat until no actionable tasks remain:
 - Stay focused on assigned/available tasks. Do not refactor unrelated code.
 - Prefer small, incremental commits over large batches.
 - Always push your branch before stopping — unpushed work is lost work.
+
+## Available Skills
+
+Tackline skills are installed and available. Key skills for agent work:
+- `/gather` — Research and collect information
+- `/decompose` — Break goals into sub-tasks
+- `/review` — Structured code review
+- `/retro` — Session retrospective
+
+Use task management through Seam MCP tools, not bd/tk commands.

@@ -104,6 +104,15 @@ data "coder_parameter" "workspace_id" {
   default      = ""
 }
 
+data "coder_parameter" "tackline_repo_url" {
+  name         = "tackline_repo_url"
+  display_name = "Tackline Repo URL"
+  description  = "Git repository for tackline skills. Leave empty to skip."
+  type         = "string"
+  mutable      = false
+  default      = "https://github.com/tyevans/tackline.git"
+}
+
 data "coder_parameter" "credentials_json" {
   name         = "credentials_json"
   display_name = "Credentials JSON"
@@ -258,6 +267,14 @@ FORWARDER
       echo "Injecting credentials..."
       eval "$(echo "$CREDS_JSON" | jq -r 'to_entries[] | "export \(.key)=\(.value | @sh)"')"
       echo "Injected $(echo "$CREDS_JSON" | jq 'length') credential(s)"
+    fi
+
+    # Install tackline skills
+    if [ -n "${data.coder_parameter.tackline_repo_url.value}" ]; then
+      echo "Installing tackline..."
+      git clone --depth 1 "${data.coder_parameter.tackline_repo_url.value}" /opt/tackline
+      /opt/tackline/install.sh
+      echo "Tackline installed: $(ls ~/.claude/skills/ 2>/dev/null | wc -l) skills"
     fi
 
     # Configure Seam MCP tools if agent_code is provided
