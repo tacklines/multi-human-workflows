@@ -2,7 +2,6 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import { store } from '../../state/app-state.js';
 import { fetchTasks, fetchProjectTasks, createTask, updateTask, deleteTask } from '../../state/task-api.js';
-import { navigateTo } from '../../router.js';
 import {
   type TaskView, type TaskType, type TaskStatus, type TaskPriority, type TaskComplexity,
   TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
@@ -319,6 +318,56 @@ export class TaskBoard extends LitElement {
       font-style: italic;
     }
 
+    /* ── Progress bar on kanban cards ── */
+    .kanban-progress {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-top: 0.3rem;
+    }
+
+    .kanban-progress-bar {
+      flex: 1;
+      height: 4px;
+      background: var(--border-subtle);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .kanban-progress-fill {
+      height: 100%;
+      background: var(--sl-color-success-500);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    .kanban-progress-label {
+      font-size: 0.65rem;
+      color: var(--text-tertiary);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* ── Collapse toggle in list view ── */
+    .collapse-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.1rem;
+    }
+
+    /* ── Progress chip in list meta ── */
+    .progress-chip {
+      display: inline-block;
+      padding: 0 0.35rem;
+      background: color-mix(in srgb, var(--sl-color-success-500) 15%, transparent);
+      color: var(--sl-color-success-600);
+      border-radius: 3px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      font-family: var(--sl-font-mono);
+    }
+
     @media (max-width: 900px) {
       .kanban {
         grid-template-columns: 1fr;
@@ -493,6 +542,9 @@ export class TaskBoard extends LitElement {
   @state() private _searchQuery = '';
   @state() private _sortBy: 'created' | 'updated' | 'title' | 'type' = 'created';
   @state() private _filterAssignee = '';
+  @state() private _hideCompleted = true;
+  @state() private _collapseSubtasks = true;  // kanban: hide subtasks, show progress on parents
+  @state() private _collapsedGroups: Set<string> = new Set();  // list: collapsed parent IDs
   private _dragTaskId: string | null = null;
   @state() private _showCreateDialog = false;
   @state() private _showShortcuts = false;
@@ -638,26 +690,34 @@ export class TaskBoard extends LitElement {
     this._selectedTaskId = taskId;
     const task = this._tasks.find(t => t.id === taskId);
     if (task) {
+      let path = '';
       if (this.sessionCode) {
-        navigateTo(`/sessions/${this.sessionCode}/tasks/${task.ticket_id}`);
+        path = `/sessions/${this.sessionCode}/tasks/${task.ticket_id}`;
       } else if (this.projectId) {
-        navigateTo(`/projects/${this.projectId}/tasks/${task.ticket_id}`);
+        path = `/projects/${this.projectId}/tasks/${task.ticket_id}`;
       }
+      if (path) history.pushState(null, '', path);
     }
   }
 
   private _deselectTask() {
     this._selectedTaskId = null;
+    let path = '';
     if (this.sessionCode) {
-      navigateTo(`/sessions/${this.sessionCode}`);
+      path = `/sessions/${this.sessionCode}`;
     } else if (this.projectId) {
-      navigateTo(`/projects/${this.projectId}`);
+      path = `/projects/${this.projectId}/tasks`;
     }
+    if (path) history.pushState(null, '', path);
     this._loadTasks();
   }
 
   private get _filteredTasks(): TaskView[] {
     let tasks = this._tasks;
+    // Hide completed unless toggled or explicitly filtering for a completed status
+    if (this._hideCompleted && !this._filterStatus) {
+      tasks = tasks.filter(t => t.status !== 'done' && t.status !== 'closed');
+    }
     if (this._searchQuery.trim()) {
       const q = this._searchQuery.toLowerCase();
       tasks = tasks.filter(t =>
@@ -688,6 +748,23 @@ export class TaskBoard extends LitElement {
         break;
     }
     return sorted;
+  }
+
+  /** Count of hidden completed tasks (for the toggle label). */
+  private get _completedCount(): number {
+    return this._tasks.filter(t => t.status === 'done' || t.status === 'closed').length;
+  }
+
+  /** Get child tasks for a parent (from full task list, not filtered). */
+  private _childrenOf(parentId: string): TaskView[] {
+    return this._tasks.filter(t => t.parent_id === parentId);
+  }
+
+  /** Progress for a parent: [done+closed, total children]. */
+  private _childProgress(parentId: string): [number, number] {
+    const children = this._childrenOf(parentId);
+    const complete = children.filter(t => t.status === 'done' || t.status === 'closed').length;
+    return [complete, children.length];
   }
 
   private _showToast(message: string) {
@@ -955,6 +1032,20 @@ export class TaskBoard extends LitElement {
           <sl-option value="title">Title A-Z</sl-option>
           <sl-option value="type">Type</sl-option>
         </sl-select>
+
+        ${this._completedCount > 0 ? html`
+          <sl-tooltip content=${this._hideCompleted ? `Show ${this._completedCount} completed` : 'Hide completed'}>
+            <sl-button
+              size="small"
+              variant=${this._hideCompleted ? 'default' : 'primary'}
+              @click=${() => { this._hideCompleted = !this._hideCompleted; }}
+              style="white-space: nowrap;"
+            >
+              <sl-icon slot="prefix" name=${this._hideCompleted ? 'eye' : 'eye-slash'}></sl-icon>
+              ${this._hideCompleted ? `${this._completedCount} done` : 'Hide done'}
+            </sl-button>
+          </sl-tooltip>
+        ` : nothing}
       </div>
 
       ${this._error ? html`
@@ -986,14 +1077,16 @@ export class TaskBoard extends LitElement {
     const inProgress = tasks.filter(t => t.status === 'in_progress').length;
     const done = tasks.filter(t => t.status === 'done').length;
     const closed = tasks.filter(t => t.status === 'closed').length;
+    const showing = this._filteredTasks.length;
 
     return html`
       <div class="stats-bar">
-        <div class="stat"><span class="stat-value">${tasks.length}</span> total</div>
+        <div class="stat"><span class="stat-value">${showing}</span> showing</div>
         <div class="stat"><span class="stat-value">${open}</span> open</div>
         <div class="stat"><span class="stat-value">${inProgress}</span> in progress</div>
         <div class="stat"><span class="stat-value">${done}</span> done</div>
         ${closed > 0 ? html`<div class="stat"><span class="stat-value">${closed}</span> closed</div>` : nothing}
+        ${showing < tasks.length ? html`<div class="stat" style="margin-left: auto; color: var(--text-tertiary);">${tasks.length - showing} hidden</div>` : nothing}
       </div>
     `;
   }
@@ -1028,6 +1121,16 @@ export class TaskBoard extends LitElement {
     `;
   }
 
+  private _toggleGroup(parentId: string) {
+    const next = new Set(this._collapsedGroups);
+    if (next.has(parentId)) {
+      next.delete(parentId);
+    } else {
+      next.add(parentId);
+    }
+    this._collapsedGroups = next;
+  }
+
   private _renderTaskList() {
     const tasks = this._filteredTasks;
     const topLevel = tasks.filter(t => !t.parent_id);
@@ -1036,36 +1139,52 @@ export class TaskBoard extends LitElement {
     return html`
       ${this._renderBatchBar()}
       <div class="task-list">
-        ${topLevel.map(task => html`
-          ${this._renderTaskCard(task, false)}
-          ${childrenOf(task.id).map(child => this._renderTaskCard(child, true))}
-        `)}
+        ${topLevel.map(task => {
+          const children = childrenOf(task.id);
+          const isCollapsed = this._collapsedGroups.has(task.id);
+          const hasChildren = children.length > 0;
+          return html`
+            ${this._renderTaskCard(task, false, hasChildren, isCollapsed)}
+            ${hasChildren && !isCollapsed ? children.map(child => this._renderTaskCard(child, true, false, false)) : nothing}
+          `;
+        })}
       </div>
     `;
   }
 
-  private _renderTaskCard(task: TaskView, isChild: boolean) {
+  private _renderTaskCard(task: TaskView, isChild: boolean, hasChildren = false, isCollapsed = false) {
     const typeColor = TASK_TYPE_COLORS[task.task_type];
     const assignee = this._getParticipantName(task.assigned_to);
     const isSelected = this._selectedIds.has(task.id);
+    const [done, total] = hasChildren ? this._childProgress(task.id) : [0, 0];
 
     return html`
       <div class="task-card ${isChild ? 'child' : ''} ${isSelected ? 'selected' : ''}" @click=${() => { this._selectTask(task.id); }}>
         <div class="select-checkbox" @click=${(e: Event) => { e.stopPropagation(); this._toggleSelect(task.id); }}>
           <sl-icon name=${isSelected ? 'check-square-fill' : 'square'} style="font-size: 1rem; color: ${isSelected ? 'var(--sl-color-primary-500)' : 'var(--text-tertiary)'}; cursor: pointer;"></sl-icon>
         </div>
-        <div class="task-type-icon">
-          <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${typeColor}"></sl-icon>
-        </div>
+        ${hasChildren ? html`
+          <div class="collapse-toggle" @click=${(e: Event) => { e.stopPropagation(); this._toggleGroup(task.id); }}>
+            <sl-icon name=${isCollapsed ? 'chevron-right' : 'chevron-down'} style="font-size: 0.85rem; color: var(--text-tertiary); cursor: pointer;"></sl-icon>
+          </div>
+        ` : html`
+          <div class="task-type-icon">
+            <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${typeColor}"></sl-icon>
+          </div>
+        `}
 
         <div class="task-info">
-          <div class="task-title">${task.title}</div>
+          <div class="task-title">
+            ${hasChildren ? html`<sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${typeColor}; font-size: 0.85rem; vertical-align: middle; margin-right: 0.25rem;"></sl-icon>` : nothing}
+            ${task.title}
+          </div>
           <div class="task-meta">
             <span style="font-family: var(--sl-font-mono); color: var(--text-tertiary);">${task.ticket_id}</span>
             ${task.priority !== 'medium' ? html`&middot; <sl-icon name=${PRIORITY_ICONS[task.priority]} style="color: ${PRIORITY_COLORS[task.priority]}; font-size: 0.75rem; vertical-align: middle;"></sl-icon>` : nothing}
             &middot; ${TASK_TYPE_LABELS[task.task_type]}
             ${assignee ? html` &middot; ${assignee}` : nothing}
-            ${task.child_count > 0 ? html` &middot; <sl-icon name="diagram-3" style="font-size: 0.7rem; vertical-align: middle;"></sl-icon> ${task.child_count}` : nothing}
+            ${hasChildren ? html` &middot; <span class="progress-chip">${done}/${total}</span>` : nothing}
+            ${!hasChildren && task.child_count > 0 ? html` &middot; <sl-icon name="diagram-3" style="font-size: 0.7rem; vertical-align: middle;"></sl-icon> ${task.child_count}` : nothing}
             ${task.comment_count > 0 ? html` &middot; <sl-icon name="chat-dots" style="font-size: 0.7rem; vertical-align: middle;"></sl-icon> ${task.comment_count}` : nothing}
           </div>
         </div>
@@ -1116,13 +1235,20 @@ export class TaskBoard extends LitElement {
   }
 
   private _renderKanban() {
-    const statuses: TaskStatus[] = ['open', 'in_progress', 'done', 'closed'];
+    // When hiding completed, only show open + in_progress columns
+    const statuses: TaskStatus[] = this._hideCompleted
+      ? ['open', 'in_progress']
+      : ['open', 'in_progress', 'done', 'closed'];
     const tasks = this._filteredTasks;
+    // In kanban, hide subtasks that have a parent — they show as progress on the parent card
+    const kanbanTasks = this._collapseSubtasks
+      ? tasks.filter(t => !t.parent_id)
+      : tasks;
     const tasksByStatus = (status: TaskStatus) =>
-      tasks.filter(t => t.status === status);
+      kanbanTasks.filter(t => t.status === status);
 
     return html`
-      <div class="kanban">
+      <div class="kanban" style="grid-template-columns: repeat(${statuses.length}, 1fr);">
         ${statuses.map(status => html`
           <div class="kanban-column">
             <div class="kanban-column-header status-${status}">
@@ -1174,6 +1300,8 @@ export class TaskBoard extends LitElement {
   private _renderKanbanCard(task: TaskView) {
     const typeColor = TASK_TYPE_COLORS[task.task_type];
     const assignee = this._getParticipantName(task.assigned_to);
+    const [done, total] = task.child_count > 0 ? this._childProgress(task.id) : [0, 0];
+    const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
 
     return html`
       <div
@@ -1191,14 +1319,17 @@ export class TaskBoard extends LitElement {
           <span class="kanban-card-title">${task.title}</span>
           ${task.priority !== 'medium' ? html`<sl-icon name=${PRIORITY_ICONS[task.priority]} style="color: ${PRIORITY_COLORS[task.priority]}; font-size: 0.75rem; flex-shrink: 0;"></sl-icon>` : nothing}
         </div>
+        ${total > 0 ? html`
+          <div class="kanban-progress">
+            <div class="kanban-progress-bar">
+              <div class="kanban-progress-fill" style="width: ${progressPct}%"></div>
+            </div>
+            <span class="kanban-progress-label">${done}/${total}</span>
+          </div>
+        ` : nothing}
         <div class="kanban-card-footer">
           <span class="kanban-card-counts">
             <span style="font-family: var(--sl-font-mono);">${task.ticket_id}</span>
-            ${task.child_count > 0 ? html`
-              <span class="kanban-card-count">
-                <sl-icon name="diagram-3"></sl-icon> ${task.child_count}
-              </span>
-            ` : nothing}
             ${task.comment_count > 0 ? html`
               <span class="kanban-card-count">
                 <sl-icon name="chat-dots"></sl-icon> ${task.comment_count}
@@ -1365,7 +1496,8 @@ export class TaskBoard extends LitElement {
 
           <sl-input
             label="Branch"
-            placeholder="Default branch"
+            placeholder="Auto-generated (agent/<type>-<id>)"
+            help-text="Leave empty to auto-create a branch for this agent"
             value=${this._agentBranch}
             @sl-input=${(e: Event) => { this._agentBranch = (e.target as HTMLInputElement).value; }}
           ></sl-input>
@@ -1396,7 +1528,7 @@ export class TaskBoard extends LitElement {
     this._agentLoading = true;
     this._agentError = '';
     try {
-      await launchAgent(this.sessionCode, {
+      const result = await launchAgent(this.sessionCode, {
         agent_type: this._agentType,
         branch: this._agentBranch || undefined,
         instructions: this._agentInstructions || undefined,
@@ -1405,7 +1537,7 @@ export class TaskBoard extends LitElement {
       this._agentType = 'coder';
       this._agentBranch = '';
       this._agentInstructions = '';
-      this._toastMessage = 'Agent launched! It will appear in the session shortly.';
+      this._toastMessage = `Agent launched on branch ${result.branch}. It will appear in the session shortly.`;
       setTimeout(() => { this._toastMessage = ''; }, 4000);
     } catch (err) {
       this._agentError = err instanceof Error ? err.message : 'Failed to launch agent';

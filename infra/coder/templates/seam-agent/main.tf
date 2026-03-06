@@ -221,6 +221,18 @@ if __name__ == "__main__": main()
 FORWARDER
     chmod +x /opt/seam/log-forwarder.py
 
+    # Configure git credential helper if GIT_TOKEN is available
+    if [ -n "$GIT_TOKEN" ]; then
+      echo "Configuring git credentials..."
+      git config --global credential.helper '!f() { echo "password=$GIT_TOKEN"; }; f'
+      # Also set up for HTTPS clone URLs that need auth
+      REPO_HOST=$(echo "${data.coder_parameter.repo_url.value}" | sed -n 's|https://\([^/]*\)/.*|\1|p')
+      if [ -n "$REPO_HOST" ]; then
+        git config --global "credential.https://$REPO_HOST.helper" \
+          '!f() { echo "username=git"; echo "password='"$GIT_TOKEN"'"; }; f'
+      fi
+    fi
+
     # Clone repo if specified and /workspace is empty
     if [ -n "${data.coder_parameter.repo_url.value}" ] && [ ! -d "/workspace/.git" ]; then
       echo "Cloning ${data.coder_parameter.repo_url.value}..."
@@ -293,14 +305,16 @@ FORWARDER
   EOT
 
   env = {
-    GIT_AUTHOR_NAME    = data.coder_workspace_owner.me.name
-    GIT_AUTHOR_EMAIL   = data.coder_workspace_owner.me.email
-    SEAM_URL           = data.coder_parameter.seam_url.value
-    SEAM_AGENT_CODE    = data.coder_parameter.agent_code.value
-    SEAM_AGENT_TYPE    = data.coder_parameter.agent_type.value
-    SEAM_TOKEN         = data.coder_parameter.seam_token.value
-    SEAM_INSTRUCTIONS  = data.coder_parameter.instructions.value
-    SEAM_WORKSPACE_ID  = data.coder_parameter.workspace_id.value
+    GIT_AUTHOR_NAME      = data.coder_workspace_owner.me.name
+    GIT_AUTHOR_EMAIL     = data.coder_workspace_owner.me.email
+    GIT_COMMITTER_NAME   = data.coder_workspace_owner.me.name
+    GIT_COMMITTER_EMAIL  = data.coder_workspace_owner.me.email
+    SEAM_URL             = data.coder_parameter.seam_url.value
+    SEAM_AGENT_CODE      = data.coder_parameter.agent_code.value
+    SEAM_AGENT_TYPE      = data.coder_parameter.agent_type.value
+    SEAM_TOKEN           = data.coder_parameter.seam_token.value
+    SEAM_INSTRUCTIONS    = data.coder_parameter.instructions.value
+    SEAM_WORKSPACE_ID    = data.coder_parameter.workspace_id.value
   }
 }
 

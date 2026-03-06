@@ -32,6 +32,7 @@ pub struct LaunchAgentResponse {
     pub workspace_id: Uuid,
     pub participant_id: Uuid,
     pub agent_code: String,
+    pub branch: String,
     pub status: WorkspaceStatus,
 }
 
@@ -102,11 +103,9 @@ pub async fn launch_agent(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let agent_type = req.agent_type.unwrap_or_else(|| "coder".to_string());
-    let branch = req.branch.or_else(|| {
-        let b = &project.default_branch;
-        if b.is_empty() { None } else { Some(b.clone()) }
-    });
     let template_name = "seam-agent".to_string();
+
+    let user_branch = req.branch.filter(|b| !b.is_empty());
 
     // Determine the Seam server URL that the agent should connect to.
     // In production this would be a public URL; for local dev we use host.docker.internal
@@ -114,7 +113,7 @@ pub async fn launch_agent(
     let seam_url = std::env::var("SEAM_URL")
         .unwrap_or_else(|_| "http://host.docker.internal:3002".to_string());
 
-    // Create workspace record
+    // Create workspace record (branch set below after auto-generation)
     let workspace = sqlx::query_as::<_, Workspace>(
         "INSERT INTO workspaces (task_id, project_id, template_name, branch, status)
          VALUES ($1, $2, $3, $4, 'pending')
@@ -123,13 +122,28 @@ pub async fn launch_agent(
     .bind(req.task_id.unwrap_or(Uuid::nil()))
     .bind(session.project_id)
     .bind(&template_name)
-    .bind(&branch)
+    .bind(user_branch.as_deref().unwrap_or(""))
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
         tracing::error!("Failed to create workspace record: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+
+    // Auto-generate branch name if user didn't specify one
+    let branch = if let Some(b) = user_branch {
+        b
+    } else {
+        let short_id = &workspace.id.to_string()[..8];
+        let auto_branch = format!("agent/{}-{}", agent_type, short_id);
+        // Update workspace record with the generated branch
+        let _ = sqlx::query("UPDATE workspaces SET branch = $2 WHERE id = $1")
+            .bind(workspace.id)
+            .bind(&auto_branch)
+            .execute(&state.db)
+            .await;
+        auto_branch
+    };
 
     // Create the agent participant record immediately so it shows in the UI
     let agent_display_name = format!("{}'s {} Agent", user.display_name, capitalize(&agent_type));
@@ -210,6 +224,7 @@ pub async fn launch_agent(
     let repo_url = project.repo_url.clone().unwrap_or_default();
     let agent_code_clone = agent_code.clone();
 
+    let branch_clone = branch.clone();
     tokio::spawn(async move {
         let client = coder::CoderClient::new(coder_url, coder_token);
         provision_agent_workspace(
@@ -217,7 +232,7 @@ pub async fn launch_agent(
             &client,
             ws_id,
             &template_name,
-            branch.as_deref(),
+            &branch_clone,
             &repo_url,
             &seam_url,
             &agent_code_clone,
@@ -236,6 +251,7 @@ pub async fn launch_agent(
             workspace_id: workspace.id,
             participant_id: agent_participant_id,
             agent_code,
+            branch,
             status: WorkspaceStatus::Pending,
         }),
     ))
@@ -247,7 +263,7 @@ async fn provision_agent_workspace(
     client: &coder::CoderClient,
     workspace_id: Uuid,
     template_name: &str,
-    branch: Option<&str>,
+    branch: &str,
     repo_url: &str,
     seam_url: &str,
     agent_code: &str,
@@ -309,18 +325,28 @@ async fn provision_agent_workspace(
             value: repo_url.to_string(),
         });
     }
-    if let Some(b) = branch {
+    if !branch.is_empty() {
         params.push(coder::RichParameterValue {
             name: "branch".to_string(),
-            value: b.to_string(),
+            value: branch.to_string(),
         });
     }
-    if let Some(instr) = instructions {
-        params.push(coder::RichParameterValue {
-            name: "instructions".to_string(),
-            value: instr.to_string(),
-        });
-    }
+
+    // Auto-append git workflow instructions
+    let push_instructions = format!(
+        "IMPORTANT: You are working on branch `{}`. \
+         When you complete your work, commit your changes and push the branch with `git push -u origin {}`. \
+         This ensures your changes are preserved and available for review.",
+        branch, branch,
+    );
+    let full_instructions = match instructions {
+        Some(instr) => format!("{}\n\n{}", instr, push_instructions),
+        None => push_instructions,
+    };
+    params.push(coder::RichParameterValue {
+        name: "instructions".to_string(),
+        value: full_instructions,
+    });
 
     // Inject merged org + user credentials
     match crate::credentials::credentials_for_workspace(db, org_id, user_id).await {

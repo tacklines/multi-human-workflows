@@ -21,6 +21,7 @@ export interface LaunchAgentResponse {
   workspace_id: string;
   participant_id: string;
   agent_code: string;
+  branch: string;
   status: string;
 }
 
