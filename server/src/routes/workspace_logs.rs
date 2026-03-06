@@ -11,11 +11,6 @@ use crate::agent_token;
 use crate::log_buffer::LogLine;
 use crate::AppState;
 
-#[derive(Debug, Deserialize)]
-pub struct IngestPath {
-    pub workspace_id: Uuid,
-}
-
 /// Extract and validate a Bearer token from headers.
 /// Returns Ok(()) if valid agent token or auth is disabled, Err(401) otherwise.
 async fn validate_agent_auth(

@@ -396,10 +396,6 @@ pub struct SeamMcp {
 
 #[tool_router]
 impl SeamMcp {
-    pub fn new(db: PgPool) -> Self {
-        Self::with_code_index(db, None)
-    }
-
     pub fn with_code_index(
         db: PgPool,
         code_index: Option<std::sync::Arc<crate::code_search::CodeIndex>>,
