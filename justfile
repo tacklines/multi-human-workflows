@@ -112,6 +112,13 @@ install:
 test:
     cd server && cargo test
 
+# Run frontend tests
+test-frontend:
+    cd frontend && npm test
+
+# Run all tests
+test-all: test test-frontend
+
 # Show Docker container status
 ps:
     docker compose ps
