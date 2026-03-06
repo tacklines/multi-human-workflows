@@ -557,6 +557,14 @@ impl SeamMcp {
         .execute(&self.db)
         .await {
             Ok(_) => {
+                // Auto-add task to session
+                sqlx::query("INSERT INTO session_tasks (session_id, task_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+                    .bind(session_id)
+                    .bind(task_id)
+                    .execute(&self.db)
+                    .await
+                    .ok();
+
                 // Record activity
                 let prefix = self.get_ticket_prefix();
                 let ticket_id = format!("{}-{}", prefix, ticket_number);
@@ -2753,6 +2761,16 @@ impl SeamMcp {
         .map_err(|e| format!("Database error: {e}"))?;
 
         // Mark any existing agent participants from this sponsor as disconnected
+        let old_agents: Vec<(Uuid,)> = sqlx::query_as(
+            "SELECT id FROM participants
+             WHERE session_id = $1 AND sponsor_id = $2 AND participant_type = 'agent' AND disconnected_at IS NULL",
+        )
+        .bind(session.id)
+        .bind(sponsor.id)
+        .fetch_all(&self.db)
+        .await
+        .map_err(|e| format!("Database error: {e}"))?;
+
         sqlx::query(
             "UPDATE participants SET disconnected_at = NOW()
              WHERE session_id = $1 AND sponsor_id = $2 AND participant_type = 'agent' AND disconnected_at IS NULL",
@@ -2762,6 +2780,20 @@ impl SeamMcp {
         .execute(&self.db)
         .await
         .map_err(|e| format!("Database error: {e}"))?;
+
+        // Notify disconnection of old agents so presence tracking is updated
+        for (old_id,) in &old_agents {
+            let payload = serde_json::json!({
+                "session_code": session.code,
+                "participant_id": old_id.to_string(),
+                "state": "disconnected",
+                "detail": "Replaced by new agent session",
+            });
+            let _ = sqlx::query("SELECT pg_notify('agent_state', $1)")
+                .bind(payload.to_string())
+                .execute(&self.db)
+                .await;
+        }
 
         // Always create a new participant — agents are ephemeral compositions
         let name = display_name

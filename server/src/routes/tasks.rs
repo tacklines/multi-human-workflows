@@ -76,6 +76,11 @@ pub struct AddCommentRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct AddTasksToSessionRequest {
+    pub task_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct ListTasksQuery {
     pub task_type: Option<String>,
     pub status: Option<String>,
@@ -110,6 +115,7 @@ pub struct TaskView {
     pub closed_at: Option<chrono::DateTime<chrono::Utc>>,
     pub child_count: i64,
     pub comment_count: i64,
+    pub session_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Serialize)]
@@ -180,6 +186,7 @@ impl TaskView {
             closed_at: t.closed_at,
             child_count: 0,
             comment_count: 0,
+            session_ids: vec![],
         }
     }
 }
@@ -274,6 +281,15 @@ pub async fn create_task(
         tracing::error!("Failed to create task: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+
+    // Auto-add task to session
+    sqlx::query("INSERT INTO session_tasks (session_id, task_id, added_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING")
+        .bind(session.id)
+        .bind(task_id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .ok(); // Fire and forget
 
     let task: Task = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
         .bind(task_id)
@@ -405,11 +421,26 @@ pub async fn list_tasks(
 
     let comment_map: std::collections::HashMap<Uuid, i64> = comment_counts.into_iter().collect();
 
+    // Batch-fetch session memberships
+    let session_memberships: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT task_id, session_id FROM session_tasks WHERE task_id = ANY($1)"
+    )
+    .bind(&task_ids)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let mut session_map: std::collections::HashMap<Uuid, Vec<Uuid>> = std::collections::HashMap::new();
+    for (task_id, session_id) in session_memberships {
+        session_map.entry(task_id).or_default().push(session_id);
+    }
+
     let views: Vec<TaskView> = tasks.into_iter().map(|t| {
         let id = t.id;
         let mut view = TaskView::from_task(t, &project.ticket_prefix);
         view.child_count = *child_map.get(&id).unwrap_or(&0);
         view.comment_count = *comment_map.get(&id).unwrap_or(&0);
+        view.session_ids = session_map.remove(&id).unwrap_or_default();
         view
     }).collect();
 
@@ -1199,11 +1230,26 @@ pub async fn list_project_tasks(
 
     let comment_map: std::collections::HashMap<Uuid, i64> = comment_counts.into_iter().collect();
 
+    // Batch-fetch session memberships
+    let session_memberships: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT task_id, session_id FROM session_tasks WHERE task_id = ANY($1)"
+    )
+    .bind(&task_ids)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let mut session_map: std::collections::HashMap<Uuid, Vec<Uuid>> = std::collections::HashMap::new();
+    for (task_id, session_id) in session_memberships {
+        session_map.entry(task_id).or_default().push(session_id);
+    }
+
     let views: Vec<TaskView> = tasks.into_iter().map(|t| {
         let id = t.id;
         let mut view = TaskView::from_task(t, &project.ticket_prefix);
         view.child_count = *child_map.get(&id).unwrap_or(&0);
         view.comment_count = *comment_map.get(&id).unwrap_or(&0);
+        view.session_ids = session_map.remove(&id).unwrap_or_default();
         view
     }).collect();
 
@@ -1280,4 +1326,70 @@ pub async fn get_project_task(
         blocks: blocks.iter().map(|t| task_summary_view(t, prefix)).collect(),
         blocked_by: blocked_by.iter().map(|t| task_summary_view(t, prefix)).collect(),
     }))
+}
+
+// --- Session-Task Association ---
+
+pub async fn add_tasks_to_session(
+    State(state): State<Arc<AppState>>,
+    Path(session_code): Path<String>,
+    AuthUser(claims): AuthUser,
+    Json(req): Json<AddTasksToSessionRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let user = crate::db::upsert_user(&state.db, &claims).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let session = resolve_session_pub(&state.db, &session_code).await?;
+    let _participant = resolve_participant(&state.db, session.id, user.id).await?;
+
+    // Validate all tasks belong to the same project as the session
+    if !req.task_ids.is_empty() {
+        let mismatched_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM tasks WHERE id = ANY($1) AND project_id != $2"
+        )
+        .bind(&req.task_ids)
+        .bind(session.project_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        if mismatched_count.0 > 0 {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
+    let mut added: u64 = 0;
+    for task_id in &req.task_ids {
+        let result = sqlx::query(
+            "INSERT INTO session_tasks (session_id, task_id, added_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
+        )
+        .bind(session.id)
+        .bind(task_id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        added += result.rows_affected();
+    }
+
+    Ok(Json(serde_json::json!({ "added": added })))
+}
+
+pub async fn remove_task_from_session(
+    State(state): State<Arc<AppState>>,
+    Path((session_code, task_id)): Path<(String, Uuid)>,
+    AuthUser(claims): AuthUser,
+) -> Result<StatusCode, StatusCode> {
+    let user = crate::db::upsert_user(&state.db, &claims).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let session = resolve_session_pub(&state.db, &session_code).await?;
+    let _participant = resolve_participant(&state.db, session.id, user.id).await?;
+
+    sqlx::query("DELETE FROM session_tasks WHERE session_id = $1 AND task_id = $2")
+        .bind(session.id)
+        .bind(task_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(StatusCode::NO_CONTENT)
 }

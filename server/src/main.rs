@@ -139,6 +139,8 @@ async fn main() {
         .route("/api/sessions/{code}/tasks/{task_id}/comments", post(routes::tasks::add_comment))
         .route("/api/sessions/{code}/tasks/{task_id}/dependencies", post(routes::tasks::add_dependency))
         .route("/api/sessions/{code}/tasks/{task_id}/dependencies/{blocked_id}", delete(routes::tasks::remove_dependency))
+        .route("/api/sessions/{code}/tasks/add", post(routes::tasks::add_tasks_to_session))
+        .route("/api/sessions/{code}/tasks/{task_id}/membership", delete(routes::tasks::remove_task_from_session))
         .route("/api/sessions/{code}/mentions/unread", get(routes::tasks::list_unread_mentions))
         .route("/api/sessions/{code}/mentions/unread", delete(routes::tasks::clear_unread_mentions))
         // Notes
