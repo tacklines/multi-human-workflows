@@ -1,6 +1,5 @@
 # Rust
 server/target/
-server/Cargo.lock
 
 # Node / Frontend
 frontend/node_modules/
