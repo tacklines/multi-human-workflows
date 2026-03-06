@@ -34,7 +34,7 @@ pub struct AppState {
     pub jwks: auth::JwksCache,
     pub connections: ws::ConnectionManager,
     pub coder: Option<coder::CoderClient>,
-    pub keycloak_issuer: String,
+    pub issuer_url: String,
     pub log_buffer: log_buffer::LogBuffer,
     pub code_index: Option<std::sync::Arc<code_search::CodeIndex>>,
     /// Public base URL (from SEAM_URL env or derived from listen address).
@@ -71,10 +71,12 @@ async fn main() {
     let resource_url = std::env::var("SEAM_URL")
         .unwrap_or_else(|_| format!("http://localhost:{port}"));
 
-    let keycloak_url = std::env::var("KEYCLOAK_URL")
-        .unwrap_or_else(|_| "http://localhost:8081".to_string());
-    let realm = std::env::var("KEYCLOAK_REALM")
-        .unwrap_or_else(|_| "seam".to_string());
+    // OIDC configuration — provider-agnostic.
+    // Defaults are for local dev with Keycloak. Production sets these explicitly.
+    let issuer_url = std::env::var("ISSUER_URL")
+        .unwrap_or_else(|_| "http://localhost:8081/realms/seam".to_string());
+    let jwks_url = std::env::var("JWKS_URL")
+        .unwrap_or_else(|_| format!("{}/protocol/openid-connect/certs", issuer_url));
 
     let coder = coder::CoderClient::from_env();
     if coder.is_some() {
@@ -82,8 +84,6 @@ async fn main() {
     } else {
         tracing::info!("Coder integration disabled (CODER_URL not set)");
     }
-
-    let keycloak_issuer = format!("{}/realms/{}", keycloak_url, realm);
 
     // Initialize code search index
     let code_index: Option<std::sync::Arc<code_search::CodeIndex>> = {
@@ -103,11 +103,11 @@ async fn main() {
 
     let state = Arc::new(AppState {
         db,
-        jwks: auth::JwksCache::new(&keycloak_url, &realm),
+        jwks: auth::JwksCache::new(&jwks_url),
         connections: ws::ConnectionManager::new(),
         log_buffer: log_buffer::LogBuffer::new(500),
         coder,
-        keycloak_issuer: keycloak_issuer.clone(),
+        issuer_url: issuer_url.clone(),
         code_index: code_index.clone(),
         resource_url: resource_url.clone(),
     });
@@ -271,32 +271,32 @@ async fn well_known_protected_resource(
     let resource = format!("{}/mcp", state.resource_url.trim_end_matches('/'));
     Json(serde_json::json!({
         "resource": resource,
-        "authorization_servers": [&state.keycloak_issuer],
+        "authorization_servers": [&state.issuer_url],
         "scopes_supported": ["openid", "profile"],
         "bearer_methods_supported": ["header"],
     }))
 }
 
-/// Proxy to Keycloak's OpenID Connect discovery document.
+/// Proxy to the OIDC provider's OpenID Connect discovery document.
 /// MCP clients use this to find token, authorization, and device auth endpoints.
 async fn well_known_authorization_server(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let url = format!(
         "{}/.well-known/openid-configuration",
-        state.keycloak_issuer
+        state.issuer_url
     );
     match reqwest::get(&url).await {
         Ok(resp) => match resp.json::<serde_json::Value>().await {
             Ok(body) => (axum::http::StatusCode::OK, Json(body)).into_response(),
             Err(_) => (
                 axum::http::StatusCode::BAD_GATEWAY,
-                Json(serde_json::json!({"error": "Failed to parse Keycloak response"})),
+                Json(serde_json::json!({"error": "Failed to parse OIDC discovery response"})),
             ).into_response(),
         },
         Err(_) => (
             axum::http::StatusCode::BAD_GATEWAY,
-            Json(serde_json::json!({"error": "Keycloak unavailable"})),
+            Json(serde_json::json!({"error": "OIDC provider unavailable"})),
         ).into_response(),
     }
 }

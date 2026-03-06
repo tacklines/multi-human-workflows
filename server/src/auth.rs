@@ -39,9 +39,9 @@ struct JwksResponse {
 }
 
 impl JwksCache {
-    pub fn new(keycloak_url: &str, realm: &str) -> Self {
+    pub fn new(jwks_url: &str) -> Self {
         Self {
-            certs_url: format!("{}/realms/{}/protocol/openid-connect/certs", keycloak_url, realm),
+            certs_url: jwks_url.to_string(),
             keys: Arc::new(RwLock::new(Vec::new())),
         }
     }

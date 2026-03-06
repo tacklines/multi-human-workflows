@@ -1,8 +1,9 @@
-const KEYCLOAK_URL = (import.meta as any).env?.VITE_KEYCLOAK_URL ?? 'http://localhost:8081';
+// Default is for local dev with Keycloak. Production sets VITE_AUTH_AUTHORITY at build time.
+const AUTH_AUTHORITY = (import.meta as any).env?.VITE_AUTH_AUTHORITY ?? 'http://localhost:8081/realms/seam';
 const APP_URL = (import.meta as any).env?.VITE_APP_URL ?? 'http://localhost:5173';
 
 export const AUTH_CONFIG = {
-  authority: `${KEYCLOAK_URL}/realms/seam`,
+  authority: AUTH_AUTHORITY,
   client_id: 'web-app',
   redirect_uri: `${APP_URL}/auth/callback`,
   post_logout_redirect_uri: `${APP_URL}/`,

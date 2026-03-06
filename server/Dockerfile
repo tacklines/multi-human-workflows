@@ -1,10 +1,15 @@
 # ─── Stage 1: Frontend Build ──────────────────────────────────────────────────
 FROM node:22-bookworm-slim AS frontend
 
+ARG VITE_AUTH_AUTHORITY=http://localhost:8081
+ARG VITE_APP_URL=http://localhost:5173
+
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+ENV VITE_AUTH_AUTHORITY=$VITE_AUTH_AUTHORITY
+ENV VITE_APP_URL=$VITE_APP_URL
 RUN npm run build
 
 # ─── Stage 2: Rust Builder ────────────────────────────────────────────────────
