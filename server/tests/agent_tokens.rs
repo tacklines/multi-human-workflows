@@ -203,7 +203,7 @@ async fn test_token_hash_uniqueness() {
     let db = setup_db().await;
     let user_id = create_user(&db).await;
 
-    let token_hash = hash_token("sat_duplicate_test");
+    let token_hash = hash_token(&format!("sat_dup_{}", Uuid::new_v4()));
 
     sqlx::query(
         "INSERT INTO agent_tokens (token_hash, user_id, display_name, expires_at)
