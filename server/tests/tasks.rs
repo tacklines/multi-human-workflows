@@ -37,7 +37,7 @@ async fn create_test_session(db: &PgPool) -> (Uuid, Uuid, Uuid) {
     sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
         .bind(org_id)
         .bind("Test Org")
-        .bind(format!("test-org-{}", &external_id[..8]))
+        .bind(format!("test-org-{}", Uuid::new_v4()))
         .execute(db).await.unwrap();
 
     let project_id = Uuid::new_v4();
@@ -45,7 +45,7 @@ async fn create_test_session(db: &PgPool) -> (Uuid, Uuid, Uuid) {
         .bind(project_id)
         .bind(org_id)
         .bind("Test Project")
-        .bind(format!("test-proj-{}", &external_id[..8]))
+        .bind(format!("test-proj-{}", Uuid::new_v4()))
         .execute(db).await.unwrap();
 
     let session_id = Uuid::new_v4();
@@ -277,22 +277,22 @@ async fn test_task_commit_link() {
     .bind(task_id).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
     .execute(&db).await.unwrap();
 
-    // Close with commit SHA
+    // Close with commit hashes (TEXT[] array per migration 021)
     let sha = "abc123def456";
     sqlx::query(
-        "UPDATE tasks SET status = 'closed', commit_sha = $1, closed_at = NOW(), updated_at = NOW() WHERE id = $2"
+        "UPDATE tasks SET status = 'closed', commit_hashes = $1, closed_at = NOW(), updated_at = NOW() WHERE id = $2"
     )
-    .bind(sha).bind(task_id)
+    .bind(&[sha] as &[&str]).bind(task_id)
     .execute(&db).await.unwrap();
 
-    let row: (String, String, Option<chrono::DateTime<Utc>>) = sqlx::query_as(
-        "SELECT status, commit_sha, closed_at FROM tasks WHERE id = $1"
+    let row: (String, Vec<String>, Option<chrono::DateTime<Utc>>) = sqlx::query_as(
+        "SELECT status, commit_hashes, closed_at FROM tasks WHERE id = $1"
     )
     .bind(task_id)
     .fetch_one(&db).await.unwrap();
 
     assert_eq!(row.0, "closed");
-    assert_eq!(row.1, sha);
+    assert_eq!(row.1, vec![sha.to_string()]);
     assert!(row.2.is_some(), "closed_at should be set");
 }
 
