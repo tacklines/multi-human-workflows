@@ -675,6 +675,21 @@ impl SeamMcp {
                     serde_json::json!({ "ticket_id": ticket_id, "task_type": params.task_type, "title": params.title }),
                 ).await;
 
+                // Emit domain event for event bridge (automated reactions)
+                let event = crate::events::DomainEvent::new(
+                    "task.created", "task", task_id, Some(participant_id),
+                    serde_json::json!({
+                        "project_id": project_id,
+                        "session_id": session_id,
+                        "ticket_id": ticket_id,
+                        "task_type": params.task_type,
+                        "title": params.title,
+                    }),
+                );
+                if let Err(e) = crate::events::emit(&self.db, &event).await {
+                    tracing::warn!("Failed to emit task_created domain event: {e}");
+                }
+
                 let task = self.fetch_task(task_id).await;
                 match task {
                     Ok(t) => Ok(CallToolResult::success(vec![Content::text(
@@ -999,6 +1014,20 @@ impl SeamMcp {
                     &summary,
                     serde_json::json!({ "ticket_id": ticket_id }),
                 ).await;
+
+                // Emit domain event for event bridge
+                let domain_event_type = if event_type == "task_closed" { "task.closed" } else { "task.updated" };
+                let event = crate::events::DomainEvent::new(
+                    domain_event_type, "task", task_id, Some(participant_id),
+                    serde_json::json!({
+                        "project_id": project_id,
+                        "ticket_id": ticket_id,
+                        "status": status,
+                    }),
+                );
+                if let Err(e) = crate::events::emit(&self.db, &event).await {
+                    tracing::warn!("Failed to emit {domain_event_type} domain event: {e}");
+                }
 
                 let updated = self.fetch_task(task_id).await;
                 match updated {
