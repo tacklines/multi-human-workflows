@@ -18,6 +18,7 @@ import '@shoelace-style/shoelace/dist/components/tab/tab.js';
 import '@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js';
 
 import '../tasks/task-board.js';
+import './activity-view.js';
 
 const API_BASE = '';  // proxied via vite
 
@@ -215,8 +216,8 @@ export class SessionLobby extends LitElement {
     .error-msg { margin-bottom: 0.75rem; }
   `;
 
-  // Set by @vaadin/router
-  location!: RouterLocation;
+  // Set by @vaadin/router — reactive so view switches trigger re-render
+  @state() location!: RouterLocation;
 
   @state() private _lobbyState: LobbyState = 'landing';
   @state() private _joinCode = '';
@@ -231,16 +232,21 @@ export class SessionLobby extends LitElement {
   @state() private _sessionName = '';
 
   private _unsubscribe: (() => void) | null = null;
+  private _popstateHandler = () => this.requestUpdate();
 
   connectedCallback() {
     super.connectedCallback();
+    window.addEventListener('popstate', this._popstateHandler);
     this._unsubscribe = store.subscribe((event) => {
       if (event.type === 'session-connected' || event.type === 'session-updated' || event.type === 'session-disconnected') {
         this._sessionState = store.get().sessionState;
         if (event.type === 'session-connected') {
           this._lobbyState = 'in-session';
           const code = store.get().sessionState?.code;
-          if (code) navigateTo(`/sessions/${code}`);
+          // Only navigate if not already on a session URL (preserves deep-link suffixes like /tasks/:ticketId)
+          if (code && !window.location.pathname.startsWith(`/sessions/${code}`)) {
+            navigateTo(`/sessions/${code}`);
+          }
         } else if (event.type === 'session-disconnected') {
           this._lobbyState = 'landing';
           navigateTo('/projects');
@@ -257,6 +263,7 @@ export class SessionLobby extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsubscribe?.();
+    window.removeEventListener('popstate', this._popstateHandler);
   }
 
   private async _tryJoinFromRoute() {
@@ -469,9 +476,24 @@ export class SessionLobby extends LitElement {
     `;
   }
 
+  private get _isActivityRoute(): boolean {
+    return window.location.pathname.endsWith('/activity');
+  }
+
   private _renderInSession() {
     if (!this._sessionState) return nothing;
     const { session, participantId, agentCode } = this._sessionState;
+
+    if (this._isActivityRoute) {
+      return html`
+        <div class="session-workspace">
+          <activity-view
+            session-code=${session.code}
+            .participants=${session.participants}
+          ></activity-view>
+        </div>
+      `;
+    }
 
     return html`
       <div class="session-workspace">

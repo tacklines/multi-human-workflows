@@ -121,9 +121,26 @@ export class ActivityFeed extends LitElement {
       justify-content: center;
       padding: 1rem;
     }
+
+    .show-all-link {
+      display: block;
+      text-align: center;
+      padding: 0.5rem 0 0.25rem;
+      font-size: 0.7rem;
+      color: var(--sl-color-primary-400);
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .show-all-link:hover {
+      color: var(--sl-color-primary-300);
+      text-decoration: underline;
+    }
   `;
 
   @property({ attribute: 'session-code' }) sessionCode = '';
+  /** Max items to show before truncating with "Show all". 0 = no limit. */
+  @property({ type: Number }) limit = 7;
   @state() private _events: ActivityEvent[] = [];
   @state() private _loading = false;
 
@@ -157,7 +174,9 @@ export class ActivityFeed extends LitElement {
     if (!this.sessionCode) return;
     try {
       this._loading = this._events.length === 0;
-      this._events = await fetchActivity(this.sessionCode, { limit: 30 });
+      // Fetch a few more than the display limit so we know if there's overflow
+      const fetchLimit = this.limit > 0 ? this.limit + 1 : 100;
+      this._events = await fetchActivity(this.sessionCode, { limit: fetchLimit });
     } catch {
       // silent
     } finally {
@@ -168,6 +187,17 @@ export class ActivityFeed extends LitElement {
   /** Called externally when a WebSocket event indicates new activity */
   refresh() {
     this._loadActivity();
+  }
+
+  private get _hasOverflow(): boolean {
+    return this.limit > 0 && this._events.length > this.limit;
+  }
+
+  private get _visibleEvents(): ActivityEvent[] {
+    if (this.limit > 0 && this._events.length > this.limit) {
+      return this._events.slice(0, this.limit);
+    }
+    return this._events;
   }
 
   render() {
@@ -185,8 +215,17 @@ export class ActivityFeed extends LitElement {
           ? html`<div class="empty-state">No activity yet</div>`
           : html`
             <div class="feed-list">
-              ${this._events.map(e => this._renderEvent(e))}
+              ${this._visibleEvents.map(e => this._renderEvent(e))}
             </div>
+            ${this._hasOverflow ? html`
+              <a class="show-all-link" href="/sessions/${this.sessionCode}/activity"
+                @click=${(e: Event) => {
+                  e.preventDefault();
+                  this.dispatchEvent(new CustomEvent('show-all-activity', { bubbles: true, composed: true }));
+                  import('../../router.js').then(m => m.navigateTo(`/sessions/${this.sessionCode}/activity`));
+                }}
+              >Show all activity</a>
+            ` : nothing}
           `}
     `;
   }

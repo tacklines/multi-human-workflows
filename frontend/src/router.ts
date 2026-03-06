@@ -110,6 +110,11 @@ export function initRouter(outlet: HTMLElement): Router {
       component: 'session-lobby',
       action: async () => { await import('./components/session/session-lobby.js'); },
     },
+    {
+      path: '/sessions/:code/activity',
+      component: 'session-lobby',
+      action: async () => { await import('./components/session/session-lobby.js'); },
+    },
   ]);
   return router;
 }
