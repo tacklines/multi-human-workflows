@@ -239,9 +239,11 @@ FORWARDER
         "$STARTUP_LOG" \
         "${data.coder_parameter.seam_url.value}" \
         "${data.coder_parameter.workspace_id.value}" \
-        "${data.coder_parameter.seam_token.value}" &
+        "${data.coder_parameter.seam_token.value}" \
+        > /dev/null 2>&1 &
       STARTUP_FORWARDER_PID=$!
-      # Tee all subsequent output to both stdout and the startup log
+      # Save original fds, tee output to both stdout and startup log
+      exec 3>&1 4>&2
       exec > >(tee -a "$STARTUP_LOG") 2>&1
       echo "Startup log forwarder started (PID: $STARTUP_FORWARDER_PID)"
     fi
@@ -321,10 +323,10 @@ FORWARDER
       echo "Seam MCP configured: ${data.coder_parameter.seam_url.value}/mcp"
       echo "Agent type: ${data.coder_parameter.agent_type.value}"
 
-      # Stop startup log forwarder, switch to agent log forwarder
+      # Stop startup log forwarder, restore original stdout/stderr
       if [ -n "$STARTUP_FORWARDER_PID" ]; then
-        # Give it a moment to flush remaining startup output
         sleep 1
+        exec 1>&3 2>&4 3>&- 4>&-
         kill "$STARTUP_FORWARDER_PID" 2>/dev/null || true
         wait "$STARTUP_FORWARDER_PID" 2>/dev/null || true
       fi
@@ -344,7 +346,8 @@ FORWARDER
           /tmp/claude-agent.log \
           "${data.coder_parameter.seam_url.value}" \
           "${data.coder_parameter.workspace_id.value}" \
-          "${data.coder_parameter.seam_token.value}" &
+          "${data.coder_parameter.seam_token.value}" \
+          > /dev/null 2>&1 &
         echo "Agent log forwarder PID: $!"
       fi
     fi
