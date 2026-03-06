@@ -41,6 +41,8 @@ import "../requests/request-list.js";
 import "../requests/request-detail.js";
 import "../agents/agent-list.js";
 import "../agents/agent-detail.js";
+import "../workspaces/workspace-list.js";
+import "../workspaces/workspace-detail.js";
 import "../tasks/task-board.js";
 import "../automations/automation-panel.js";
 // Lazy-loaded when graph tab is shown (Three.js is ~800KB)
@@ -532,6 +534,7 @@ export class ProjectWorkspace extends LitElement {
   @state() private _selectedRequirementId: string | null = null;
   @state() private _selectedRequestId: string | null = null;
   @state() private _selectedAgentId: string | null = null;
+  @state() private _selectedWorkspaceId = "";
   @state() private _loading = true;
   @state() private _error = "";
   @state() private _showNewSession = false;
@@ -569,6 +572,7 @@ export class ProjectWorkspace extends LitElement {
           "plans",
           "sessions",
           "agents",
+          "workspaces",
           "automations",
         ];
         if (valid.includes(params.tab)) {
@@ -590,6 +594,10 @@ export class ProjectWorkspace extends LitElement {
       if (params.agentId) {
         this._activeTab = "agents";
         this._selectedAgentId = params.agentId;
+      }
+      if (params.workspaceId) {
+        this._activeTab = "workspaces";
+        this._selectedWorkspaceId = params.workspaceId;
       }
     }
     this._loadProject();
@@ -618,6 +626,7 @@ export class ProjectWorkspace extends LitElement {
         "graph",
         "settings",
         "agents",
+        "workspaces",
         "automations",
       ];
       if (valid.includes(this.initialTab)) {
@@ -791,6 +800,9 @@ export class ProjectWorkspace extends LitElement {
                   : nothing}
                 ${this._activeTab === "plans" ? this._renderPlans() : nothing}
                 ${this._activeTab === "agents" ? this._renderAgents() : nothing}
+                ${this._activeTab === "workspaces"
+                  ? this._renderWorkspacesTab()
+                  : nothing}
                 ${this._activeTab === "automations"
                   ? html`<automation-panel
                       .projectId=${this._project!.id}
@@ -1115,14 +1127,12 @@ export class ProjectWorkspace extends LitElement {
                 @click=${(e: MouseEvent) => {
                   // Don't navigate if an action button was clicked
                   if ((e.target as HTMLElement).closest(".ws-actions")) return;
-                  this._switchTab("agents");
-                  if (w.participant_id) {
-                    this._selectedAgentId = w.participant_id;
-                    const base = orgSlug
-                      ? `/orgs/${orgSlug}/projects/${this.projectId}/agents/${w.participant_id}`
-                      : `/projects/${this.projectId}/agents/${w.participant_id}`;
-                    window.history.replaceState(null, "", base);
-                  }
+                  this._selectedWorkspaceId = w.id;
+                  this._switchTab("workspaces");
+                  const base = orgSlug
+                    ? `/orgs/${orgSlug}/projects/${this.projectId}/workspaces/${w.id}`
+                    : `/projects/${this.projectId}/workspaces/${w.id}`;
+                  window.history.replaceState(null, "", base);
                 }}
               >
                 <span class="ws-name"
@@ -1239,6 +1249,7 @@ export class ProjectWorkspace extends LitElement {
         ${tab("requests", t("workspace.tab.requests"), "chat-square-text")}
         ${tab("plans", t("workspace.tab.plans"), "file-earmark-text")}
         ${tab("agents", t("workspace.tab.agents"), "robot")}
+        ${tab("workspaces", t("workspace.tab.workspaces"), "terminal")}
         ${tab("graph", t("workspace.tab.graph"), "diagram-3")}
         ${tab(
           "automations",
@@ -1353,6 +1364,40 @@ export class ProjectWorkspace extends LitElement {
               ></agent-list>
             `}
       </div>
+    `;
+  }
+
+  private _renderWorkspacesTab() {
+    const orgSlug =
+      (this.location?.params as Record<string, string>)?.slug ?? "";
+
+    if (this._selectedWorkspaceId) {
+      return html`
+        <workspace-detail
+          .projectId=${this.projectId}
+          .workspaceId=${this._selectedWorkspaceId}
+          @workspace-back=${() => {
+            this._selectedWorkspaceId = "";
+            const base = orgSlug
+              ? `/orgs/${orgSlug}/projects/${this.projectId}/workspaces`
+              : `/projects/${this.projectId}/workspaces`;
+            window.history.replaceState(null, "", base);
+          }}
+        ></workspace-detail>
+      `;
+    }
+
+    return html`
+      <workspace-list
+        .projectId=${this.projectId}
+        @workspace-select=${(e: CustomEvent) => {
+          this._selectedWorkspaceId = e.detail.workspaceId;
+          const base = orgSlug
+            ? `/orgs/${orgSlug}/projects/${this.projectId}/workspaces/${e.detail.workspaceId}`
+            : `/projects/${this.projectId}/workspaces/${e.detail.workspaceId}`;
+          window.history.replaceState(null, "", base);
+        }}
+      ></workspace-list>
     `;
   }
 

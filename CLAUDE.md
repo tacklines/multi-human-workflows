@@ -113,10 +113,11 @@ Uses `@vaadin/router` (History API, not hash-based). Route config in `frontend/s
 
 - `/projects` — project list
 - `/projects/:id` — project workspace (overview)
-- `/projects/:id/:tab` — project workspace tab (graph, settings, tasks, plans, agents)
+- `/projects/:id/:tab` — project workspace tab (graph, settings, tasks, plans, agents, workspaces)
 - `/projects/:id/tasks/:ticketId` — deep-link to task
 - `/projects/:id/plans/:planId` — deep-link to plan
 - `/projects/:id/agents/:agentId` — deep-link to agent detail
+- `/projects/:id/workspaces/:workspaceId` — deep-link to workspace detail
 - `/sessions/:code` — session lobby
 - `/sessions/:code/tasks/:ticketId` — in-session task deep-link
 

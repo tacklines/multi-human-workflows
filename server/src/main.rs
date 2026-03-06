@@ -195,6 +195,7 @@ async fn main() {
         .route("/api/projects/{project_id}/workspaces", get(routes::workspaces::list_workspaces).post(routes::workspaces::create_workspace))
         .route("/api/projects/{project_id}/workspaces/{workspace_id}", get(routes::workspaces::get_workspace).delete(routes::workspaces::destroy_workspace))
         .route("/api/projects/{project_id}/workspaces/{workspace_id}/stop", post(routes::workspaces::stop_workspace))
+        .route("/api/projects/{project_id}/workspaces/{workspace_id}/events", get(routes::workspaces::workspace_events))
         // Workspace Logs (agent process output)
         .route("/api/workspaces/{workspace_id}/logs", post(routes::workspace_logs::ingest_logs).get(routes::workspace_logs::get_logs))
         // Integrations

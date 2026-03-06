@@ -103,6 +103,24 @@ export async function destroyWorkspace(
   }
 }
 
+export interface WorkspaceEvent {
+  id: number;
+  event_type: string;
+  payload: Record<string, unknown>;
+  occurred_at: string;
+}
+
+export async function fetchWorkspaceEvents(
+  projectId: string,
+  workspaceId: string,
+): Promise<WorkspaceEvent[]> {
+  const res = await fetch(
+    `${API_BASE}/api/projects/${projectId}/workspaces/${workspaceId}/events`,
+    { headers: authHeaders() },
+  );
+  return handleResponse(res);
+}
+
 export interface CoderStatus {
   enabled: boolean;
   connected: boolean;

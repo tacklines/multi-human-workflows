@@ -554,3 +554,44 @@ pub async fn destroy_workspace(
 
     Ok(StatusCode::NO_CONTENT)
 }
+
+/// GET /api/projects/:project_id/workspaces/:workspace_id/events
+/// Return domain events for a workspace.
+pub async fn workspace_events(
+    State(state): State<Arc<AppState>>,
+    Path((project_id, workspace_id)): Path<(Uuid, Uuid)>,
+    AuthUser(claims): AuthUser,
+) -> Result<Json<Vec<crate::events::DomainEvent>>, StatusCode> {
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    verify_project_member(&state.db, project_id, user.id).await?;
+
+    // Verify workspace belongs to project
+    let exists: Option<(Uuid,)> = sqlx::query_as(
+        "SELECT id FROM workspaces WHERE id = $1 AND project_id = $2",
+    )
+    .bind(workspace_id)
+    .bind(project_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to check workspace: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    if exists.is_none() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    let events =
+        crate::events::events_for_aggregate(&state.db, "workspace", workspace_id, None)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to fetch workspace events: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+    Ok(Json(events))
+}
