@@ -1,4 +1,4 @@
-import { LitElement, html, css } from "lit";
+import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   createInvocation,
@@ -51,11 +51,22 @@ export class InvokeDialog extends LitElement {
   @state() private _systemPrompt = "";
   @state() private _submitting = false;
   @state() private _error = "";
+  @state() private _resumeSessionId = "";
 
   show() {
     this._open = true;
     this._error = "";
     this._submitting = false;
+    this._resumeSessionId = "";
+  }
+
+  showContinue(opts: { claude_session_id: string; agent_perspective: string }) {
+    this._open = true;
+    this._error = "";
+    this._submitting = false;
+    this._perspective = opts.agent_perspective;
+    this._resumeSessionId = opts.claude_session_id;
+    this._prompt = "";
   }
 
   hide() {
@@ -77,12 +88,14 @@ export class InvokeDialog extends LitElement {
         prompt: this._prompt.trim(),
         branch: this._branch.trim() || undefined,
         system_prompt_append: this._systemPrompt.trim() || undefined,
+        resume_session_id: this._resumeSessionId || undefined,
       });
 
       this._open = false;
       this._prompt = "";
       this._systemPrompt = "";
       this._branch = "";
+      this._resumeSessionId = "";
 
       this.dispatchEvent(
         new CustomEvent("invocation-created", {
@@ -92,7 +105,8 @@ export class InvokeDialog extends LitElement {
         }),
       );
     } catch (e) {
-      this._error = e instanceof Error ? e.message : "Failed to create invocation";
+      this._error =
+        e instanceof Error ? e.message : "Failed to create invocation";
     } finally {
       this._submitting = false;
     }
@@ -101,10 +115,20 @@ export class InvokeDialog extends LitElement {
   render() {
     return html`
       <sl-dialog
-        label="New Invocation"
+        label=${this._resumeSessionId
+          ? "Continue Invocation"
+          : "New Invocation"}
         ?open=${this._open}
         @sl-after-hide=${() => (this._open = false)}
       >
+        ${this._resumeSessionId
+          ? html`
+              <sl-alert variant="primary" open>
+                Continuing previous session
+                (${this._resumeSessionId.substring(0, 8)}...)
+              </sl-alert>
+            `
+          : nothing}
         <div class="form-group">
           <label>Agent Perspective</label>
           <sl-select

@@ -208,7 +208,10 @@ export class InvocationList extends LitElement {
             <div class="list">
               ${this._invocations.map(
                 (inv) => html`
-                  <div class="invocation-card" @click=${() => this._onSelect(inv)}>
+                  <div
+                    class="invocation-card"
+                    @click=${() => this._onSelect(inv)}
+                  >
                     <div class="card-top">
                       <sl-badge
                         variant=${STATUS_VARIANT[inv.status] ?? "neutral"}
@@ -231,6 +234,16 @@ export class InvocationList extends LitElement {
                           >`
                         : nothing}
                       <span>${inv.triggered_by}</span>
+                      ${inv.resume_session_id
+                        ? html`
+                            <span title="Continued from previous session">
+                              <sl-icon
+                                name="arrow-repeat"
+                                style="font-size: 0.85rem"
+                              ></sl-icon>
+                            </span>
+                          `
+                        : nothing}
                     </div>
                   </div>
                 `,

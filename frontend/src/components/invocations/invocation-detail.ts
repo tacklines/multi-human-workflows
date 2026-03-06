@@ -244,6 +244,22 @@ export class InvocationDetail extends LitElement {
     return `${mins}m ${secs % 60}s`;
   }
 
+  private _onContinue() {
+    const inv = this._invocation;
+    if (!inv?.claude_session_id) return;
+    this.dispatchEvent(
+      new CustomEvent("continue-invocation", {
+        detail: {
+          claude_session_id: inv.claude_session_id,
+          agent_perspective: inv.agent_perspective,
+          workspace_id: inv.workspace_id,
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   render() {
     if (this._loading) {
       return html`<div class="loading"><sl-spinner></sl-spinner></div>`;
@@ -267,6 +283,19 @@ export class InvocationDetail extends LitElement {
         <sl-badge variant=${STATUS_VARIANT[inv.status] ?? "neutral"} pill>
           ${inv.status}
         </sl-badge>
+        ${(inv.status === "completed" || inv.status === "failed") &&
+        inv.claude_session_id
+          ? html`
+              <sl-button
+                size="small"
+                variant="success"
+                @click=${this._onContinue}
+              >
+                <sl-icon slot="prefix" name="arrow-repeat"></sl-icon>
+                Continue
+              </sl-button>
+            `
+          : nothing}
       </div>
 
       ${inv.error_message
@@ -291,6 +320,14 @@ export class InvocationDetail extends LitElement {
           <span class="meta-label">Created:</span>
           ${new Date(inv.created_at).toLocaleString()}
         </div>
+        ${inv.resume_session_id
+          ? html`
+              <div class="meta-item">
+                <span class="meta-label">Resumed from:</span>
+                ${inv.resume_session_id.substring(0, 8)}...
+              </div>
+            `
+          : nothing}
       </div>
 
       <div class="prompt-section">
@@ -312,7 +349,7 @@ export class InvocationDetail extends LitElement {
               </div>`
             : inv.output.map(
                 (line) => html`
-                  <div class="log-line ${line.fd === 'stderr' ? 'stderr' : ''}">
+                  <div class="log-line ${line.fd === "stderr" ? "stderr" : ""}">
                     ${line.line}
                   </div>
                 `,

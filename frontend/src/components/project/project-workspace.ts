@@ -1376,28 +1376,39 @@ export class ProjectWorkspace extends LitElement {
   }
 
   private _renderInvocationsTab() {
-    if (this._selectedInvocationId) {
-      return html`
-        <invocation-detail
-          invocation-id=${this._selectedInvocationId}
-          @back=${() => {
-            this._selectedInvocationId = "";
-          }}
-        ></invocation-detail>
-      `;
-    }
+    const onContinue = (e: CustomEvent) => {
+      const dialog = this.shadowRoot?.querySelector("invoke-dialog");
+      if (dialog) {
+        (dialog as any).showContinue({
+          claude_session_id: e.detail.claude_session_id,
+          agent_perspective: e.detail.agent_perspective,
+        });
+      }
+    };
 
     return html`
-      <invocation-list
-        project-id=${this.projectId}
-        @invocation-select=${(e: CustomEvent) => {
-          this._selectedInvocationId = e.detail.id;
-        }}
-        @invoke-request=${() => {
-          const dialog = this.shadowRoot?.querySelector("invoke-dialog");
-          if (dialog) (dialog as any).show();
-        }}
-      ></invocation-list>
+      ${this._selectedInvocationId
+        ? html`
+            <invocation-detail
+              invocation-id=${this._selectedInvocationId}
+              @back=${() => {
+                this._selectedInvocationId = "";
+              }}
+              @continue-invocation=${onContinue}
+            ></invocation-detail>
+          `
+        : html`
+            <invocation-list
+              project-id=${this.projectId}
+              @invocation-select=${(e: CustomEvent) => {
+                this._selectedInvocationId = e.detail.id;
+              }}
+              @invoke-request=${() => {
+                const dialog = this.shadowRoot?.querySelector("invoke-dialog");
+                if (dialog) (dialog as any).show();
+              }}
+            ></invocation-list>
+          `}
       <invoke-dialog
         project-id=${this.projectId}
         @invocation-created=${(e: CustomEvent) => {

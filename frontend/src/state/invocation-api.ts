@@ -36,6 +36,8 @@ export interface InvocationView {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  claude_session_id: string | null;
+  resume_session_id: string | null;
 }
 
 export interface InvocationDetailView extends InvocationView {
@@ -57,11 +59,17 @@ export interface CreateInvocationRequest {
   task_id?: string;
   session_id?: string;
   branch?: string;
+  resume_session_id?: string;
 }
 
 export async function fetchInvocations(
   projectId: string,
-  opts?: { status?: string; workspace_id?: string; task_id?: string; limit?: number },
+  opts?: {
+    status?: string;
+    workspace_id?: string;
+    task_id?: string;
+    limit?: number;
+  },
 ): Promise<InvocationView[]> {
   const params = new URLSearchParams();
   if (opts?.status) params.set("status", opts.status);
