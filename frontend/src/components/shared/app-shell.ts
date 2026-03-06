@@ -4,6 +4,7 @@ import { authStore, type AuthState } from '../../state/auth-state.js';
 import { store, type AppState, type SessionState, type SessionParticipant } from '../../state/app-state.js';
 import { disconnectSession } from '../../state/session-connection.js';
 import { fetchUnreadMentions, clearUnreadMentions, type UnreadMentionView } from '../../state/task-api.js';
+import { fetchOrgs, setOrgs, setCurrentOrg, getCurrentOrg, subscribeOrg, type OrgView } from '../../state/org-api.js';
 import { initRouter, navigateTo } from '../../router.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
@@ -13,6 +14,9 @@ import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
+import '@shoelace-style/shoelace/dist/components/dropdown/dropdown.js';
+import '@shoelace-style/shoelace/dist/components/menu/menu.js';
+import '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js';
 
 import './presence-bar.js';
 import './activity-feed.js';
@@ -111,6 +115,32 @@ export class AppShell extends LitElement {
       font-weight: 700;
       color: rgba(255, 255, 255, 0.9);
       letter-spacing: -0.02em;
+    }
+
+    .org-switcher {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .org-switcher:hover {
+      background: var(--surface-active);
+      border-color: var(--border-subtle);
+      color: var(--text-primary);
+    }
+
+    .org-divider {
+      color: var(--text-tertiary);
+      font-size: 0.9rem;
+      user-select: none;
     }
 
     .header-center {
@@ -296,11 +326,14 @@ export class AppShell extends LitElement {
   @state() private _unreadMentions: UnreadMentionView[] = [];
   @state() private _routerReady = false;
   @state() private _agentConsoleParticipant: SessionParticipant | null = null;
+  @state() private _orgs: OrgView[] = [];
+  @state() private _currentOrg: OrgView | null = null;
 
   @query('#outlet') private _outlet!: HTMLElement;
 
   private _authUnsub: (() => void) | null = null;
   private _appUnsub: (() => void) | null = null;
+  private _orgUnsub: (() => void) | null = null;
 
   connectedCallback() {
     super.connectedCallback();
@@ -309,8 +342,13 @@ export class AppShell extends LitElement {
       this._authState = authStore.get();
       // Once authenticated, init the router if not already done
       if (this._authState.isAuthenticated && !this._routerReady) {
+        this._loadOrgs();
         this._initRouter();
       }
+    });
+
+    this._orgUnsub = subscribeOrg(() => {
+      this._currentOrg = getCurrentOrg();
     });
 
     this._appUnsub = store.subscribe((event) => {
@@ -318,8 +356,11 @@ export class AppShell extends LitElement {
       if (event.type === 'mentioned' || event.type === 'session-connected') {
         this._loadUnreadMentions();
       }
-      if (event.type === 'session-disconnected' && !window.location.pathname.startsWith('/projects/')) {
-        navigateTo('/projects');
+      if (event.type === 'session-disconnected') {
+        const orgSlug = this._currentOrg?.slug;
+        if (orgSlug && !window.location.pathname.startsWith(`/orgs/${orgSlug}`)) {
+          navigateTo(`/orgs/${orgSlug}`);
+        }
       }
     });
 
@@ -334,6 +375,7 @@ export class AppShell extends LitElement {
     super.disconnectedCallback();
     this._authUnsub?.();
     this._appUnsub?.();
+    this._orgUnsub?.();
   }
 
   private _initRouter() {
@@ -355,11 +397,23 @@ export class AppShell extends LitElement {
     try { await navigator.clipboard.writeText(text); } catch { /* blocked */ }
   }
 
+  private async _loadOrgs() {
+    try {
+      this._orgs = await fetchOrgs();
+      setOrgs(this._orgs);
+    } catch { /* silent — router will handle */ }
+  }
+
+  private _switchOrg(org: OrgView) {
+    setCurrentOrg(org);
+    navigateTo(`/orgs/${org.slug}`);
+  }
+
   private _leaveSession() {
-    const projectId = this._appState.sessionState?.session?.project_id;
+    const orgSlug = this._currentOrg?.slug;
     disconnectSession();
     store.clearSession();
-    navigateTo(projectId ? `/projects/${projectId}` : '/projects');
+    navigateTo(orgSlug ? `/orgs/${orgSlug}` : '/');
   }
 
   private async _loadUnreadMentions() {
@@ -512,7 +566,33 @@ export class AppShell extends LitElement {
               label="Toggle sidebar"
               @click=${this._toggleSidebar}
             ></sl-icon-button>
-            <span class="logo-wordmark">Seam</span>
+            <span class="logo-wordmark" @click=${() => navigateTo('/')} style="cursor: pointer;">Seam</span>
+            ${this._currentOrg && this._orgs.length > 0 ? html`
+              <span class="org-divider">/</span>
+              ${this._orgs.length === 1 ? html`
+                <span class="org-switcher" @click=${() => navigateTo(`/orgs/${this._currentOrg!.slug}`)}>
+                  ${this._currentOrg.name}
+                </span>
+              ` : html`
+                <sl-dropdown>
+                  <span class="org-switcher" slot="trigger">
+                    ${this._currentOrg.name}
+                    <sl-icon name="chevron-down" style="font-size: 0.7rem;"></sl-icon>
+                  </span>
+                  <sl-menu @sl-select=${(e: CustomEvent) => {
+                    const org = this._orgs.find(o => o.slug === e.detail.item.value);
+                    if (org) this._switchOrg(org);
+                  }}>
+                    ${this._orgs.map(o => html`
+                      <sl-menu-item value=${o.slug} ?checked=${o.slug === this._currentOrg?.slug}>
+                        ${o.name}
+                        ${o.personal ? html`<sl-badge variant="neutral" pill slot="suffix" style="font-size: 0.6rem;">Personal</sl-badge>` : nothing}
+                      </sl-menu-item>
+                    `)}
+                  </sl-menu>
+                </sl-dropdown>
+              `}
+            ` : nothing}
           </div>
 
           <div class="header-center">
