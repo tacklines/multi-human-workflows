@@ -1918,7 +1918,18 @@ impl SeamMcp {
             Err(e) => return Ok(e),
         };
 
+        if params.title.trim().is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text("Title cannot be empty")]));
+        }
+
         let priority = params.priority.as_deref().unwrap_or("medium");
+        let valid_priorities = ["critical", "high", "medium", "low"];
+        if !valid_priorities.contains(&priority) {
+            return Ok(CallToolResult::error(vec![Content::text(
+                format!("Invalid priority '{}'. Must be one of: {}", priority, valid_priorities.join(", ")),
+            )]));
+        }
+
         let description = params.description.as_deref().unwrap_or("");
 
         let parent_id = if let Some(ref pid) = params.parent_id {
@@ -1993,37 +2004,6 @@ impl SeamMcp {
             Err(e) => return Ok(e),
         };
 
-        let mut sql = "SELECT r.*,
-            (SELECT COUNT(*) FROM requirements c WHERE c.parent_id = r.id) as child_count,
-            (SELECT COUNT(*) FROM requirement_tasks rt WHERE rt.requirement_id = r.id) as task_count
-            FROM requirements r WHERE r.project_id = $1".to_string();
-
-        let mut conditions = Vec::new();
-        let mut bind_idx = 2u32;
-
-        if let Some(ref status) = params.status {
-            conditions.push(format!("r.status = ${bind_idx}"));
-            bind_idx += 1;
-            let _ = status;
-        }
-        if let Some(ref priority) = params.priority {
-            conditions.push(format!("r.priority = ${bind_idx}"));
-            bind_idx += 1;
-            let _ = priority;
-        }
-        if let Some(ref parent_id) = params.parent_id {
-            conditions.push(format!("r.parent_id = ${bind_idx}"));
-            let _ = parent_id;
-        } else if params.status.is_none() && params.priority.is_none() {
-            conditions.push("r.parent_id IS NULL".to_string());
-        }
-
-        for c in &conditions {
-            sql.push_str(&format!(" AND {c}"));
-        }
-        sql.push_str(" ORDER BY r.priority, r.created_at");
-
-        // Build query string with lifetime that outlasts the query
         let mut sql = "SELECT * FROM requirements WHERE project_id = $1".to_string();
         let mut idx = 2u32;
         if params.status.is_some() {
@@ -2365,6 +2345,10 @@ impl SeamMcp {
             Some((uid,)) => uid,
             None => return Ok(CallToolResult::error(vec![Content::text("Participant not found")])),
         };
+
+        if params.title.trim().is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text("Title cannot be empty")]));
+        }
 
         match sqlx::query_as::<_, crate::models::Request>(
             "INSERT INTO requests (project_id, session_id, author_id, title, body)
