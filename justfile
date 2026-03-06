@@ -130,6 +130,10 @@ token:
       -d "password=testpass" \
       -d "scope=openid profile email" | jq -r '.access_token'
 
+# Run the background worker (scheduler + reactions)
+worker:
+    cd server && cargo run --bin seam-worker
+
 # Create a test session (requires running backend)
 test-session:
     #!/usr/bin/env bash
