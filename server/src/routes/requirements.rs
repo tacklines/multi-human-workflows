@@ -41,6 +41,8 @@ pub struct RequirementDetailView {
     pub session_id: Option<Uuid>,
     pub children: Vec<RequirementListView>,
     pub linked_task_ids: Vec<Uuid>,
+    pub task_done_count: i64,
+    pub task_total_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -258,6 +260,19 @@ pub async fn get_requirement(
     .await
     .unwrap_or_default();
 
+    let (task_done_count, task_total_count): (i64, i64) = sqlx::query_as(
+        "SELECT \
+            COUNT(*) FILTER (WHERE t.status IN ('done', 'closed')) as done_count, \
+            COUNT(*) as total_count \
+         FROM requirement_tasks rt \
+         JOIN tasks t ON t.id = rt.task_id \
+         WHERE rt.requirement_id = $1"
+    )
+    .bind(req.id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or((0, 0));
+
     Ok(Json(RequirementDetailView {
         id: req.id,
         project_id: req.project_id,
@@ -270,6 +285,8 @@ pub async fn get_requirement(
         session_id: req.session_id,
         children: child_views,
         linked_task_ids: linked_task_ids.into_iter().map(|(id,)| id).collect(),
+        task_done_count,
+        task_total_count,
         created_at: req.created_at,
         updated_at: req.updated_at,
     }))
@@ -339,6 +356,8 @@ pub async fn create_requirement(
         session_id: req.session_id,
         children: vec![],
         linked_task_ids: vec![],
+        task_done_count: 0,
+        task_total_count: 0,
         created_at: req.created_at,
         updated_at: req.updated_at,
     })))
@@ -466,6 +485,19 @@ pub async fn update_requirement(
     .await
     .unwrap_or_default();
 
+    let (task_done_count, task_total_count): (i64, i64) = sqlx::query_as(
+        "SELECT \
+            COUNT(*) FILTER (WHERE t.status IN ('done', 'closed')) as done_count, \
+            COUNT(*) as total_count \
+         FROM requirement_tasks rt \
+         JOIN tasks t ON t.id = rt.task_id \
+         WHERE rt.requirement_id = $1"
+    )
+    .bind(req.id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or((0, 0));
+
     Ok(Json(RequirementDetailView {
         id: req.id,
         project_id: req.project_id,
@@ -478,6 +510,8 @@ pub async fn update_requirement(
         session_id: req.session_id,
         children: vec![],
         linked_task_ids: linked_task_ids.into_iter().map(|(id,)| id).collect(),
+        task_done_count,
+        task_total_count,
         created_at: req.created_at,
         updated_at: req.updated_at,
     }))

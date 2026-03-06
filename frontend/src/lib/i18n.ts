@@ -353,6 +353,7 @@ export const messagesEn: Record<string, string> = {
   'requirementDetail.transition.archive': 'Archive',
   'requirementDetail.transition.reopen': 'Reopen',
   'requirementDetail.addChild': 'Add Sub-requirement',
+  'requirementDetail.progress': '{{done}} of {{total}} tasks complete',
 
   // ── request-list ──
   'workspace.tab.requests': 'Requests',
@@ -397,6 +398,7 @@ export const messagesEn: Record<string, string> = {
   'requestDetail.transition.decompose': 'Mark Decomposed',
   'requestDetail.transition.archive': 'Archive',
   'requestDetail.transition.reopen': 'Reopen',
+  'requestDetail.progress': '{{satisfied}} of {{total}} requirements satisfied',
 
   // ── plan-list ──
   'planList.empty': 'No plans yet.',

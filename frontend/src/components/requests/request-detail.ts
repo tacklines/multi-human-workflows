@@ -12,6 +12,7 @@ import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
 import '@shoelace-style/shoelace/dist/components/details/details.js';
+import '@shoelace-style/shoelace/dist/components/progress-bar/progress-bar.js';
 
 import '../shared/markdown-content.js';
 
@@ -168,6 +169,20 @@ export class RequestDetail extends LitElement {
       border-radius: 4px;
       color: var(--text-secondary);
     }
+
+    .progress-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .progress-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.4rem;
+    }
+
+    .progress-section sl-progress-bar {
+      --height: 6px;
+    }
   `;
 
   @property() projectId = '';
@@ -317,6 +332,15 @@ export class RequestDetail extends LitElement {
               ${t(tr.label)}
             </sl-button>
           `)}
+        </div>
+      ` : nothing}
+
+      ${r.requirement_total_count > 0 ? html`
+        <div class="progress-section">
+          <div class="progress-label">
+            ${t('requestDetail.progress', { satisfied: r.requirement_satisfied_count, total: r.requirement_total_count })}
+          </div>
+          <sl-progress-bar value=${Math.round((r.requirement_satisfied_count / r.requirement_total_count) * 100)}></sl-progress-bar>
         </div>
       ` : nothing}
 

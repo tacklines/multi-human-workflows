@@ -11,6 +11,7 @@ import '@shoelace-style/shoelace/dist/components/input/input.js';
 import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
+import '@shoelace-style/shoelace/dist/components/progress-bar/progress-bar.js';
 
 const STATUS_VARIANTS: Record<RequirementStatusType, string> = {
   draft: 'neutral',
@@ -211,6 +212,20 @@ export class RequirementDetail extends LitElement {
       font-size: 0.85rem;
       font-style: italic;
     }
+
+    .progress-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .progress-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.4rem;
+    }
+
+    .progress-section sl-progress-bar {
+      --height: 6px;
+    }
   `;
 
   @property() projectId = '';
@@ -361,6 +376,15 @@ export class RequirementDetail extends LitElement {
               ${t(tr.label)}
             </sl-button>
           `)}
+        </div>
+      ` : nothing}
+
+      ${r.task_total_count > 0 ? html`
+        <div class="progress-section">
+          <div class="progress-label">
+            ${t('requirementDetail.progress', { done: r.task_done_count, total: r.task_total_count })}
+          </div>
+          <sl-progress-bar value=${Math.round((r.task_done_count / r.task_total_count) * 100)}></sl-progress-bar>
         </div>
       ` : nothing}
 

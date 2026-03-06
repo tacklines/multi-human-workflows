@@ -38,6 +38,8 @@ pub struct RequestDetailView {
     pub status: RequestStatus,
     pub analysis: Option<String>,
     pub linked_requirement_ids: Vec<Uuid>,
+    pub requirement_satisfied_count: i64,
+    pub requirement_total_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -220,6 +222,19 @@ pub async fn get_request(
     .await
     .unwrap_or_default();
 
+    let (requirement_satisfied_count, requirement_total_count): (i64, i64) = sqlx::query_as(
+        "SELECT \
+            COUNT(*) FILTER (WHERE r.status = 'satisfied') as satisfied_count, \
+            COUNT(*) as total_count \
+         FROM request_requirements rr \
+         JOIN requirements r ON r.id = rr.requirement_id \
+         WHERE rr.request_id = $1"
+    )
+    .bind(req.id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or((0, 0));
+
     Ok(Json(RequestDetailView {
         id: req.id,
         project_id: req.project_id,
@@ -230,6 +245,8 @@ pub async fn get_request(
         status: req.status,
         analysis: req.analysis,
         linked_requirement_ids: linked_requirement_ids.into_iter().map(|(id,)| id).collect(),
+        requirement_satisfied_count,
+        requirement_total_count,
         created_at: req.created_at,
         updated_at: req.updated_at,
     }))
@@ -293,6 +310,8 @@ pub async fn create_request(
             status: req.status,
             analysis: req.analysis,
             linked_requirement_ids: vec![],
+            requirement_satisfied_count: 0,
+            requirement_total_count: 0,
             created_at: req.created_at,
             updated_at: req.updated_at,
         }),
@@ -390,6 +409,19 @@ pub async fn update_request(
     .await
     .unwrap_or_default();
 
+    let (requirement_satisfied_count, requirement_total_count): (i64, i64) = sqlx::query_as(
+        "SELECT \
+            COUNT(*) FILTER (WHERE r.status = 'satisfied') as satisfied_count, \
+            COUNT(*) as total_count \
+         FROM request_requirements rr \
+         JOIN requirements r ON r.id = rr.requirement_id \
+         WHERE rr.request_id = $1"
+    )
+    .bind(req.id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or((0, 0));
+
     Ok(Json(RequestDetailView {
         id: req.id,
         project_id: req.project_id,
@@ -400,6 +432,8 @@ pub async fn update_request(
         status: req.status,
         analysis: req.analysis,
         linked_requirement_ids: linked_requirement_ids.into_iter().map(|(id,)| id).collect(),
+        requirement_satisfied_count,
+        requirement_total_count,
         created_at: req.created_at,
         updated_at: req.updated_at,
     }))
