@@ -21,13 +21,14 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 export async function fetchTasks(
   sessionCode: string,
-  filters?: { task_type?: TaskType; status?: TaskStatus; parent_id?: string; assigned_to?: string },
+  filters?: { task_type?: TaskType; status?: TaskStatus; parent_id?: string; assigned_to?: string; session_only?: boolean },
 ): Promise<TaskView[]> {
   const params = new URLSearchParams();
   if (filters?.task_type) params.set('task_type', filters.task_type);
   if (filters?.status) params.set('status', filters.status);
   if (filters?.parent_id) params.set('parent_id', filters.parent_id);
   if (filters?.assigned_to) params.set('assigned_to', filters.assigned_to);
+  if (filters?.session_only === false) params.set('session_only', 'false');
 
   const qs = params.toString();
   const url = `${API_BASE}/api/sessions/${sessionCode}/tasks${qs ? `?${qs}` : ''}`;

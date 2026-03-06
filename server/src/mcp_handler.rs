@@ -88,6 +88,8 @@ struct ListTasksParams {
     assigned_to: Option<String>,
     /// Search text (searches title and description, case-insensitive)
     search: Option<String>,
+    /// If true (default), only show tasks in the current session. Set to false to see all project tasks.
+    session_only: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -598,8 +600,28 @@ impl SeamMcp {
         };
         let ticket_prefix = self.get_ticket_prefix();
 
-        let mut query = String::from("SELECT * FROM tasks WHERE project_id = $1");
-        let mut param_idx = 2u32;
+        // Default to session-scoped unless explicitly opted out
+        let filter_by_session = params.session_only != Some(false);
+
+        let session_id_opt = if filter_by_session {
+            match self.require_session().await {
+                Ok(id) => Some(id),
+                Err(e) => return Ok(e),
+            }
+        } else {
+            None
+        };
+
+        let mut query = if filter_by_session {
+            String::from(
+                "SELECT t.* FROM tasks t \
+                 INNER JOIN session_tasks st ON st.task_id = t.id AND st.session_id = $2 \
+                 WHERE t.project_id = $1",
+            )
+        } else {
+            String::from("SELECT * FROM tasks WHERE project_id = $1")
+        };
+        let mut param_idx = if filter_by_session { 3u32 } else { 2u32 };
 
         // Build dynamic query with filters
         let mut bind_values: Vec<String> = vec![];
@@ -650,6 +672,9 @@ impl SeamMcp {
 
         // Use raw query with dynamic bindings
         let mut q = sqlx::query_as::<_, Task>(&query).bind(project_id);
+        if let Some(session_id) = session_id_opt {
+            q = q.bind(session_id);
+        }
         for val in &bind_values {
             q = q.bind(val);
         }

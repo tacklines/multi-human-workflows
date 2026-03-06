@@ -89,6 +89,7 @@ pub struct ListTasksQuery {
     pub parent_id: Option<String>,
     pub assigned_to: Option<Uuid>,
     pub search: Option<String>,
+    pub session_only: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -340,10 +341,20 @@ pub async fn list_tasks(
     let session = resolve_session_pub(&state.db, &session_code).await?;
     let project = resolve_project(&state.db, session.project_id).await?;
 
-    // Query by project (tasks persist across sessions)
-    let mut sql = String::from("SELECT * FROM tasks WHERE project_id = $1");
+    // Default to session-scoped unless explicitly opted out
+    let filter_by_session = query.session_only != Some(false);
+
+    let mut sql = if filter_by_session {
+        String::from(
+            "SELECT t.* FROM tasks t \
+             INNER JOIN session_tasks st ON st.task_id = t.id AND st.session_id = $2 \
+             WHERE t.project_id = $1",
+        )
+    } else {
+        String::from("SELECT * FROM tasks WHERE project_id = $1")
+    };
     let mut bind_values: Vec<String> = vec![];
-    let mut idx = 2u32;
+    let mut idx = if filter_by_session { 3u32 } else { 2u32 };
 
     if let Some(ref tt) = query.task_type {
         sql.push_str(&format!(" AND task_type = ${idx}"));
@@ -390,6 +401,9 @@ pub async fn list_tasks(
     sql.push_str(" ORDER BY created_at");
 
     let mut q = sqlx::query_as::<_, Task>(&sql).bind(project.id);
+    if filter_by_session {
+        q = q.bind(session.id);
+    }
     for val in &bind_values {
         q = q.bind(val);
     }

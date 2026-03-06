@@ -524,9 +524,9 @@ export class TaskBoard extends LitElement {
     /* ── Sprint planning panel ── */
     .sprint-panel {
       margin-bottom: 1rem;
-      border: 1px solid var(--sl-color-primary-200);
+      border: 1px solid var(--sl-color-neutral-300);
       border-radius: 8px;
-      background: var(--sl-color-primary-50);
+      background: var(--sl-color-neutral-50);
       overflow: hidden;
     }
 
@@ -547,7 +547,7 @@ export class TaskBoard extends LitElement {
     .sprint-drop-zone {
       min-height: 80px;
       padding: 0.75rem;
-      border-top: 1px dashed var(--sl-color-primary-200);
+      border-top: 1px dashed var(--sl-color-neutral-300);
       display: flex;
       flex-wrap: wrap;
       gap: 0.5rem;
@@ -556,7 +556,7 @@ export class TaskBoard extends LitElement {
     }
 
     .sprint-drop-zone.drag-over {
-      background: var(--sl-color-primary-100);
+      background: var(--sl-color-primary-100, rgba(99, 102, 241, 0.1));
     }
 
     .sprint-drop-zone-empty {
@@ -572,7 +572,7 @@ export class TaskBoard extends LitElement {
       align-items: center;
       gap: 0.4rem;
       padding: 0.35rem 0.6rem;
-      background: white;
+      background: var(--sl-color-neutral-0);
       border: 1px solid var(--sl-color-neutral-200);
       border-radius: 6px;
       font-size: 0.8rem;
@@ -620,6 +620,7 @@ export class TaskBoard extends LitElement {
   @state() private _viewMode: 'list' | 'board' = 'board';
   @state() private _filterType: TaskType | '' = '';
   @state() private _filterStatus: TaskStatus | '' = '';
+  @state() private _showAllProject = false;
   @state() private _searchQuery = '';
   @state() private _sortBy: 'created' | 'updated' | 'title' | 'type' = 'created';
   @state() private _filterAssignee = '';
@@ -655,10 +656,12 @@ export class TaskBoard extends LitElement {
 
   private _storeUnsub: (() => void) | null = null;
   private _keyHandler = (e: KeyboardEvent) => {
-    const target = e.target as HTMLElement;
-    const tag = target?.tagName?.toLowerCase();
-    const isInput = tag === 'sl-input' || tag === 'sl-textarea' || tag === 'input' || tag === 'textarea'
-      || target?.isContentEditable;
+    const isInput = e.composedPath().some((el) => {
+      if (!(el instanceof HTMLElement)) return false;
+      const tag = el.tagName.toLowerCase();
+      return tag === 'input' || tag === 'textarea' || tag === 'sl-input' || tag === 'sl-textarea'
+        || tag === 'sl-select' || tag === 'sl-combobox' || el.isContentEditable;
+    });
 
     if (e.key === 'Escape') {
       if (isInput) return; // let inputs handle their own Escape
@@ -732,6 +735,7 @@ export class TaskBoard extends LitElement {
       if (this._isProjectMode) {
         this._tasks = await fetchProjectTasks(this.projectId, filters as any);
       } else {
+        if (this._showAllProject) (filters as any).session_only = false;
         this._tasks = await fetchTasks(this.sessionCode, filters as any);
       }
     } catch (err) {
@@ -1125,6 +1129,20 @@ export class TaskBoard extends LitElement {
           <sl-option value="title">Title A-Z</sl-option>
           <sl-option value="type">Type</sl-option>
         </sl-select>
+
+        ${!this._isProjectMode ? html`
+          <sl-tooltip content=${this._showAllProject ? 'Show only session tasks' : 'Show all project tasks'}>
+            <sl-button
+              size="small"
+              variant=${this._showAllProject ? 'primary' : 'default'}
+              @click=${() => { this._showAllProject = !this._showAllProject; this._loadTasks(); }}
+              style="white-space: nowrap;"
+            >
+              <sl-icon slot="prefix" name=${this._showAllProject ? 'collection' : 'collection'}></sl-icon>
+              ${this._showAllProject ? 'All Project' : 'Session'}
+            </sl-button>
+          </sl-tooltip>
+        ` : nothing}
 
         ${this._completedCount > 0 ? html`
           <sl-tooltip content=${this._hideCompleted ? `Show ${this._completedCount} completed` : 'Hide completed'}>
