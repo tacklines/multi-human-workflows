@@ -1,6 +1,7 @@
 pub mod activity;
 pub mod agent;
 pub mod agents;
+pub mod credentials;
 pub mod events;
 pub mod integrations;
 pub mod messages;

@@ -1,6 +1,7 @@
 mod agent_token;
 mod auth;
 mod coder;
+mod credentials;
 mod db;
 mod events;
 mod mcp_auth;
@@ -102,6 +103,9 @@ async fn main() {
         .route("/api/orgs/{slug}/members", get(routes::orgs::list_members).post(routes::orgs::invite_member))
         .route("/api/orgs/{slug}/members/{user_id}", patch(routes::orgs::update_member).delete(routes::orgs::remove_member))
         .route("/api/orgs/{slug}/projects", get(routes::orgs::list_org_projects).post(routes::orgs::create_org_project))
+        // Org Credentials
+        .route("/api/orgs/{slug}/credentials", get(routes::credentials::list_credentials).post(routes::credentials::create_credential))
+        .route("/api/orgs/{slug}/credentials/{credential_id}", patch(routes::credentials::rotate_credential).delete(routes::credentials::delete_credential))
         // Projects
         .route("/api/projects", get(routes::projects::list_projects))
         .route("/api/projects", post(routes::projects::create_project))
