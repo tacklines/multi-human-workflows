@@ -93,47 +93,47 @@ New: `dispatch_invocation` → find/create workspace → execute `claude -p` ins
 
 ### Phase 1: Invocation Model (server)
 
-- [ ] Create `invocations` migration
-- [ ] `POST /api/projects/:id/invocations` — create and dispatch an invocation
-- [ ] `GET /api/projects/:id/invocations` — list invocations (filterable by workspace, task, status)
-- [ ] `GET /api/invocations/:id` — get invocation detail with output
-- [ ] Invocation dispatcher: find workspace, execute `coder ssh <ws> -- claude -p ...`, stream output
-- [ ] Domain events: invocation.started, invocation.completed, invocation.failed
+- [x] Create `invocations` migration
+- [x] `POST /api/projects/:id/invocations` — create and dispatch an invocation
+- [x] `GET /api/projects/:id/invocations` — list invocations (filterable by workspace, task, status)
+- [x] `GET /api/invocations/:id` — get invocation detail with output
+- [x] Invocation dispatcher: find workspace, execute `coder ssh <ws> -- claude -p ...`, stream output
+- [x] Domain events: invocation.started, invocation.completed, invocation.failed
 
 ### Phase 2: Workspace Pool (server + infra)
 
-- [ ] Simplify Coder template — environment setup only, no agent launch in startup script
-- [ ] Workspace pool logic: find existing workspace for project+branch, or create new
-- [ ] Auto-pause: workspaces stop after N minutes idle (Coder's `auto_stop_timeout`)
-- [ ] Wake-on-invoke: start paused workspace before dispatching invocation
+- [x] Simplify Coder template — environment setup only, no agent launch in startup script
+- [x] Workspace pool logic: find existing workspace for project+branch, or create new
+- [x] Auto-pause: workspaces stop after N minutes idle (Coder's `auto_stop_timeout`)
+- [x] Wake-on-invoke: start paused workspace before dispatching invocation
 
 ### Phase 3: Agent Perspectives (config)
 
-- [ ] Define perspective format: `.claude/agents/<name>.md` with system prompt, tools, skills
-- [ ] Map perspectives to `claude -p` flags: `--agent <name>` or `--append-system-prompt-file`
-- [ ] Default perspectives: coder (implement), reviewer (review), planner (decompose)
-- [ ] MCP config generation: per-invocation `.mcp.json` with Seam server URL + auth
+- [x] Define perspective format: `.claude/agents/<name>.md` with system prompt, tools, skills
+- [x] Map perspectives to `claude -p` flags: `--agent <name>` or `--append-system-prompt-file`
+- [x] Default perspectives: coder (implement), reviewer (review), planner (decompose)
+- [x] MCP config generation: per-invocation `.mcp.json` with Seam server URL + auth
 
 ### Phase 4: Output Pipeline (server + frontend)
 
-- [ ] Invocation output streaming: capture stdout from `coder ssh`, POST to Seam
-- [ ] Structured result capture: parse `--output-format json` output, store in `result_json`
-- [ ] Artifact filing: extract commits, file changes, test results from structured output
-- [ ] WebSocket broadcast: stream invocation output to subscribed clients
+- [x] Invocation output streaming: capture stdout from `coder ssh`, POST to Seam
+- [x] Structured result capture: parse `--output-format json` output, store in `result_json`
+- [x] Artifact filing: extract commits, file changes, test results from structured output
+- [x] WebSocket broadcast: stream invocation output to subscribed clients
 
 ### Phase 5: Frontend (UI)
 
-- [ ] Invocation list view (per-project, per-workspace, per-task)
-- [ ] Invocation detail: output stream, result, status, duration
-- [ ] Launch dialog: pick perspective, optional task, custom prompt
-- [ ] Workspace pool view: active workspaces, idle status, invocation history
-- [ ] Replace current agent activity panel with invocation-centric view
+- [x] Invocation list view (per-project, per-workspace, per-task)
+- [x] Invocation detail: output stream, result, status, duration
+- [x] Launch dialog: pick perspective, optional task, custom prompt
+- [x] Workspace pool view: active workspaces, idle status, invocation history
+- [x] Replace current agent activity panel with invocation-centric view
 
 ### Phase 6: Reaction Integration (worker)
 
-- [ ] New action type: `invoke_agent` (lighter than `launch_agent`)
-- [ ] Wire reactions to invocation dispatcher
-- [ ] Scheduler: periodic invocations (e.g. nightly review sweep)
+- [x] New action type: `invoke_agent` (lighter than `launch_agent`)
+- [x] Wire reactions to invocation dispatcher
+- [x] Scheduler: periodic invocations (e.g. nightly review sweep)
 
 ## What Gets Removed/Simplified
 

@@ -124,6 +124,45 @@ Uses `@vaadin/router` (History API, not hash-based). Route config in `frontend/s
 Navigation: use `navigateTo('/path')` from `router.ts`, never `window.location.hash`.
 Router sets `location` property on routed components (params available via `this.location.params`).
 
+## Ephemeral Invocations
+
+Single `claude -p` executions inside persistent Coder workspaces. Workspaces are reusable environments; invocations are short-lived processes.
+
+### Data Model
+
+- `invocations` table: tracks each `claude -p` call (perspective, prompt, status, output, exit code)
+- Workspaces have `pool_key` for find-or-create resolution (e.g. `project:<uuid>:branch:<name>`)
+- Invocations can optionally link to a session, task, and participant
+
+### Dispatch Flow
+
+1. `POST /api/projects/:id/invocations` creates an invocation record
+2. Server resolves a workspace via pool key (find running → wake stopped → create new)
+3. `coder ssh <workspace> -- claude -p --agent <perspective> '<prompt>'` is spawned
+4. stdout/stderr streamed to log buffer + WebSocket broadcast
+5. Structured JSON output captured in `result_json`
+
+### Agent Perspectives
+
+`.claude/agents/{coder,reviewer,planner}.md` files in workspace define role-specific behavior. The `--agent <name>` flag selects which perspective to use.
+
+### Reaction Integration
+
+`invoke_agent` action type in the reaction engine creates invocations from event triggers. Supports `{{key}}` template interpolation from event payloads.
+
+### Frontend Components
+
+- `invocation-list` — per-project list with status badges and prompt preview
+- `invocation-detail` — output stream (2s polling), result JSON, metadata
+- `invoke-dialog` — launch form (perspective, prompt, branch, system prompt)
+- Integrated as "Invocations" tab in project workspace
+
+### Key Endpoints
+
+- `POST /api/projects/:id/invocations` — create and dispatch
+- `GET /api/projects/:id/invocations` — list (filterable by status, workspace, task)
+- `GET /api/invocations/:id` — detail with output from log buffer
+
 ## Agent Observability
 
 Real-time streaming of agent activity via multiplexed WebSocket channels.
