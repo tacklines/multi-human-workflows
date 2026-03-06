@@ -113,6 +113,30 @@ Server sends filtered `agent_stream` messages only to subscribed connections.
 - `agent-activity-panel.ts` — Tabbed panel (All/Tools/Output) with live indicator and state badges
 - Integrated into `agent-detail.ts` for online agents
 
+## Agent Git Workflow
+
+Agents get a structured git workflow for propagating changes back to the repo.
+
+### Branch Management
+- If no branch specified at launch, server auto-generates `agent/<type>-<short-workspace-id>` (e.g. `agent/coder-a1b2c3d4`)
+- Template checks out the branch (creates it if it doesn't exist remotely)
+- Branch name is returned in the launch response and shown in the UI
+
+### Push Credentials
+- Git credential helper is configured in the Coder template using `GIT_TOKEN` from injected credentials
+- Store a `git_token` credential (org or personal) with push access for agents to push
+- Without `GIT_TOKEN`, agents can commit locally but cannot push
+
+### Push Instructions
+- Server auto-appends push instructions to the agent prompt: "commit and push branch with `git push -u origin <branch>`"
+- User-provided instructions are preserved and the push reminder is appended
+
+### Credential Types (env var mapping)
+- `claude_oauth` → `CLAUDE_CODE_OAUTH_TOKEN`
+- `anthropic_api_key` → `ANTHROPIC_API_KEY`
+- `git_token` → `GIT_TOKEN`
+- User credentials override org credentials of the same type
+
 ## Conventions
 
 - Frontend API calls go through Vite proxy (`/api` → `:3002`, `/ws` → WebSocket)
