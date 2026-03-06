@@ -14,6 +14,7 @@ use crate::auth::JwksCache;
 /// Authenticated MCP caller identity, injected into request extensions.
 /// Tool handlers access this via `Extension(parts)` → `parts.extensions.get::<Arc<McpIdentity>>()`.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct McpIdentity {
     /// Keycloak subject (for JWT) or user's external_id (for agent token)
     pub subject: String,
@@ -42,11 +43,13 @@ pub struct McpAuthLayer {
     jwks: JwksCache,
     db: PgPool,
     enabled: bool,
+    /// Public base URL of this server, used for RFC 9728 resource_metadata in WWW-Authenticate.
+    resource_url: String,
 }
 
 impl McpAuthLayer {
-    pub fn new(jwks: JwksCache, db: PgPool, enabled: bool) -> Self {
-        Self { jwks, db, enabled }
+    pub fn new(jwks: JwksCache, db: PgPool, enabled: bool, resource_url: String) -> Self {
+        Self { jwks, db, enabled, resource_url }
     }
 }
 
@@ -59,6 +62,7 @@ impl<S> tower::Layer<S> for McpAuthLayer {
             jwks: self.jwks.clone(),
             db: self.db.clone(),
             enabled: self.enabled,
+            resource_url: self.resource_url.clone(),
         }
     }
 }
@@ -69,20 +73,28 @@ pub struct McpAuthService<S> {
     jwks: JwksCache,
     db: PgPool,
     enabled: bool,
+    resource_url: String,
 }
 
 /// rmcp's StreamableHttpService returns Response<BoxBody<Bytes, Infallible>>
 type McpResponse = Response<BoxBody<Bytes, Infallible>>;
 
-fn unauthorized_response(message: &str) -> McpResponse {
+/// Build a 401 response with RFC 9728 `WWW-Authenticate` header.
+/// The `resource_metadata` parameter tells MCP clients (like Claude Code)
+/// where to discover OAuth configuration for this protected resource.
+fn unauthorized_response(message: &str, resource_url: &str) -> McpResponse {
     let body = serde_json::json!({
         "error": "unauthorized",
         "message": message,
     });
+    let www_authenticate = format!(
+        "Bearer resource_metadata=\"{}/.well-known/oauth-protected-resource\"",
+        resource_url.trim_end_matches('/')
+    );
     Response::builder()
         .status(StatusCode::UNAUTHORIZED)
         .header("content-type", "application/json")
-        .header("www-authenticate", "Bearer")
+        .header("www-authenticate", &www_authenticate)
         .body(Full::new(Bytes::from(body.to_string())).boxed())
         .expect("valid response")
 }
@@ -115,6 +127,7 @@ where
 
         let jwks = self.jwks.clone();
         let db = self.db.clone();
+        let resource_url = self.resource_url.clone();
         let mut inner = self.inner.clone();
 
         Box::pin(async move {
@@ -128,6 +141,7 @@ where
             let Some(token) = token else {
                 return Ok(unauthorized_response(
                     "Authorization header with Bearer token required",
+                    &resource_url,
                 ));
             };
 
@@ -141,10 +155,10 @@ where
                         session_id: info.session_id,
                         auth_method: AuthMethod::AgentToken,
                     },
-                    Ok(None) => return Ok(unauthorized_response("Invalid or expired agent token")),
+                    Ok(None) => return Ok(unauthorized_response("Invalid or expired agent token", &resource_url)),
                     Err(e) => {
                         tracing::error!("Agent token validation failed: {e}");
-                        return Ok(unauthorized_response("Authentication service error"));
+                        return Ok(unauthorized_response("Authentication service error", &resource_url));
                     }
                 }
             } else {
@@ -158,7 +172,7 @@ where
                         session_id: None,
                         auth_method: AuthMethod::Jwt,
                     },
-                    Err(_) => return Ok(unauthorized_response("Invalid or expired token")),
+                    Err(_) => return Ok(unauthorized_response("Invalid or expired token", &resource_url)),
                 }
             };
 

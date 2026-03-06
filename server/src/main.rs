@@ -36,6 +36,9 @@ pub struct AppState {
     pub keycloak_issuer: String,
     pub log_buffer: log_buffer::LogBuffer,
     pub code_index: Option<std::sync::Arc<code_search::CodeIndex>>,
+    /// Public base URL (from SEAM_URL env or derived from listen address).
+    /// Used for RFC 9728 OAuth Protected Resource Metadata.
+    pub resource_url: String,
 }
 
 #[tokio::main]
@@ -62,6 +65,10 @@ async fn main() {
 
     // Start the background embedding worker (no-op if OLLAMA_URL is not set)
     embeddings::start_embedding_worker(db.clone());
+
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3002".to_string());
+    let resource_url = std::env::var("SEAM_URL")
+        .unwrap_or_else(|_| format!("http://localhost:{port}"));
 
     let keycloak_url = std::env::var("KEYCLOAK_URL")
         .unwrap_or_else(|_| "http://localhost:8081".to_string());
@@ -101,6 +108,7 @@ async fn main() {
         coder,
         keycloak_issuer: keycloak_issuer.clone(),
         code_index: code_index.clone(),
+        resource_url: resource_url.clone(),
     });
 
     let cors = CorsLayer::new()
@@ -239,14 +247,13 @@ async fn main() {
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );
-    let auth_layer = mcp_auth::McpAuthLayer::new(state.jwks.clone(), state.db.clone(), mcp_auth_enabled);
+    let auth_layer = mcp_auth::McpAuthLayer::new(state.jwks.clone(), state.db.clone(), mcp_auth_enabled, resource_url.clone());
     let authed_mcp = auth_layer.layer(mcp_service);
     let app = app.nest_service("/mcp", authed_mcp);
     tracing::info!(auth_enabled = mcp_auth_enabled, "MCP Streamable HTTP endpoint available at /mcp");
 
-    let port = std::env::var("PORT").unwrap_or_else(|_| "3002".to_string());
-    let addr = format!("0.0.0.0:{}", port);
-    tracing::info!("Seam server listening on {}", addr);
+    let addr = format!("0.0.0.0:{port}");
+    tracing::info!("Seam server listening on {addr}");
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
@@ -257,8 +264,9 @@ async fn main() {
 async fn well_known_protected_resource(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
+    let resource = format!("{}/mcp", state.resource_url.trim_end_matches('/'));
     Json(serde_json::json!({
-        "resource": "/mcp",
+        "resource": resource,
         "authorization_servers": [&state.keycloak_issuer],
         "scopes_supported": ["openid", "profile"],
         "bearer_methods_supported": ["header"],
