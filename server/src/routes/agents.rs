@@ -119,7 +119,7 @@ pub async fn launch_agent(
          VALUES ($1, $2, $3, $4, 'pending')
          RETURNING *",
     )
-    .bind(req.task_id.unwrap_or(Uuid::nil()))
+    .bind(req.task_id)
     .bind(session.project_id)
     .bind(&template_name)
     .bind(user_branch.as_deref().unwrap_or(""))
