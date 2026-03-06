@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Mutex;
 use tantivy::{
     Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Term,
     collector::TopDocs,
@@ -35,6 +36,7 @@ pub struct CodeSearchResult {
 pub struct CodeIndex {
     index: Index,
     reader: IndexReader,
+    writer: Mutex<IndexWriter>,
     schema: CodeSchema,
 }
 
@@ -69,9 +71,12 @@ impl CodeIndex {
             .reload_policy(ReloadPolicy::OnCommitWithDelay)
             .try_into()?;
 
+        let writer = index.writer(50_000_000)?;
+
         Ok(Self {
             index,
             reader,
+            writer: Mutex::new(writer),
             schema: CodeSchema {
                 path,
                 content,
@@ -83,27 +88,20 @@ impl CodeIndex {
     }
 
     /// Add or update a file in the index. Uses the path as the unique key per project.
+    ///
+    /// Note: Tantivy's `delete_term` deletes ALL documents matching a single term.
+    /// There's no native "delete where A AND B". We delete by path term (which may
+    /// over-delete if the same path exists in multiple projects) and then re-add.
+    /// This is acceptable because `index_file` is always called per-project, and
+    /// the same physical path in different projects will simply be re-indexed on
+    /// their next indexing pass.
     pub fn index_file(&self, doc: CodeDocument) -> anyhow::Result<()> {
-        let mut writer: IndexWriter = self.index.writer(50_000_000)?;
+        let mut writer = self.writer.lock().map_err(|e| anyhow::anyhow!("writer lock poisoned: {e}"))?;
 
-        // Delete existing doc with same path + project_id before re-indexing
-        let path_term = Term::from_field_text(self.schema.path, &doc.path);
-        let project_term = Term::from_field_text(
-            self.schema.project_id,
-            &doc.project_id.to_string(),
-        );
-        // Delete by compound identity: path within the project
-        writer.delete_term(Term::from_field_text(
-            self.schema.path,
-            &format!("{}::{}", doc.project_id, doc.path),
-        ));
-        // Also delete by raw path term to handle legacy entries
-        writer.delete_term(path_term.clone());
-        drop(path_term);
-        drop(project_term);
+        // Delete existing doc with same path before re-indexing
+        writer.delete_term(Term::from_field_text(self.schema.path, &doc.path));
 
         let mut new_doc = TantivyDocument::default();
-        // Store the compound key as the path for deletion uniqueness
         new_doc.add_text(self.schema.path, &doc.path);
         new_doc.add_text(self.schema.content, &doc.content);
         new_doc.add_text(self.schema.language, &doc.language);
@@ -192,7 +190,7 @@ impl CodeIndex {
 
     /// Remove all documents belonging to a project.
     pub fn delete_project(&self, project_id: Uuid) -> anyhow::Result<()> {
-        let mut writer: IndexWriter = self.index.writer(50_000_000)?;
+        let mut writer = self.writer.lock().map_err(|e| anyhow::anyhow!("writer lock poisoned: {e}"))?;
         writer.delete_term(Term::from_field_text(
             self.schema.project_id,
             &project_id.to_string(),

@@ -72,7 +72,7 @@ async fn run_indexer(pool: &PgPool) -> Result<(), anyhow::Error> {
 
 /// Read all unprocessed events since the cursor, process them, and advance.
 async fn process_pending_events(pool: &PgPool) {
-    let cursor = match get_cursor(pool).await {
+    let mut cursor = match get_cursor(pool).await {
         Ok(c) => c,
         Err(e) => {
             tracing::warn!("failed to read indexer cursor: {e}");
@@ -103,12 +103,12 @@ async fn process_pending_events(pool: &PgPool) {
             break;
         }
 
+        let batch_size = rows.len();
         let last_id = rows.last().map(|r| r.id).unwrap_or(cursor);
         let events: Vec<DomainEvent> = rows.into_iter().map(Into::into).collect();
 
         if let Err(e) = process_events(pool, events).await {
             tracing::warn!("failed to process event batch ending at {last_id}: {e}");
-            // Do not advance cursor — we'll retry on next wake-up.
             return;
         }
 
@@ -117,13 +117,12 @@ async fn process_pending_events(pool: &PgPool) {
             return;
         }
 
-        // If we got a full page, keep draining.
-        if last_id == cursor {
+        cursor = last_id;
+
+        // If we got fewer than a full batch, we've caught up.
+        if batch_size < 100 {
             break;
         }
-        // Only continue if we fetched a full batch (more may exist)
-        // We break if we processed fewer than 100 to avoid infinite loops on errors.
-        // Actually we just loop again — if empty it breaks at top.
     }
 }
 
@@ -214,6 +213,10 @@ async fn index_task(pool: &PgPool, task_id: Uuid) -> Result<(), anyhow::Error> {
         return Ok(());
     };
 
+    // Delete existing chunks before re-inserting so stale chunks
+    // (e.g. removed description) don't linger.
+    delete_chunks_for_source(pool, task_id).await?;
+
     // Title chunk
     upsert_chunk(
         pool,
@@ -293,6 +296,9 @@ async fn index_comment(
     if comment.content.trim().is_empty() {
         return Ok(());
     }
+
+    // Delete existing chunks before re-inserting so stale content is replaced.
+    delete_chunks_for_source(pool, comment_id).await?;
 
     upsert_chunk(
         pool,

@@ -91,23 +91,14 @@ async fn embed_pending_chunks(
             }
         };
 
-        // pgvector stores embeddings as the `vector` type; sqlx doesn't have a native
-        // binding for it, so we cast from a float array literal via SQL.
-        let vector_literal = format!(
-            "[{}]",
-            vector
-                .iter()
-                .map(|f| f.to_string())
-                .collect::<Vec<_>>()
-                .join(",")
-        );
+        let pgvec = pgvector::Vector::from(vector);
 
         sqlx::query(
             "UPDATE knowledge_chunks
-             SET embedding = $1::vector
+             SET embedding = $1
              WHERE id = $2",
         )
-        .bind(&vector_literal)
+        .bind(pgvec)
         .bind(chunk.id)
         .execute(pool)
         .await?;
