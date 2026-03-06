@@ -17,6 +17,7 @@ use sqlx::PgPool;
 use std::sync::Mutex;
 use uuid::Uuid;
 use chrono::Utc;
+use crate::knowledge;
 use crate::models::{Task, TaskComment, TaskStatus};
 use crate::models::{AgentJoinCode, Participant, Session, User};
 
@@ -340,6 +341,24 @@ struct UnlinkRequestRequirementParams {
     request_id: String,
     /// Requirement ID to unlink
     requirement_id: String,
+}
+
+// --- Knowledge params ---
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SearchKnowledgeParams {
+    /// Search query text
+    query: String,
+    /// Optional filter by content type: "task", "plan", "comment"
+    content_type: Option<String>,
+    /// Maximum number of results to return (default 10, max 50)
+    limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetKnowledgeDetailParams {
+    /// UUID of the source entity (task, plan, etc.) to retrieve chunks for
+    source_id: String,
 }
 
 // --- MCP Server ---
@@ -2760,6 +2779,134 @@ impl SeamMcp {
             }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed to send: {e}"))])),
         }
+    }
+
+    #[tool(description = "Search the project knowledge base using full-text search. Returns relevant knowledge chunks (task descriptions, plan content, comments) ranked by relevance.")]
+    async fn search_knowledge(
+        &self,
+        Parameters(params): Parameters<SearchKnowledgeParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let org_id = sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT org_id FROM projects WHERE id = $1",
+        )
+        .bind(project_id)
+        .fetch_one(&self.db)
+        .await
+        .map_err(|_| McpError::internal_error("Failed to look up project", None))?;
+
+        let limit = params.limit.unwrap_or(10).min(50).max(1);
+
+        let mut results = match knowledge::search_fts_only(&self.db, org_id, &params.query, limit * 5).await {
+            Ok(r) => r,
+            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Search failed: {e}"))])),
+        };
+
+        // Post-filter by content_type if specified
+        if let Some(ref ct) = params.content_type {
+            results.retain(|r| r.content_type == *ct);
+        }
+
+        results.truncate(limit as usize);
+
+        let output: Vec<serde_json::Value> = results
+            .into_iter()
+            .map(|r| {
+                let snippet: String = r.chunk_text.chars().take(500).collect();
+                serde_json::json!({
+                    "id": r.id,
+                    "content_type": r.content_type,
+                    "source_id": r.source_id,
+                    "snippet": snippet,
+                    "score": r.score,
+                    "metadata": r.metadata,
+                })
+            })
+            .collect();
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&output).unwrap_or_default(),
+        )]))
+    }
+
+    #[tool(description = "Retrieve the full knowledge base content for a specific source entity (task, plan, etc.) by its ID. Returns all indexed chunks with their full text.")]
+    async fn get_knowledge_detail(
+        &self,
+        Parameters(params): Parameters<GetKnowledgeDetailParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let source_id = match Uuid::parse_str(&params.source_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid source_id: must be a UUID")])),
+        };
+
+        let org_id = sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT org_id FROM projects WHERE id = $1",
+        )
+        .bind(project_id)
+        .fetch_one(&self.db)
+        .await
+        .map_err(|_| McpError::internal_error("Failed to look up project", None))?;
+
+        #[derive(sqlx::FromRow)]
+        struct ChunkRow {
+            id: Uuid,
+            chunk_text: String,
+            source_field: Option<String>,
+            content_type: String,
+            metadata: serde_json::Value,
+            created_at: chrono::DateTime<Utc>,
+        }
+
+        let chunks = sqlx::query_as::<_, ChunkRow>(
+            "SELECT id, chunk_text, source_field, content_type, metadata, created_at
+             FROM knowledge_chunks
+             WHERE source_id = $1 AND org_id = $2
+             ORDER BY source_field",
+        )
+        .bind(source_id)
+        .bind(org_id)
+        .fetch_all(&self.db)
+        .await
+        .map_err(|e| McpError::internal_error(format!("Database error: {e}"), None))?;
+
+        if chunks.is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "No knowledge chunks found for this source_id",
+            )]));
+        }
+
+        let content_type = chunks[0].content_type.clone();
+        let sections: Vec<serde_json::Value> = chunks
+            .iter()
+            .map(|c| {
+                serde_json::json!({
+                    "id": c.id,
+                    "source_field": c.source_field,
+                    "text": c.chunk_text,
+                    "metadata": c.metadata,
+                    "created_at": c.created_at.to_rfc3339(),
+                })
+            })
+            .collect();
+
+        let output = serde_json::json!({
+            "source_id": source_id,
+            "content_type": content_type,
+            "chunks": sections,
+        });
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&output).unwrap_or_default(),
+        )]))
     }
 }
 
