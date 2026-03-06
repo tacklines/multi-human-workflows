@@ -442,6 +442,8 @@ pub struct Workspace {
     pub status: WorkspaceStatus,
     pub template_name: String,
     pub branch: Option<String>,
+    pub pool_key: Option<String>,
+    pub last_invocation_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
@@ -470,6 +472,40 @@ pub struct CreateWorkspaceRequest {
     pub task_id: Option<Uuid>,
     pub template_name: Option<String>,
     pub branch: Option<String>,
+}
+
+// --- Invocations ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Invocation {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub project_id: Uuid,
+    pub session_id: Option<Uuid>,
+    pub task_id: Option<Uuid>,
+    pub participant_id: Option<Uuid>,
+
+    // What to run
+    pub agent_perspective: String,
+    pub prompt: String,
+    pub system_prompt_append: Option<String>,
+
+    // Execution state
+    pub status: String,
+    pub exit_code: Option<i32>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+
+    // Output
+    pub result_json: Option<serde_json::Value>,
+    pub error_message: Option<String>,
+
+    // Provenance
+    pub triggered_by: String,
+    pub reaction_id: Option<Uuid>,
+
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 // --- Requirements ---
