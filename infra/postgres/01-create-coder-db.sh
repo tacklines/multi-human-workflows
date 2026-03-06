@@ -3,4 +3,9 @@ set -e
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
     CREATE DATABASE coder;
     GRANT ALL PRIVILEGES ON DATABASE coder TO seam;
+
+    CREATE DATABASE zitadel;
+    CREATE ROLE zitadel WITH LOGIN PASSWORD '${ZITADEL_DB_PASSWORD:-zitadel}';
+    GRANT ALL PRIVILEGES ON DATABASE zitadel TO zitadel;
+    GRANT ALL PRIVILEGES ON DATABASE zitadel TO seam;
 EOSQL

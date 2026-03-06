@@ -1,0 +1,13 @@
+target/
+node_modules/
+.git/
+.github/
+.claude/
+.beads/
+docs/
+agents/
+infra/
+memory/
+*.md
+.env*
+docker-compose*.yml
