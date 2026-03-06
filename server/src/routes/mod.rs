@@ -8,6 +8,7 @@ pub mod events;
 pub mod integrations;
 pub mod invocations;
 pub mod messages;
+pub mod model_preferences;
 pub mod notes;
 pub mod orgs;
 pub mod plans;

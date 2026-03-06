@@ -146,6 +146,9 @@ async fn main() {
         // User Credentials
         .route("/api/me/credentials", get(routes::user_credentials::list_user_credentials).post(routes::user_credentials::create_user_credential))
         .route("/api/me/credentials/{credential_id}", patch(routes::user_credentials::rotate_user_credential).delete(routes::user_credentials::delete_user_credential))
+        // Model Preferences
+        .route("/api/me/model-preferences", get(routes::model_preferences::list_user_model_preferences).put(routes::model_preferences::upsert_user_model_preferences))
+        .route("/api/orgs/{slug}/model-preferences", get(routes::model_preferences::list_org_model_preferences).put(routes::model_preferences::upsert_org_model_preferences))
         // Projects
         .route("/api/projects", get(routes::projects::list_projects))
         .route("/api/projects", post(routes::projects::create_project))
