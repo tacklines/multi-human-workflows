@@ -319,6 +319,71 @@ struct InvocationRow {
     prompt: String,
     system_prompt_append: Option<String>,
     resume_session_id: Option<String>,
+    model_hint: Option<String>,
+    budget_tier: Option<String>,
+    provider: Option<String>,
+}
+
+/// Resolve effective model configuration by merging:
+/// request params > user prefs > org prefs > system defaults.
+///
+/// Stored at invocation CREATE time so the stored values are already the
+/// merged result and dispatch can simply read them from the row.
+pub async fn resolve_model_config(
+    db: &PgPool,
+    project_id: Uuid,
+    user_id: Option<Uuid>,
+    request_model_hint: Option<&str>,
+    request_budget_tier: Option<&str>,
+    request_provider: Option<&str>,
+) -> (Option<String>, Option<String>, Option<String>) {
+    let mut model_hint = request_model_hint.map(|s| s.to_string());
+    let mut budget_tier = request_budget_tier.map(|s| s.to_string());
+    let mut provider = request_provider.map(|s| s.to_string());
+
+    // Look up user preferences (if user_id available)
+    if let Some(uid) = user_id {
+        let user_prefs: Vec<(String, serde_json::Value)> = sqlx::query_as(
+            "SELECT preference_key, preference_value FROM user_model_preferences WHERE user_id = $1",
+        )
+        .bind(uid)
+        .fetch_all(db)
+        .await
+        .unwrap_or_default();
+
+        for (key, value) in &user_prefs {
+            let val_str = value.as_str().map(|s| s.to_string());
+            match key.as_str() {
+                "default_model" if model_hint.is_none() => model_hint = val_str,
+                "default_budget" if budget_tier.is_none() => budget_tier = val_str,
+                "default_provider" if provider.is_none() => provider = val_str,
+                _ => {}
+            }
+        }
+    }
+
+    // Look up org preferences
+    if let Some(org_id) = org_id_for_project(db, project_id).await {
+        let org_prefs: Vec<(String, serde_json::Value)> = sqlx::query_as(
+            "SELECT preference_key, preference_value FROM org_model_preferences WHERE org_id = $1",
+        )
+        .bind(org_id)
+        .fetch_all(db)
+        .await
+        .unwrap_or_default();
+
+        for (key, value) in &org_prefs {
+            let val_str = value.as_str().map(|s| s.to_string());
+            match key.as_str() {
+                "default_model" if model_hint.is_none() => model_hint = val_str,
+                "default_budget" if budget_tier.is_none() => budget_tier = val_str,
+                "default_provider" if provider.is_none() => provider = val_str,
+                _ => {}
+            }
+        }
+    }
+
+    (model_hint, budget_tier, provider)
 }
 
 /// A line tagged with its file descriptor.
@@ -356,20 +421,24 @@ pub async fn dispatch_invocation(
     // 1. Load invocation
     let inv: Option<InvocationRow> = sqlx::query_as(
         "SELECT id, workspace_id, session_id, participant_id,
-                agent_perspective, prompt, system_prompt_append, resume_session_id
+                agent_perspective, prompt, system_prompt_append, resume_session_id,
+                model_hint, budget_tier, provider
          FROM invocations WHERE id = $1",
     )
     .bind(invocation_id)
     .fetch_optional(db)
     .await?
     .map(
-        |(id, workspace_id, session_id, participant_id, agent_perspective, prompt, system_prompt_append, resume_session_id): (
+        |(id, workspace_id, session_id, participant_id, agent_perspective, prompt, system_prompt_append, resume_session_id, model_hint, budget_tier, provider): (
             Uuid,
             Uuid,
             Option<Uuid>,
             Option<Uuid>,
             String,
             String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
             Option<String>,
             Option<String>,
         )| InvocationRow {
@@ -381,6 +450,9 @@ pub async fn dispatch_invocation(
             prompt,
             system_prompt_append,
             resume_session_id,
+            model_hint,
+            budget_tier,
+            provider,
         },
     );
 
@@ -462,6 +534,28 @@ pub async fn dispatch_invocation(
             bash_single_quote_escape(spa)
         ));
     }
+
+    // Prepend model selection env vars so the agent process can read them
+    let mut model_env = String::new();
+    if let Some(ref hint) = inv.model_hint {
+        model_env.push_str(&format!(
+            "export SEAM_MODEL_HINT='{}' && ",
+            bash_single_quote_escape(hint)
+        ));
+    }
+    if let Some(ref budget) = inv.budget_tier {
+        model_env.push_str(&format!(
+            "export SEAM_BUDGET_TIER='{}' && ",
+            bash_single_quote_escape(budget)
+        ));
+    }
+    if let Some(ref prov) = inv.provider {
+        model_env.push_str(&format!(
+            "export SEAM_PROVIDER='{}' && ",
+            bash_single_quote_escape(prov)
+        ));
+    }
+    let claude_cmd = format!("{model_env}{claude_cmd}");
 
     // 6. Resolve session code for WebSocket broadcast (best-effort)
     let session_code: Option<String> = if let Some(sid) = inv.session_id {

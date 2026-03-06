@@ -29,6 +29,9 @@ pub struct CreateInvocationRequest {
     pub branch: Option<String>,
     /// If set, resume a prior Claude session (claude_session_id from a completed invocation).
     pub resume_session_id: Option<String>,
+    pub model_hint: Option<String>,
+    pub budget_tier: Option<String>,
+    pub provider: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,6 +63,9 @@ pub struct InvocationView {
     pub updated_at: DateTime<Utc>,
     pub claude_session_id: Option<String>,
     pub resume_session_id: Option<String>,
+    pub model_hint: Option<String>,
+    pub budget_tier: Option<String>,
+    pub provider: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -91,6 +97,9 @@ fn to_view(inv: Invocation) -> InvocationView {
         updated_at: inv.updated_at,
         claude_session_id: inv.claude_session_id,
         resume_session_id: inv.resume_session_id,
+        model_hint: inv.model_hint,
+        budget_tier: inv.budget_tier,
+        provider: inv.provider,
     }
 }
 
@@ -167,12 +176,24 @@ pub async fn create_invocation(
         }
     };
 
+    // Resolve effective model config: request params > user prefs > org prefs
+    let (effective_model_hint, effective_budget_tier, effective_provider) =
+        crate::dispatch::resolve_model_config(
+            &state.db,
+            project_id,
+            Some(user.id),
+            req.model_hint.as_deref(),
+            req.budget_tier.as_deref(),
+            req.provider.as_deref(),
+        )
+        .await;
+
     let inv = sqlx::query_as::<_, Invocation>(
         "INSERT INTO invocations
             (workspace_id, project_id, session_id, task_id,
              agent_perspective, prompt, system_prompt_append, triggered_by,
-             resume_session_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual', $8)
+             resume_session_id, model_hint, budget_tier, provider)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual', $8, $9, $10, $11)
          RETURNING *",
     )
     .bind(workspace_id)
@@ -183,6 +204,9 @@ pub async fn create_invocation(
     .bind(&req.prompt)
     .bind(&req.system_prompt_append)
     .bind(&req.resume_session_id)
+    .bind(&effective_model_hint)
+    .bind(&effective_budget_tier)
+    .bind(&effective_provider)
     .fetch_one(&state.db)
     .await
     .map_err(|e| {

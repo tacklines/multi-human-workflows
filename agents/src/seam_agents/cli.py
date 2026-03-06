@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from seam_agents.coder_client import CoderMCPClient
@@ -17,13 +18,19 @@ from seam_agents.agents.session_agent import run_agent
 
 
 def _parse_requirement(args) -> ModelRequirement | None:
-    """Build a ModelRequirement from CLI flags, if any are set."""
-    if not args.model and not args.budget:
+    """Build a ModelRequirement from CLI flags + SEAM_* env vars.
+
+    Priority: CLI flags > SEAM_* env vars (set by server dispatch).
+    """
+    model = args.model or os.environ.get("SEAM_MODEL_HINT")
+    budget = args.budget or os.environ.get("SEAM_BUDGET_TIER")
+
+    if not model and not budget:
         return None
     return ModelRequirement(
-        model_hint=args.model,
-        exact=bool(args.model),
-        max_budget=Budget(args.budget) if args.budget else None,
+        model_hint=model,
+        exact=bool(model),
+        max_budget=Budget(budget) if budget else None,
     )
 
 

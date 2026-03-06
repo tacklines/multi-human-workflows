@@ -504,6 +504,11 @@ pub struct Invocation {
     pub triggered_by: String,
     pub reaction_id: Option<Uuid>,
 
+    // Model selection (request-level overrides)
+    pub model_hint: Option<String>,
+    pub budget_tier: Option<String>,
+    pub provider: Option<String>,
+
     // Session continuity (claude -p --resume)
     pub claude_session_id: Option<String>,
     pub resume_session_id: Option<String>,
