@@ -47,9 +47,13 @@ pub struct SearchResult {
 /// Returns top-k results ranked by combined RRF score. Requires embeddings to be
 /// present in the table; chunks without embeddings are excluded from the vector
 /// half but can still surface via FTS.
+///
+/// When `project_id` is `Some`, results are scoped to that project only.
+/// When `None`, all projects in the org are searched.
 pub async fn search_hybrid(
     pool: &PgPool,
     org_id: Uuid,
+    project_id: Option<Uuid>,
     query: &str,
     query_embedding: &[f32],
     limit: i64,
@@ -62,6 +66,7 @@ pub async fn search_hybrid(
                    ROW_NUMBER() OVER (ORDER BY embedding <=> $3::vector) AS rank
             FROM knowledge_chunks
             WHERE org_id = $1 AND embedding IS NOT NULL
+              AND ($5::uuid IS NULL OR project_id = $5)
             ORDER BY embedding <=> $3::vector
             LIMIT 20
         ),
@@ -73,6 +78,7 @@ pub async fn search_hybrid(
             FROM knowledge_chunks
             WHERE org_id = $1
               AND search_vector @@ websearch_to_tsquery('english', $2)
+              AND ($5::uuid IS NULL OR project_id = $5)
             ORDER BY ts_rank(search_vector, websearch_to_tsquery('english', $2)) DESC
             LIMIT 20
         ),
@@ -98,6 +104,7 @@ pub async fn search_hybrid(
     .bind(query)
     .bind(embedding)
     .bind(limit)
+    .bind(project_id)
     .fetch_all(pool)
     .await?;
 
@@ -105,9 +112,13 @@ pub async fn search_hybrid(
 }
 
 /// Keyword-only full-text search. Works without any embeddings in the table.
+///
+/// When `project_id` is `Some`, results are scoped to that project only.
+/// When `None`, all projects in the org are searched.
 pub async fn search_fts_only(
     pool: &PgPool,
     org_id: Uuid,
+    project_id: Option<Uuid>,
     query: &str,
     limit: i64,
 ) -> Result<Vec<SearchResult>, sqlx::Error> {
@@ -117,12 +128,14 @@ pub async fn search_fts_only(
          FROM knowledge_chunks
          WHERE org_id = $1
            AND search_vector @@ websearch_to_tsquery('english', $2)
+           AND ($4::uuid IS NULL OR project_id = $4)
          ORDER BY score DESC
          LIMIT $3",
     )
     .bind(org_id)
     .bind(query)
     .bind(limit)
+    .bind(project_id)
     .fetch_all(pool)
     .await?;
 

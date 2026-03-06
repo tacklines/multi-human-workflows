@@ -353,6 +353,8 @@ struct SearchKnowledgeParams {
     content_type: Option<String>,
     /// Maximum number of results to return (default 10, max 50)
     limit: Option<i64>,
+    /// When true, search all projects in the org instead of only the current project
+    project_wide: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -2801,7 +2803,14 @@ impl SeamMcp {
 
         let limit = params.limit.unwrap_or(10).min(50).max(1);
 
-        let mut results = match knowledge::search_fts_only(&self.db, org_id, &params.query, limit * 5).await {
+        // project_wide=true searches the entire org; default is current-project only
+        let search_project_id = if params.project_wide.unwrap_or(false) {
+            None
+        } else {
+            Some(project_id)
+        };
+
+        let mut results = match knowledge::search_fts_only(&self.db, org_id, search_project_id, &params.query, limit * 5).await {
             Ok(r) => r,
             Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Search failed: {e}"))])),
         };
@@ -2816,7 +2825,13 @@ impl SeamMcp {
         let output: Vec<serde_json::Value> = results
             .into_iter()
             .map(|r| {
-                let snippet: String = r.chunk_text.chars().take(500).collect();
+                let raw_snippet: String = r.chunk_text.chars().take(500).collect();
+                // XML-delimit the snippet to establish a trust boundary and prevent
+                // prompt injection from user-authored content being treated as instructions.
+                let snippet = format!(
+                    r#"<knowledge_result source_id="{}" content_type="{}" score="{:.4}">{}</knowledge_result>"#,
+                    r.source_id, r.content_type, r.score, raw_snippet
+                );
                 serde_json::json!({
                     "id": r.id,
                     "content_type": r.content_type,
@@ -2870,10 +2885,12 @@ impl SeamMcp {
             "SELECT id, chunk_text, source_field, content_type, metadata, created_at
              FROM knowledge_chunks
              WHERE source_id = $1 AND org_id = $2
+               AND ($3::uuid IS NULL OR project_id = $3)
              ORDER BY source_field",
         )
         .bind(source_id)
         .bind(org_id)
+        .bind(project_id)
         .fetch_all(&self.db)
         .await
         .map_err(|e| McpError::internal_error(format!("Database error: {e}"), None))?;
@@ -2888,10 +2905,18 @@ impl SeamMcp {
         let sections: Vec<serde_json::Value> = chunks
             .iter()
             .map(|c| {
+                // XML-delimit chunk text to establish a trust boundary and prevent
+                // prompt injection from user-authored content being treated as instructions.
+                let text = format!(
+                    r#"<knowledge_chunk source_field="{}" content_type="{}">{}</knowledge_chunk>"#,
+                    c.source_field.as_deref().unwrap_or(""),
+                    c.content_type,
+                    c.chunk_text
+                );
                 serde_json::json!({
                     "id": c.id,
                     "source_field": c.source_field,
-                    "text": c.chunk_text,
+                    "text": text,
                     "metadata": c.metadata,
                     "created_at": c.created_at.to_rfc3339(),
                 })
