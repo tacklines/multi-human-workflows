@@ -1072,21 +1072,21 @@ export class TaskBoard extends LitElement {
   }
 
   private _renderStats() {
-    const tasks = this._tasks;
-    const open = tasks.filter(t => t.status === 'open').length;
-    const inProgress = tasks.filter(t => t.status === 'in_progress').length;
-    const done = tasks.filter(t => t.status === 'done').length;
-    const closed = tasks.filter(t => t.status === 'closed').length;
-    const showing = this._filteredTasks.length;
+    const filtered = this._filteredTasks;
+    const total = this._tasks.length;
+    const open = filtered.filter(t => t.status === 'open').length;
+    const inProgress = filtered.filter(t => t.status === 'in_progress').length;
+    const done = filtered.filter(t => t.status === 'done').length;
+    const closed = filtered.filter(t => t.status === 'closed').length;
+    const hidden = total - filtered.length;
 
     return html`
       <div class="stats-bar">
-        <div class="stat"><span class="stat-value">${showing}</span> showing</div>
         <div class="stat"><span class="stat-value">${open}</span> open</div>
         <div class="stat"><span class="stat-value">${inProgress}</span> in progress</div>
-        <div class="stat"><span class="stat-value">${done}</span> done</div>
+        ${done > 0 ? html`<div class="stat"><span class="stat-value">${done}</span> done</div>` : nothing}
         ${closed > 0 ? html`<div class="stat"><span class="stat-value">${closed}</span> closed</div>` : nothing}
-        ${showing < tasks.length ? html`<div class="stat" style="margin-left: auto; color: var(--text-tertiary);">${tasks.length - showing} hidden</div>` : nothing}
+        ${hidden > 0 ? html`<div class="stat" style="margin-left: auto; color: var(--text-tertiary);">${hidden} hidden</div>` : nothing}
       </div>
     `;
   }
