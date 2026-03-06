@@ -5,6 +5,7 @@ pub mod events;
 pub mod integrations;
 pub mod messages;
 pub mod notes;
+pub mod orgs;
 pub mod plans;
 pub mod projects;
 pub mod questions;

@@ -96,6 +96,12 @@ async fn main() {
     let app = Router::new()
         // Health
         .route("/health", get(|| async { "ok" }))
+        // Organizations
+        .route("/api/orgs", get(routes::orgs::list_orgs).post(routes::orgs::create_org))
+        .route("/api/orgs/{slug}", get(routes::orgs::get_org).patch(routes::orgs::update_org))
+        .route("/api/orgs/{slug}/members", get(routes::orgs::list_members).post(routes::orgs::invite_member))
+        .route("/api/orgs/{slug}/members/{user_id}", patch(routes::orgs::update_member).delete(routes::orgs::remove_member))
+        .route("/api/orgs/{slug}/projects", get(routes::orgs::list_org_projects).post(routes::orgs::create_org_project))
         // Projects
         .route("/api/projects", get(routes::projects::list_projects))
         .route("/api/projects", post(routes::projects::create_project))
@@ -283,6 +289,23 @@ async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<()
                         let participant_id = msg["participant_id"].as_str().unwrap_or("");
 
                         if !session_code.is_empty() && !participant_id.is_empty() {
+                            let agent_state = msg["state"].as_str().unwrap_or("");
+
+                            // Track MCP agent presence
+                            if agent_state == "joined" {
+                                state.connections.set_mcp_agent_online(session_code, participant_id);
+                                state.connections.broadcast_to_session(session_code, &serde_json::json!({
+                                    "type": "participant_connected",
+                                    "participantId": participant_id,
+                                })).await;
+                            } else if agent_state == "disconnected" {
+                                state.connections.set_mcp_agent_offline(session_code, participant_id);
+                                state.connections.broadcast_to_session(session_code, &serde_json::json!({
+                                    "type": "participant_disconnected",
+                                    "participantId": participant_id,
+                                })).await;
+                            }
+
                             state.connections.broadcast_agent_stream(
                                 session_code,
                                 participant_id,

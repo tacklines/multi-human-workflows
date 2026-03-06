@@ -9,6 +9,7 @@ pub struct Organization {
     pub id: Uuid,
     pub name: String,
     pub slug: String,
+    pub personal: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -222,6 +223,50 @@ pub struct ActivityEvent {
     pub summary: String,
     pub metadata: serde_json::Value,
     pub created_at: DateTime<Utc>,
+}
+
+// --- Org API DTOs ---
+
+#[derive(Debug, Serialize)]
+pub struct OrgView {
+    pub id: Uuid,
+    pub name: String,
+    pub slug: String,
+    pub personal: bool,
+    pub role: OrgRole,
+    pub created_at: DateTime<Utc>,
+    pub member_count: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OrgMemberView {
+    pub user_id: Uuid,
+    pub username: String,
+    pub display_name: String,
+    pub role: OrgRole,
+    pub joined_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateOrgRequest {
+    pub name: String,
+    pub slug: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateOrgRequest {
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InviteOrgMemberRequest {
+    pub username: String,
+    pub role: Option<OrgRole>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateOrgMemberRequest {
+    pub role: OrgRole,
 }
 
 // --- API DTOs ---
