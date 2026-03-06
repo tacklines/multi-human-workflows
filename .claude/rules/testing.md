@@ -12,11 +12,16 @@ cd server && cargo test        # or: just test
 
 ## Frontend (TypeScript)
 
-No test framework currently configured. Type-checking serves as the primary verification:
+Vitest with jsdom environment. Tests live alongside source as `*.test.ts` files.
 
 ```bash
-cd frontend && npx tsc --noEmit    # or: just check-frontend
+cd frontend && npm test            # vitest run (all tests)
+cd frontend && npx tsc --noEmit    # or: just check-frontend (type check only)
 ```
+
+- Test files match `src/**/*.test.ts`
+- Config: `frontend/vitest.config.ts`
+- Environment: jsdom (suitable for DOM-dependent Lit component tests)
 
 ## Agents (Python)
 
