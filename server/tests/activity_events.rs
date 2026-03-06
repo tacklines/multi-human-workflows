@@ -118,6 +118,35 @@ async fn test_activity_target_type_constraint() {
 }
 
 #[tokio::test]
+async fn test_activity_event_extended_types() {
+    let db = setup_db().await;
+    let (session_id, project_id, participant_id, _) = create_test_context(&db).await;
+
+    // All extended event_type + target_type combos should be accepted
+    let cases = [
+        ("question_asked", "question"),
+        ("question_answered", "question"),
+        ("requirement_created", "requirement"),
+        ("requirement_updated", "requirement"),
+        ("request_created", "request"),
+        ("request_updated", "request"),
+    ];
+
+    for (event_type, target_type) in cases {
+        let result = sqlx::query(
+            "INSERT INTO activity_events (project_id, session_id, actor_id, event_type, target_type, target_id, summary)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)"
+        )
+        .bind(project_id).bind(session_id).bind(participant_id)
+        .bind(event_type).bind(target_type).bind(Uuid::new_v4())
+        .bind(format!("Test: {event_type}"))
+        .execute(&db).await;
+
+        assert!(result.is_ok(), "event_type={event_type} + target_type={target_type} should be accepted");
+    }
+}
+
+#[tokio::test]
 async fn test_activity_events_ordered_by_time() {
     let db = setup_db().await;
     let (session_id, project_id, participant_id, _) = create_test_context(&db).await;
