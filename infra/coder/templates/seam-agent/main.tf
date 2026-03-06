@@ -179,7 +179,7 @@ resource "coder_agent" "dev" {
 
     # --- Phase 0: Log forwarder + startup log tee ---
     # Install log forwarder script (streams log file to Seam server)
-    mkdir -p /opt/seam
+    sudo mkdir -p /opt/seam && sudo chown "$(id -u):$(id -g)" /opt/seam
     cat > /opt/seam/log-forwarder.py <<'FORWARDER'
 #!/usr/bin/env python3
 """Tails a log file and POSTs batches to the Seam server."""
