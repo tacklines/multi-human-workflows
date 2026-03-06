@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import './markdown-content.js';
 import { store } from '../../state/app-state.js';
 import { fetchNotes, upsertNote, type NoteView } from '../../state/task-api.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -199,7 +200,7 @@ export class NotesPanel extends LitElement {
     return html`
       <div class="section-label">
         <sl-icon name="journal-text"></sl-icon>
-        Notes
+        ${t('notes.label')}
         ${this._notes.length > 0 ? html`
           <sl-badge variant="neutral" pill>${this._notes.length}</sl-badge>
         ` : nothing}
@@ -236,8 +237,8 @@ export class NotesPanel extends LitElement {
               ></sl-textarea>
               <div class="editor-actions">
                 <sl-button size="small" variant="primary" ?loading=${this._saving}
-                           @click=${this._save}>Save</sl-button>
-                <sl-button size="small" variant="text" @click=${this._cancelEditing}>Cancel</sl-button>
+                           @click=${this._save}>${t('notes.save')}</sl-button>
+                <sl-button size="small" variant="text" @click=${this._cancelEditing}>${t('notes.cancel')}</sl-button>
               </div>
             </div>
           ` : html`
@@ -247,12 +248,12 @@ export class NotesPanel extends LitElement {
           `}
           ${activeNote.updated_by_name ? html`
             <div class="note-meta">
-              Last edited by ${activeNote.updated_by_name} · ${this._relativeTime(activeNote.updated_at)}
+              ${t('notes.lastEditedBy', { name: activeNote.updated_by_name })} · ${this._relativeTime(activeNote.updated_at)}
             </div>
           ` : nothing}
         </div>
       ` : html`
-        <div class="empty-state">No notes yet. Click + to create one.</div>
+        <div class="empty-state">${t('notes.empty')}</div>
       `}
     `;
   }
@@ -260,11 +261,11 @@ export class NotesPanel extends LitElement {
   private _relativeTime(dateStr: string): string {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1) return t('time.justNow');
+    if (mins < 60) return t('time.minutesAgo', { count: mins });
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.floor(hrs / 24)}d ago`;
+    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
+    return t('time.daysAgo', { count: Math.floor(hrs / 24) });
   }
 }
 

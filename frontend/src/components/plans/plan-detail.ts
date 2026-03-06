@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchPlan, updatePlan, type PlanDetailView, type PlanStatusType } from '../../state/plan-api.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
@@ -21,12 +22,12 @@ const STATUS_VARIANTS: Record<PlanStatusType, string> = {
   abandoned: 'neutral',
 };
 
-const STATUS_LABELS: Record<PlanStatusType, string> = {
-  draft: 'Draft',
-  review: 'Review',
-  accepted: 'Accepted',
-  superseded: 'Superseded',
-  abandoned: 'Abandoned',
+const STATUS_LABEL_KEYS: Record<PlanStatusType, string> = {
+  draft: 'planList.status.draft',
+  review: 'planList.status.review',
+  accepted: 'planList.status.accepted',
+  superseded: 'planList.status.superseded',
+  abandoned: 'planList.status.abandoned',
 };
 
 interface Transition {
@@ -37,17 +38,17 @@ interface Transition {
 
 const TRANSITIONS: Record<PlanStatusType, Transition[]> = {
   draft: [
-    { label: 'Submit for Review', status: 'review', variant: 'warning' },
-    { label: 'Abandon', status: 'abandoned', variant: 'danger' },
+    { label: 'planDetail.transition.submitForReview', status: 'review', variant: 'warning' },
+    { label: 'planDetail.transition.abandon', status: 'abandoned', variant: 'danger' },
   ],
   review: [
-    { label: 'Accept', status: 'accepted', variant: 'success' },
-    { label: 'Return to Draft', status: 'draft', variant: 'neutral' },
-    { label: 'Abandon', status: 'abandoned', variant: 'danger' },
+    { label: 'planDetail.transition.accept', status: 'accepted', variant: 'success' },
+    { label: 'planDetail.transition.returnToDraft', status: 'draft', variant: 'neutral' },
+    { label: 'planDetail.transition.abandon', status: 'abandoned', variant: 'danger' },
   ],
   accepted: [
-    { label: 'Supersede', status: 'superseded', variant: 'neutral' },
-    { label: 'Abandon', status: 'abandoned', variant: 'danger' },
+    { label: 'planDetail.transition.supersede', status: 'superseded', variant: 'neutral' },
+    { label: 'planDetail.transition.abandon', status: 'abandoned', variant: 'danger' },
   ],
   superseded: [],
   abandoned: [],
@@ -179,7 +180,7 @@ export class PlanDetail extends LitElement {
     try {
       this._plan = await fetchPlan(this.projectId, this.planId);
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to load plan';
+      this._error = err instanceof Error ? err.message : t('planDetail.errorLoad');
     } finally {
       this._loading = false;
     }
@@ -209,7 +210,7 @@ export class PlanDetail extends LitElement {
       }
       this._editing = false;
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to save';
+      this._error = err instanceof Error ? err.message : t('planDetail.errorSave');
     } finally {
       this._saving = false;
     }
@@ -222,7 +223,7 @@ export class PlanDetail extends LitElement {
     try {
       this._plan = await updatePlan(this.projectId, this.planId, { status });
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to update status';
+      this._error = err instanceof Error ? err.message : t('planDetail.errorStatus');
     } finally {
       this._transitioning = false;
     }
@@ -249,7 +250,7 @@ export class PlanDetail extends LitElement {
     }
 
     if (!this._plan) {
-      return html`<div style="text-align: center; color: var(--text-tertiary); padding: 2rem;">Plan not found</div>`;
+      return html`<div style="text-align: center; color: var(--text-tertiary); padding: 2rem;">${t('planDetail.notFound')}</div>`;
     }
 
     const p = this._plan;
@@ -272,11 +273,11 @@ export class PlanDetail extends LitElement {
             ` : html`
               <h2>${p.title}</h2>
             `}
-            <sl-badge variant=${STATUS_VARIANTS[p.status]}>${STATUS_LABELS[p.status]}</sl-badge>
+            <sl-badge variant=${STATUS_VARIANTS[p.status]}>${t(STATUS_LABEL_KEYS[p.status])}</sl-badge>
           </div>
           <div class="meta">
-            <span>Updated ${this._relativeTime(p.updated_at)}</span>
-            <span>Created ${this._relativeTime(p.created_at)}</span>
+            <span>${t('planDetail.updated', { time: this._relativeTime(p.updated_at) })}</span>
+            <span>${t('planDetail.created', { time: this._relativeTime(p.created_at) })}</span>
           </div>
         </div>
       </div>
@@ -286,13 +287,13 @@ export class PlanDetail extends LitElement {
           ${this._isEditable() && !this._editing ? html`
             <sl-button size="small" variant="default" @click=${() => this._startEdit()}>
               <sl-icon slot="prefix" name="pencil"></sl-icon>
-              Edit
+              ${t('planDetail.edit')}
             </sl-button>
           ` : nothing}
-          ${transitions.map(t => html`
-            <sl-button size="small" variant=${t.variant} ?loading=${this._transitioning}
-                       @click=${() => void this._transition(t.status)}>
-              ${t.label}
+          ${transitions.map(tr => html`
+            <sl-button size="small" variant=${tr.variant} ?loading=${this._transitioning}
+                       @click=${() => void this._transition(tr.status)}>
+              ${t(tr.label)}
             </sl-button>
           `)}
         </div>
@@ -302,20 +303,20 @@ export class PlanDetail extends LitElement {
         ${this._editing ? html`
           <sl-textarea rows="15" value=${this._editBody}
                        @sl-input=${(e: CustomEvent) => { this._editBody = (e.target as HTMLTextAreaElement).value; }}
-                       placeholder="Write your plan in Markdown..."
+                       placeholder=${t('planDetail.placeholder')}
           ></sl-textarea>
           <div class="edit-controls">
-            <sl-button size="small" variant="default" @click=${() => this._cancelEdit()}>Cancel</sl-button>
+            <sl-button size="small" variant="default" @click=${() => this._cancelEdit()}>${t('planDetail.cancel')}</sl-button>
             <sl-button size="small" variant="primary" ?loading=${this._saving}
                        @click=${() => void this._saveEdit()}>
-              Save
+              ${t('planDetail.save')}
             </sl-button>
           </div>
         ` : html`
           ${p.body ? html`
             <markdown-content .content=${p.body}></markdown-content>
           ` : html`
-            <div class="empty-body">No content yet. ${this._isEditable() ? 'Click Edit to start writing.' : ''}</div>
+            <div class="empty-body">${this._isEditable() ? t('planDetail.emptyBodyEditable') : t('planDetail.emptyBody')}</div>
           `}
         `}
       </div>

@@ -11,6 +11,7 @@ pub mod orgs;
 pub mod plans;
 pub mod projects;
 pub mod questions;
+pub mod requests;
 pub mod requirements;
 pub mod sessions;
 pub mod tasks;

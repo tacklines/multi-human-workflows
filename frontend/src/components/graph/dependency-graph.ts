@@ -587,8 +587,16 @@ export class DependencyGraph extends LitElement {
   }
 
   private _isInputFocused(): boolean {
-    const active = (this.renderRoot as ShadowRoot).activeElement ?? document.activeElement;
-    return active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
+    const active = document.activeElement;
+    if (!active) return false;
+    // Walk into shadow roots to find the deepest active element
+    let el: Element | null = active;
+    while (el?.shadowRoot?.activeElement) {
+      el = el.shadowRoot.activeElement;
+    }
+    const tag = el?.tagName?.toLowerCase() ?? '';
+    return tag === 'input' || tag === 'textarea' || tag === 'sl-input' || tag === 'sl-textarea'
+      || tag === 'sl-select' || tag === 'sl-combobox' || (el as HTMLElement)?.isContentEditable === true;
   }
 
   private async _loadAndRender() {
@@ -1262,7 +1270,6 @@ export class DependencyGraph extends LitElement {
       (link.particles.material as THREE.PointsMaterial).opacity = isConnected ? 0.9 : 0.05;
     }
 
-    this._flyToNode(node);
     this.requestUpdate();
   }
 
@@ -1327,7 +1334,7 @@ export class DependencyGraph extends LitElement {
   private _flyToNode(node: GraphNode) {
     this._cameraTarget.copy(node.position);
     if (this._is2D) this._cameraTarget.z = 0;
-    this._cameraTargetDist = 30;
+    this._cameraTargetDist = 80;
     this._animatingCamera = true;
   }
 

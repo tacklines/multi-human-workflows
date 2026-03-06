@@ -3,6 +3,7 @@ import { customElement, property, state, query } from 'lit/decorators.js';
 import { fetchActivity, type ActivityEvent } from '../../state/task-api.js';
 import { fetchMessages, sendMessage, fetchProjectAgent, type MessageView, type ProjectAgentDetailView } from '../../state/agent-api.js';
 import { store, type SessionParticipant } from '../../state/app-state.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
@@ -42,12 +43,12 @@ const EVENT_COLORS: Record<string, string> = {
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return 'just now';
+  if (seconds < 60) return t('time.justNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t('time.minutesAgo', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return t('time.hoursAgo', { count: hours });
+  return t('time.daysAgo', { count: Math.floor(hours / 24) });
 }
 
 @customElement('agent-console')
@@ -684,14 +685,14 @@ export class AgentConsole extends LitElement {
         <div class="tab-area">
           <sl-tab-group @sl-tab-show=${(e: CustomEvent) => { this._activeTab = (e.detail as any).name; }}>
             <sl-tab slot="nav" panel="messages">
-              Messages
+              ${t('agentConsole.tab.messages')}
               ${this._messages.length > 0 ? html`<sl-badge variant="primary" pill style="margin-left: 0.3rem">${this._messages.length}</sl-badge>` : nothing}
             </sl-tab>
             <sl-tab slot="nav" panel="activity">
-              Activity
+              ${t('agentConsole.tab.activity')}
               ${this._activity.length > 0 ? html`<sl-badge variant="neutral" pill style="margin-left: 0.3rem">${this._activity.length}</sl-badge>` : nothing}
             </sl-tab>
-            <sl-tab slot="nav" panel="workspace">Workspace</sl-tab>
+            <sl-tab slot="nav" panel="workspace">${t('agentConsole.tab.workspace')}</sl-tab>
 
             <sl-tab-panel name="messages">
               ${this._renderMessages(myId)}
@@ -723,11 +724,11 @@ export class AgentConsole extends LitElement {
           <div class="header-name">${p.display_name}</div>
           <div class="header-meta">
             <span class="status-dot ${p.is_online ? '' : 'offline'}"></span>
-            ${p.is_online ? 'Online' : 'Offline'}
-            ${sponsor ? html`<span>Agent of ${sponsor.display_name}</span>` : nothing}
+            ${p.is_online ? t('agentConsole.online') : t('agentConsole.offline')}
+            ${sponsor ? html`<span>${t('agentConsole.agentOf', { name: sponsor.display_name })}</span>` : nothing}
           </div>
         </div>
-        <sl-tooltip content="Close (Esc)">
+        <sl-tooltip content="${t('agentConsole.closeEsc')}">
           <sl-icon-button class="close-btn" name="x-lg" @click=${this._close}></sl-icon-button>
         </sl-tooltip>
       </div>
@@ -745,9 +746,9 @@ export class AgentConsole extends LitElement {
           ? html`
             <div class="message-empty">
               <sl-icon name="chat-left-dots"></sl-icon>
-              <div>No messages yet</div>
+              <div>${t('agentConsole.messages.empty')}</div>
               <div style="font-size: 0.75rem; margin-top: 0.25rem; opacity: 0.7">
-                Send a message to direct this agent.
+                ${t('agentConsole.messages.emptyHint')}
               </div>
             </div>
           `
@@ -766,7 +767,7 @@ export class AgentConsole extends LitElement {
           `}
         <div class="compose">
           <sl-textarea
-            placeholder="Message ${this.participant?.display_name ?? 'agent'}..."
+            placeholder="${t('agentConsole.messages.placeholder', { name: this.participant?.display_name ?? 'agent' })}"
             rows="1"
             resize="auto"
             .value=${this._messageText}
@@ -796,9 +797,9 @@ export class AgentConsole extends LitElement {
       return html`
         <div class="activity-empty">
           <sl-icon name="clock-history"></sl-icon>
-          <div>No activity yet</div>
+          <div>${t('agentConsole.activity.empty')}</div>
           <div style="font-size: 0.75rem; margin-top: 0.25rem; opacity: 0.7">
-            Activity will appear here as the agent works.
+            ${t('agentConsole.activity.emptyHint')}
           </div>
         </div>
       `;
@@ -835,9 +836,9 @@ export class AgentConsole extends LitElement {
       return html`
         <div class="ws-empty">
           <sl-icon name="hdd-stack"></sl-icon>
-          <div>No workspace info available</div>
+          <div>${t('agentConsole.workspace.empty')}</div>
           <div style="font-size: 0.75rem; margin-top: 0.25rem; opacity: 0.7">
-            Workspace details appear here when the agent has an active Coder workspace.
+            ${t('agentConsole.workspace.emptyHint')}
           </div>
         </div>
       `;
@@ -847,7 +848,7 @@ export class AgentConsole extends LitElement {
       <div class="workspace-scroll">
         ${ws ? html`
           <div class="ws-card">
-            <div class="ws-card-label">Status</div>
+            <div class="ws-card-label">${t('agentConsole.workspace.status')}</div>
             <div class="ws-status-row">
               <span class="ws-status-badge ${ws.status}">${ws.status}</span>
               ${ws.coder_workspace_name ? html`
@@ -858,7 +859,7 @@ export class AgentConsole extends LitElement {
 
           ${ws.branch ? html`
             <div class="ws-card">
-              <div class="ws-card-label">Branch</div>
+              <div class="ws-card-label">${t('agentConsole.workspace.branch')}</div>
               <div class="ws-card-value">
                 <sl-icon name="git-branch" style="font-size: 0.8rem; vertical-align: middle; margin-right: 0.25rem;"></sl-icon>
                 ${ws.branch}
@@ -868,7 +869,7 @@ export class AgentConsole extends LitElement {
 
           ${ws.error_message ? html`
             <div class="ws-card" style="border-color: var(--sl-color-danger-500);">
-              <div class="ws-card-label" style="color: var(--sl-color-danger-500);">Error</div>
+              <div class="ws-card-label" style="color: var(--sl-color-danger-500);">${t('agentConsole.workspace.error')}</div>
               <div class="ws-card-value" style="color: var(--sl-color-danger-400); font-size: 0.8rem; white-space: pre-wrap;">
                 ${ws.error_message}
               </div>
@@ -877,20 +878,20 @@ export class AgentConsole extends LitElement {
 
           ${ws.started_at ? html`
             <div class="ws-card">
-              <div class="ws-card-label">Started</div>
+              <div class="ws-card-label">${t('agentConsole.workspace.started')}</div>
               <div class="ws-card-value muted">${timeAgo(ws.started_at)}</div>
             </div>
           ` : nothing}
         ` : html`
           <div class="ws-card">
-            <div class="ws-card-label">Workspace</div>
-            <div class="ws-card-value muted">No workspace provisioned</div>
+            <div class="ws-card-label">${t('agentConsole.workspace.label')}</div>
+            <div class="ws-card-value muted">${t('agentConsole.workspace.noWorkspace')}</div>
           </div>
         `}
 
         ${task ? html`
           <div class="ws-card">
-            <div class="ws-card-label">Current Task</div>
+            <div class="ws-card-label">${t('agentConsole.workspace.currentTask')}</div>
             <div class="ws-task-card">
               <span class="ticket-id">${task.ticket_id}</span>
               <span class="title">${task.title}</span>
@@ -903,9 +904,9 @@ export class AgentConsole extends LitElement {
 
         ${agent.client_name || agent.model ? html`
           <div class="ws-card">
-            <div class="ws-card-label">Agent Info</div>
+            <div class="ws-card-label">${t('agentConsole.workspace.agentInfo')}</div>
             ${agent.client_name ? html`<div style="font-size: 0.8rem; color: var(--text-secondary);">${agent.client_name}${agent.client_version ? ` v${agent.client_version}` : ''}</div>` : nothing}
-            ${agent.model ? html`<div style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 0.15rem;">Model: ${agent.model}</div>` : nothing}
+            ${agent.model ? html`<div style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 0.15rem;">${t('agentConsole.workspace.model', { model: agent.model })}</div>` : nothing}
           </div>
         ` : nothing}
       </div>

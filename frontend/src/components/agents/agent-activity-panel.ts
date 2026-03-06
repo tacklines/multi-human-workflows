@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { agentStream, type AgentStreamEvent, type AgentStreamListener } from '../../state/agent-stream.js';
 import { authStore } from '../../state/auth-state.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -304,8 +305,8 @@ export class AgentActivityPanel extends LitElement {
           duration_ms: d.duration_ms,
           ts: d.created_at,
         }));
-        const liveIds = new Set(this._toolEvents.map(t => t.id));
-        const unique = this._historicalTools.filter(t => !liveIds.has(t.id));
+        const liveIds = new Set(this._toolEvents.map(te => te.id));
+        const unique = this._historicalTools.filter(te => !liveIds.has(te.id));
         this._toolEvents = [...unique, ...this._toolEvents];
         this._allEntries = [...unique, ...this._allEntries];
       }
@@ -375,22 +376,22 @@ export class AgentActivityPanel extends LitElement {
       <div class="panel-container">
         <sl-tab-group>
           <sl-tab slot="nav" panel="all">
-            All
+            ${t('agentActivity.tab.all')}
             <sl-badge variant="neutral" pill>${this._allEntries.length}</sl-badge>
           </sl-tab>
           <sl-tab slot="nav" panel="tools">
-            Tools
+            ${t('agentActivity.tab.tools')}
             <sl-badge variant="neutral" pill>${this._toolEvents.length}</sl-badge>
           </sl-tab>
-          <sl-tab slot="nav" panel="output">Output</sl-tab>
+          <sl-tab slot="nav" panel="output">${t('agentActivity.tab.output')}</sl-tab>
 
           <sl-tab-panel name="all">
             ${this._connected ? html`
-              <div class="live-indicator"><span class="live-dot"></span> Live</div>
+              <div class="live-indicator"><span class="live-dot"></span> ${t('agentActivity.live')}</div>
             ` : nothing}
             <div class="tab-content">
               ${this._allEntries.length === 0
-                ? html`<div class="empty-state">Waiting for agent activity...</div>`
+                ? html`<div class="empty-state">${t('agentActivity.emptyAll')}</div>`
                 : this._allEntries.map(e => this._renderEntry(e))}
             </div>
           </sl-tab-panel>
@@ -398,15 +399,15 @@ export class AgentActivityPanel extends LitElement {
           <sl-tab-panel name="tools">
             <div class="tab-content">
               ${this._toolEvents.length === 0
-                ? html`<div class="empty-state">No tool invocations yet.</div>`
-                : this._toolEvents.map(t => this._renderToolItem(t))}
+                ? html`<div class="empty-state">${t('agentActivity.emptyTools')}</div>`
+                : this._toolEvents.map(te => this._renderToolItem(te))}
             </div>
           </sl-tab-panel>
 
           <sl-tab-panel name="output">
             <div class="output-container">
               ${this._outputLines.length === 0
-                ? html`<span style="color: #8b949e; font-style: italic;">No output captured yet.</span>`
+                ? html`<span style="color: #8b949e; font-style: italic;">${t('agentActivity.emptyOutput')}</span>`
                 : this._outputLines.map(o => html`
                     <span class="output-line ${o.fd === 'stderr' ? 'stderr' : ''}">${o.line}\n</span>
                   `)}
@@ -422,10 +423,10 @@ export class AgentActivityPanel extends LitElement {
       return html`
         <div class="entry">
           <span class="entry-ts">${this._formatTime(e.ts)}</span>
-          <span class="entry-kind tool">tool</span>
+          <span class="entry-kind tool">${t('agentActivity.kind.tool')}</span>
           <span class="entry-detail ${e.is_error ? 'error' : ''}">${e.tool_name}</span>
           <span class="tool-duration">${this._formatDuration(e.duration_ms)}</span>
-          ${e.is_error ? html`<sl-badge variant="danger" size="small">err</sl-badge>` : nothing}
+          ${e.is_error ? html`<sl-badge variant="danger" size="small">${t('agentActivity.errorBadge')}</sl-badge>` : nothing}
         </div>
       `;
     }
@@ -433,7 +434,7 @@ export class AgentActivityPanel extends LitElement {
       return html`
         <div class="entry">
           <span class="entry-ts">${this._formatTime(e.ts)}</span>
-          <span class="entry-kind state">state</span>
+          <span class="entry-kind state">${t('agentActivity.kind.state')}</span>
           <span class="entry-detail">${e.to}${e.detail ? ` — ${e.detail}` : ''}</span>
         </div>
       `;
@@ -447,14 +448,14 @@ export class AgentActivityPanel extends LitElement {
     `;
   }
 
-  private _renderToolItem(t: ToolEvent) {
+  private _renderToolItem(te: ToolEvent) {
     return html`
       <div class="tool-item">
-        <span class="tool-name">${t.tool_name}</span>
+        <span class="tool-name">${te.tool_name}</span>
         <div class="tool-meta">
-          <span>${this._formatDuration(t.duration_ms)}</span>
-          <span>${this._formatTime(t.ts)}</span>
-          ${t.is_error ? html`<sl-badge variant="danger" size="small">error</sl-badge>` : nothing}
+          <span>${this._formatDuration(te.duration_ms)}</span>
+          <span>${this._formatTime(te.ts)}</span>
+          ${te.is_error ? html`<sl-badge variant="danger" size="small">${t('agentActivity.errorBadgeFull')}</sl-badge>` : nothing}
         </div>
       </div>
     `;

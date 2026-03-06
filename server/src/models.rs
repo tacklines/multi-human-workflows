@@ -495,6 +495,32 @@ pub struct Requirement {
     pub updated_at: DateTime<Utc>,
 }
 
+// --- Requests ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum RequestStatus {
+    Pending,
+    Analyzing,
+    Decomposed,
+    Archived,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Request {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub session_id: Option<Uuid>,
+    pub author_id: Uuid,
+    pub title: String,
+    pub body: String,
+    pub status: RequestStatus,
+    pub analysis: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 // --- Agent API DTOs ---
 
 #[derive(Debug, Deserialize)]

@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { fetchActivity, type ActivityEvent } from '../../state/task-api.js';
 import { store, type SessionParticipant } from '../../state/app-state.js';
 import { navigateTo } from '../../router.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
@@ -32,14 +33,19 @@ const EVENT_COLORS: Record<string, string> = {
   session_created: 'var(--sl-color-purple-500)',
 };
 
-const EVENT_TYPE_LABELS: Record<string, string> = {
-  task_created: 'Task Created',
-  task_updated: 'Task Updated',
-  task_closed: 'Task Closed',
-  task_deleted: 'Task Deleted',
-  comment_added: 'Comment',
-  participant_joined: 'Joined',
-  session_created: 'Session Created',
+function getEventTypeLabel(type: string): string {
+  const key = EVENT_TYPE_LABEL_KEYS[type];
+  return key ? t(key) : type;
+}
+
+const EVENT_TYPE_LABEL_KEYS: Record<string, string> = {
+  task_created: 'activityView.event.taskCreated',
+  task_updated: 'activityView.event.taskUpdated',
+  task_closed: 'activityView.event.taskClosed',
+  task_deleted: 'activityView.event.taskDeleted',
+  comment_added: 'activityView.event.comment',
+  participant_joined: 'activityView.event.joined',
+  session_created: 'activityView.event.sessionCreated',
 };
 
 function formatTime(dateStr: string): string {
@@ -55,13 +61,13 @@ function formatTime(dateStr: string): string {
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return 'just now';
+  if (seconds < 60) return t('time.justNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t('time.minutesAgo', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t('time.hoursAgo', { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t('time.daysAgo', { count: days });
 }
 
 @customElement('activity-view')
@@ -281,29 +287,29 @@ export class ActivityView extends LitElement {
     return html`
       <div class="header">
         <sl-icon-button name="arrow-left" @click=${() => navigateTo(`/sessions/${this.sessionCode}`)}></sl-icon-button>
-        <h2>Session Activity</h2>
+        <h2>${t('activityView.title')}</h2>
         <sl-badge variant="neutral" pill>${this._events.length}</sl-badge>
       </div>
 
       <div class="filters">
         <sl-select
-          placeholder="All Event Types"
+          placeholder="${t('activityView.filterAllTypes')}"
           size="small"
           clearable
           value=${this._filterType}
           @sl-change=${(e: Event) => { this._filterType = (e.target as HTMLSelectElement).value; }}
         >
-          ${this._eventTypes.map(t => html`
-            <sl-option value=${t}>
-              <sl-icon slot="prefix" name=${EVENT_ICONS[t] || 'circle'} style="color: ${EVENT_COLORS[t] || 'inherit'}"></sl-icon>
-              ${EVENT_TYPE_LABELS[t] || t}
+          ${this._eventTypes.map(et => html`
+            <sl-option value=${et}>
+              <sl-icon slot="prefix" name=${EVENT_ICONS[et] || 'circle'} style="color: ${EVENT_COLORS[et] || 'inherit'}"></sl-icon>
+              ${getEventTypeLabel(et)}
             </sl-option>
           `)}
         </sl-select>
 
         ${this.participants.length > 0 ? html`
           <sl-select
-            placeholder="All Participants"
+            placeholder="${t('activityView.filterAllParticipants')}"
             size="small"
             clearable
             value=${this._filterActor}
@@ -323,7 +329,7 @@ export class ActivityView extends LitElement {
 
         <sl-button size="small" variant="text" @click=${() => this._loadActivity()}>
           <sl-icon slot="prefix" name="arrow-clockwise"></sl-icon>
-          Refresh
+          ${t('activityView.refresh')}
         </sl-button>
       </div>
 
@@ -335,7 +341,7 @@ export class ActivityView extends LitElement {
           ? html`
             <div class="empty-state">
               <sl-icon name="clock-history"></sl-icon>
-              <p>${this._filterType || this._filterActor ? 'No matching activity' : 'No activity yet'}</p>
+              <p>${this._filterType || this._filterActor ? t('activityView.emptyFiltered') : t('activityView.empty')}</p>
             </div>
           `
           : html`
@@ -359,7 +365,7 @@ export class ActivityView extends LitElement {
           <div class="stat">
             <sl-icon name=${EVENT_ICONS[type] || 'circle'} style="color: ${EVENT_COLORS[type] || 'inherit'}; font-size: 0.7rem;"></sl-icon>
             <span class="stat-value">${count}</span>
-            ${EVENT_TYPE_LABELS[type] || type}
+            ${getEventTypeLabel(type)}
           </div>
         `)}
       </div>
@@ -376,7 +382,7 @@ export class ActivityView extends LitElement {
         <div class="event-top">
           <sl-icon name=${icon} style="color: ${color}"></sl-icon>
           <span class="event-actor">${event.actor_name}</span>
-          <span class="event-type-badge">${EVENT_TYPE_LABELS[event.event_type] || event.event_type}</span>
+          <span class="event-type-badge">${getEventTypeLabel(event.event_type)}</span>
           <span class="event-time" title=${formatTime(event.created_at)}>${timeAgo(event.created_at)}</span>
         </div>
         <div class="event-summary">${event.summary}</div>

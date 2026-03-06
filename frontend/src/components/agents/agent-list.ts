@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchProjectAgents, type ProjectAgentView } from '../../state/agent-api.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -258,7 +259,7 @@ export class AgentList extends LitElement {
         includeDisconnected: this._showAll,
       });
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to load agents';
+      this._error = err instanceof Error ? err.message : t('agentList.errorLoad');
     } finally {
       this._loading = false;
     }
@@ -301,9 +302,9 @@ export class AgentList extends LitElement {
       return html`
         <div class="empty-state">
           <sl-icon name="robot"></sl-icon>
-          No agents have joined this project yet.
+          ${t('agentList.empty')}
           <div style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-tertiary);">
-            Launch agents from a session to see them here.
+            ${t('agentList.emptyHint')}
           </div>
         </div>
       `;
@@ -315,16 +316,16 @@ export class AgentList extends LitElement {
     return html`
       <div class="stats-row">
         <div class="stat-chip ${online.length > 0 ? 'active' : ''}">
-          <span class="count">${online.length}</span> Online
+          <span class="count">${online.length}</span> ${t('agentList.online')}
         </div>
         <div class="stat-chip">
-          <span class="count">${this._agents.length}</span> ${this._showAll ? 'Total' : 'Active'}
+          <span class="count">${this._agents.length}</span> ${this._showAll ? t('agentList.total') : t('agentList.active')}
         </div>
         <div class="stat-chip toggle-chip" role="button" tabindex="0"
              @click=${this._toggleShowAll}
              @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._toggleShowAll(); }}>
           <sl-icon name=${this._showAll ? 'eye-slash' : 'eye'}></sl-icon>
-          ${this._showAll ? 'Hide disconnected' : 'Show all'}
+          ${this._showAll ? t('agentList.hideDisconnected') : t('agentList.showAll')}
         </div>
       </div>
 
@@ -373,7 +374,7 @@ export class AgentList extends LitElement {
 
         ${agent.current_task ? html`
           <div class="task-section">
-            <div class="task-label">Working on</div>
+            <div class="task-label">${t('agentList.workingOn')}</div>
             <div class="task-info">
               <span class="task-ticket">${agent.current_task.ticket_id}</span>
               <span class="task-title">${agent.current_task.title}</span>

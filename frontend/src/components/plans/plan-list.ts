@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchPlans, createPlan, type PlanListView, type PlanStatusType } from '../../state/plan-api.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
@@ -18,12 +19,12 @@ const STATUS_VARIANTS: Record<PlanStatusType, string> = {
   abandoned: 'neutral',
 };
 
-const STATUS_LABELS: Record<PlanStatusType, string> = {
-  draft: 'Draft',
-  review: 'Review',
-  accepted: 'Accepted',
-  superseded: 'Superseded',
-  abandoned: 'Abandoned',
+const STATUS_LABEL_KEYS: Record<PlanStatusType, string> = {
+  draft: 'planList.status.draft',
+  review: 'planList.status.review',
+  accepted: 'planList.status.accepted',
+  superseded: 'planList.status.superseded',
+  abandoned: 'planList.status.abandoned',
 };
 
 @customElement('plan-list')
@@ -134,7 +135,7 @@ export class PlanList extends LitElement {
     try {
       this._plans = await fetchPlans(this.projectId);
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to load plans';
+      this._error = err instanceof Error ? err.message : t('planList.errorLoad');
     } finally {
       this._loading = false;
     }
@@ -150,7 +151,7 @@ export class PlanList extends LitElement {
       this._plans = [plan, ...this._plans];
       this.dispatchEvent(new CustomEvent('plan-select', { detail: { planId: plan.id }, bubbles: true, composed: true }));
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to create plan';
+      this._error = err instanceof Error ? err.message : t('planList.errorCreate');
     } finally {
       this._creating = false;
     }
@@ -182,11 +183,11 @@ export class PlanList extends LitElement {
       ${this._plans.length === 0 ? html`
         <div class="empty-state">
           <sl-icon name="file-earmark-text"></sl-icon>
-          No plans yet.
+          ${t('planList.empty')}
           <div style="margin-top: 0.5rem;">
             <sl-button size="small" variant="primary" @click=${() => { this._showNew = true; }}>
               <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-              New Plan
+              ${t('planList.newPlan')}
             </sl-button>
           </div>
         </div>
@@ -204,8 +205,8 @@ export class PlanList extends LitElement {
                  @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this.dispatchEvent(new CustomEvent('plan-select', { detail: { planId: p.id }, bubbles: true, composed: true })); }}>
               <sl-icon name="file-earmark-text" style="color: var(--text-tertiary); font-size: 0.9rem;"></sl-icon>
               <span class="plan-title ${this._isTerminal(p.status) ? 'terminal' : ''}">${p.title}</span>
-              <sl-badge variant=${STATUS_VARIANTS[p.status]}>${STATUS_LABELS[p.status]}</sl-badge>
-              <sl-tooltip content="Updated ${this._relativeTime(p.updated_at)}">
+              <sl-badge variant=${STATUS_VARIANTS[p.status]}>${t(STATUS_LABEL_KEYS[p.status])}</sl-badge>
+              <sl-tooltip content=${t('planList.updated', { time: this._relativeTime(p.updated_at) })}>
                 <span class="plan-time">${this._relativeTime(p.updated_at)}</span>
               </sl-tooltip>
             </div>
@@ -213,10 +214,10 @@ export class PlanList extends LitElement {
         </div>
       `}
 
-      <sl-dialog label="New Plan" ?open=${this._showNew}
+      <sl-dialog label=${t('planList.dialogLabel')} ?open=${this._showNew}
                  @sl-after-hide=${() => { this._showNew = false; }}>
         <div class="dialog-form">
-          <sl-input label="Title" placeholder="e.g. Auth migration to passkeys"
+          <sl-input label=${t('planList.titleLabel')} placeholder=${t('planList.titlePlaceholder')}
                     value=${this._newTitle}
                     @sl-input=${(e: CustomEvent) => { this._newTitle = (e.target as HTMLInputElement).value; }}
                     @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._create(); }}
@@ -224,7 +225,7 @@ export class PlanList extends LitElement {
         </div>
         <sl-button slot="footer" variant="primary" ?loading=${this._creating}
                    @click=${() => void this._create()}>
-          Create Plan
+          ${t('planList.create')}
         </sl-button>
       </sl-dialog>
     `;

@@ -126,6 +126,11 @@ async fn main() {
         // Plans
         .route("/api/projects/{project_id}/plans", get(routes::plans::list_plans).post(routes::plans::create_plan))
         .route("/api/projects/{project_id}/plans/{plan_id}", get(routes::plans::get_plan).patch(routes::plans::update_plan))
+        // Requests
+        .route("/api/projects/{project_id}/requests", get(routes::requests::list_requests).post(routes::requests::create_request))
+        .route("/api/projects/{project_id}/requests/{request_id}", get(routes::requests::get_request).patch(routes::requests::update_request).delete(routes::requests::delete_request))
+        .route("/api/projects/{project_id}/requests/{request_id}/requirements", post(routes::requests::link_requirement))
+        .route("/api/projects/{project_id}/requests/{request_id}/requirements/{requirement_id}", delete(routes::requests::unlink_requirement))
         // Requirements
         .route("/api/projects/{project_id}/requirements", get(routes::requirements::list_requirements).post(routes::requirements::create_requirement))
         .route("/api/projects/{project_id}/requirements/{req_id}", get(routes::requirements::get_requirement).patch(routes::requirements::update_requirement).delete(routes::requirements::delete_requirement))

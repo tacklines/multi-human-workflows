@@ -8,6 +8,7 @@ import {
   type UserCredentialView,
 } from '../../state/org-api.js';
 import { navigateTo } from '../../router.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -21,13 +22,13 @@ import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 import '@shoelace-style/shoelace/dist/components/divider/divider.js';
 
-const CREDENTIAL_TYPE_LABELS: Record<string, string> = {
-  claude_oauth: 'Claude OAuth Token',
-  anthropic_api_key: 'Anthropic API Key',
-  openai_api_key: 'OpenAI API Key',
-  google_api_key: 'Google API Key',
-  git_token: 'Git Token',
-  custom: 'Custom',
+const CREDENTIAL_TYPE_KEYS: Record<string, string> = {
+  claude_oauth: 'cred.type.claudeOauth',
+  anthropic_api_key: 'cred.type.anthropicApiKey',
+  openai_api_key: 'cred.type.openaiApiKey',
+  google_api_key: 'cred.type.googleApiKey',
+  git_token: 'cred.type.gitToken',
+  custom: 'cred.type.custom',
 };
 
 const CREDENTIAL_TYPE_ENV: Record<string, string> = {
@@ -188,7 +189,7 @@ export class UserSettings extends LitElement {
     try {
       this._credentials = await fetchUserCredentials();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to load';
+      this._error = err instanceof Error ? err.message : t('userSettings.errorLoad');
     } finally {
       this._loading = false;
     }
@@ -211,7 +212,7 @@ export class UserSettings extends LitElement {
       this._newCredValue = '';
       this._newCredEnvVar = '';
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to add credential';
+      this._error = err instanceof Error ? err.message : t('cred.errorAdd');
     } finally {
       this._addingCred = false;
     }
@@ -232,7 +233,7 @@ export class UserSettings extends LitElement {
       this._rotatingId = null;
       this._rotateValue = '';
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to rotate';
+      this._error = err instanceof Error ? err.message : t('cred.errorRotate');
     }
   }
 
@@ -241,12 +242,12 @@ export class UserSettings extends LitElement {
       await deleteUserCredential(id);
       this._credentials = this._credentials.filter((c) => c.id !== id);
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to delete';
+      this._error = err instanceof Error ? err.message : t('cred.errorDelete');
     }
   }
 
   private _formatDate(iso: string | null): string {
-    if (!iso) return 'Never';
+    if (!iso) return t('cred.never');
     return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
@@ -262,21 +263,20 @@ export class UserSettings extends LitElement {
             <a class="back-link" @click=${() => navigateTo('/')}>
               <sl-icon name="arrow-left"></sl-icon>
             </a>
-            <h1>Personal Settings</h1>
+            <h1>${t('userSettings.title')}</h1>
           </div>
 
           ${this._error ? html`<sl-alert variant="danger" open style="margin-bottom: 1rem;">${this._error}</sl-alert>` : nothing}
 
-          <div class="section-title">Personal Credentials</div>
+          <div class="section-title">${t('userSettings.credTitle')}</div>
           <div class="section-desc">
-            Personal tokens like Claude Max/Pro OAuth are tied to your subscription and apply only to agents you launch.
-            They override org-level credentials of the same type.
+            ${t('userSettings.credDesc')}
           </div>
 
           ${this._credentials.length === 0 ? html`
             <div class="empty-state">
-              <p>No personal credentials stored yet.</p>
-              <p style="font-size: 0.85rem;">Add your Claude Max OAuth token or other personal API keys.</p>
+              <p>${t('userSettings.emptyTitle')}</p>
+              <p style="font-size: 0.85rem;">${t('userSettings.emptyHint')}</p>
             </div>
           ` : html`
             <div class="cred-list">
@@ -286,18 +286,18 @@ export class UserSettings extends LitElement {
                     <div class="cred-info">
                       <div class="cred-name">${c.name}</div>
                       <div class="cred-meta">
-                        <span class="cred-type-badge">${CREDENTIAL_TYPE_LABELS[c.credential_type] ?? c.credential_type}</span>
+                        <span class="cred-type-badge">${t(CREDENTIAL_TYPE_KEYS[c.credential_type] ?? c.credential_type)}</span>
                         ${c.env_var_name ? html`<span>${c.env_var_name}</span>` : html`<span>${CREDENTIAL_TYPE_ENV[c.credential_type] ?? ''}</span>`}
-                        <span>Added ${this._formatDate(c.created_at)}</span>
-                        ${c.rotated_at ? html`<span>Rotated ${this._formatDate(c.rotated_at)}</span>` : nothing}
-                        ${c.expires_at ? html`<span>Expires ${this._formatDate(c.expires_at)}</span>` : nothing}
+                        <span>${t('cred.added', { date: this._formatDate(c.created_at) })}</span>
+                        ${c.rotated_at ? html`<span>${t('cred.rotated', { date: this._formatDate(c.rotated_at) })}</span>` : nothing}
+                        ${c.expires_at ? html`<span>${t('cred.expires', { date: this._formatDate(c.expires_at) })}</span>` : nothing}
                       </div>
                     </div>
                     <div class="cred-actions">
-                      <sl-tooltip content="Rotate value">
+                      <sl-tooltip content=${t('cred.rotateTooltip')}>
                         <sl-icon-button name="arrow-repeat" @click=${() => this._startRotate(c.id)}></sl-icon-button>
                       </sl-tooltip>
-                      <sl-tooltip content="Delete">
+                      <sl-tooltip content=${t('cred.deleteTooltip')}>
                         <sl-icon-button name="trash" @click=${() => this._deleteCred(c.id)}></sl-icon-button>
                       </sl-tooltip>
                     </div>
@@ -310,46 +310,46 @@ export class UserSettings extends LitElement {
           <div style="margin-top: 1rem;">
             <sl-button size="small" variant="primary" @click=${() => { this._showAddCred = true; }}>
               <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-              Add Credential
+              ${t('cred.addButton')}
             </sl-button>
           </div>
 
           <!-- Add credential dialog -->
-          <sl-dialog label="Add Personal Credential" ?open=${this._showAddCred} @sl-after-hide=${() => { this._showAddCred = false; }}>
+          <sl-dialog label=${t('userSettings.addDialog')} ?open=${this._showAddCred} @sl-after-hide=${() => { this._showAddCred = false; }}>
             <div class="dialog-form">
-              <sl-input label="Name" placeholder="e.g. My Claude Max Token" value=${this._newCredName}
+              <sl-input label=${t('cred.nameLabel')} placeholder=${t('userSettings.namePlaceholder')} value=${this._newCredName}
                         @sl-input=${(e: CustomEvent) => { this._newCredName = (e.target as HTMLInputElement).value; }}
               ></sl-input>
-              <sl-select label="Type" value=${this._newCredType} @sl-change=${(e: CustomEvent) => { this._newCredType = (e.target as HTMLSelectElement).value; }}>
-                ${Object.entries(CREDENTIAL_TYPE_LABELS).map(([val, label]) => html`<sl-option value=${val}>${label}</sl-option>`)}
+              <sl-select label=${t('cred.typeLabel')} value=${this._newCredType} @sl-change=${(e: CustomEvent) => { this._newCredType = (e.target as HTMLSelectElement).value; }}>
+                ${Object.entries(CREDENTIAL_TYPE_KEYS).map(([val, key]) => html`<sl-option value=${val}>${t(key)}</sl-option>`)}
               </sl-select>
               ${this._newCredType === 'custom' ? html`
-                <sl-input label="Environment Variable Name" placeholder="MY_SECRET_KEY" value=${this._newCredEnvVar}
+                <sl-input label=${t('cred.envVarLabel')} placeholder=${t('cred.envVarPlaceholder')} value=${this._newCredEnvVar}
                           @sl-input=${(e: CustomEvent) => { this._newCredEnvVar = (e.target as HTMLInputElement).value; }}
                 ></sl-input>
               ` : html`
                 <div style="font-size: 0.8rem; color: var(--text-tertiary);">
-                  Will be injected as <code>${CREDENTIAL_TYPE_ENV[this._newCredType] ?? '?'}</code>
+                  ${t('cred.injectedAs')} <code>${CREDENTIAL_TYPE_ENV[this._newCredType] ?? '?'}</code>
                 </div>
               `}
-              <sl-input label="Value" type="password" placeholder="Paste your key or token" value=${this._newCredValue}
+              <sl-input label=${t('cred.valueLabel')} type="password" placeholder=${t('cred.valuePlaceholder')} value=${this._newCredValue}
                         @sl-input=${(e: CustomEvent) => { this._newCredValue = (e.target as HTMLInputElement).value; }}
               ></sl-input>
             </div>
             <sl-button slot="footer" variant="primary" ?loading=${this._addingCred} @click=${() => void this._addCredential()}>
-              Save
+              ${t('cred.save')}
             </sl-button>
           </sl-dialog>
 
           <!-- Rotate dialog -->
-          <sl-dialog label="Rotate Credential" ?open=${this._showRotateDialog} @sl-after-hide=${() => { this._showRotateDialog = false; }}>
+          <sl-dialog label=${t('cred.rotateDialog')} ?open=${this._showRotateDialog} @sl-after-hide=${() => { this._showRotateDialog = false; }}>
             <div class="dialog-form">
-              <sl-input label="New Value" type="password" placeholder="Paste the new key or token" value=${this._rotateValue}
+              <sl-input label=${t('cred.rotateNewValue')} type="password" placeholder=${t('cred.rotatePlaceholder')} value=${this._rotateValue}
                         @sl-input=${(e: CustomEvent) => { this._rotateValue = (e.target as HTMLInputElement).value; }}
               ></sl-input>
             </div>
             <sl-button slot="footer" variant="primary" @click=${() => void this._doRotate()}>
-              Rotate
+              ${t('cred.rotate')}
             </sl-button>
           </sl-dialog>
         </div>

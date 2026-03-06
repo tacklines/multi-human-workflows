@@ -290,6 +290,58 @@ struct UnlinkRequirementTaskParams {
     task_id: String,
 }
 
+// --- Request params ---
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct CreateRequestParams {
+    /// Short summary of the request
+    title: String,
+    /// Full request text — the human's original words (markdown supported)
+    body: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ListRequestsParams {
+    /// Filter by status: pending, analyzing, decomposed, archived
+    status: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetRequestParams {
+    /// Request ID
+    id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct UpdateRequestParams {
+    /// Request ID to update
+    id: String,
+    /// New title
+    title: Option<String>,
+    /// New body text
+    body: Option<String>,
+    /// New status: pending, analyzing, decomposed, archived
+    status: Option<String>,
+    /// Agent analysis text (markdown)
+    analysis: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct LinkRequestRequirementParams {
+    /// Request ID
+    request_id: String,
+    /// Requirement ID to link
+    requirement_id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct UnlinkRequestRequirementParams {
+    /// Request ID
+    request_id: String,
+    /// Requirement ID to unlink
+    requirement_id: String,
+}
+
 // --- MCP Server ---
 
 #[derive(Default)]
@@ -2187,6 +2239,406 @@ impl SeamMcp {
             }
             Ok(_) => Ok(CallToolResult::success(vec![Content::text("Task unlinked from requirement")])),
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
+        }
+    }
+
+    // --- Request tools ---
+
+    #[tool(description = "Create a feature request — captures human intent that drives requirement decomposition. The request will be analyzed and broken into requirements and tasks.")]
+    async fn create_request(
+        &self,
+        Parameters(params): Parameters<CreateRequestParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let session_id = match self.require_session().await {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        // Look up user_id for this participant
+        let user_id: Option<(Uuid,)> = sqlx::query_as(
+            "SELECT user_id FROM participants WHERE id = $1",
+        )
+        .bind(participant_id)
+        .fetch_optional(&self.db)
+        .await
+        .unwrap_or(None);
+
+        let user_id = match user_id {
+            Some((uid,)) => uid,
+            None => return Ok(CallToolResult::error(vec![Content::text("Participant not found")])),
+        };
+
+        match sqlx::query_as::<_, crate::models::Request>(
+            "INSERT INTO requests (project_id, session_id, author_id, title, body)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING *",
+        )
+        .bind(project_id)
+        .bind(Some(session_id))
+        .bind(user_id)
+        .bind(&params.title)
+        .bind(&params.body)
+        .fetch_one(&self.db)
+        .await
+        {
+            Ok(req) => {
+                self.record_activity(
+                    project_id, Some(session_id), participant_id,
+                    "request_created", "request", req.id,
+                    &format!("created request: {}", req.title),
+                    serde_json::json!({"title": req.title}),
+                ).await;
+
+                // Also emit domain event for event bridge (automated dispatch)
+                let event = crate::events::DomainEvent::new(
+                    "request_created", "request", req.id, Some(user_id),
+                    serde_json::json!({
+                        "project_id": project_id,
+                        "title": req.title,
+                        "body": req.body,
+                        "session_id": session_id,
+                    }),
+                );
+                if let Err(e) = crate::events::emit(&self.db, &event).await {
+                    tracing::warn!("Failed to emit request_created domain event: {e}");
+                }
+
+                Ok(CallToolResult::success(vec![Content::text(format!(
+                    "Created request '{}' (id: {}, status: pending)",
+                    req.title, req.id
+                ))]))
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Failed to create request: {e}"
+            ))])),
+        }
+    }
+
+    #[tool(description = "List feature requests in the current project. Optionally filter by status.")]
+    async fn list_requests(
+        &self,
+        Parameters(params): Parameters<ListRequestsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let reqs = if let Some(ref status) = params.status {
+            sqlx::query_as::<_, crate::models::Request>(
+                "SELECT * FROM requests WHERE project_id = $1 AND status = $2 ORDER BY created_at DESC",
+            )
+            .bind(project_id)
+            .bind(status)
+            .fetch_all(&self.db)
+            .await
+        } else {
+            sqlx::query_as::<_, crate::models::Request>(
+                "SELECT * FROM requests WHERE project_id = $1 ORDER BY created_at DESC",
+            )
+            .bind(project_id)
+            .fetch_all(&self.db)
+            .await
+        };
+
+        match reqs {
+            Ok(reqs) if reqs.is_empty() => {
+                Ok(CallToolResult::success(vec![Content::text("No requests found.")]))
+            }
+            Ok(reqs) => {
+                let mut lines = Vec::new();
+                for r in &reqs {
+                    let req_count: i64 = sqlx::query_scalar(
+                        "SELECT COUNT(*) FROM request_requirements WHERE request_id = $1",
+                    )
+                    .bind(r.id)
+                    .fetch_one(&self.db)
+                    .await
+                    .unwrap_or(0);
+
+                    lines.push(format!(
+                        "- [{}] {} (id: {}, requirements: {})",
+                        match r.status {
+                            crate::models::RequestStatus::Pending => "pending",
+                            crate::models::RequestStatus::Analyzing => "analyzing",
+                            crate::models::RequestStatus::Decomposed => "decomposed",
+                            crate::models::RequestStatus::Archived => "archived",
+                        },
+                        r.title,
+                        r.id,
+                        req_count,
+                    ));
+                }
+                Ok(CallToolResult::success(vec![Content::text(lines.join("\n"))]))
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Failed to list requests: {e}"
+            ))])),
+        }
+    }
+
+    #[tool(description = "Get a request by ID with full details including body, analysis, and linked requirements.")]
+    async fn get_request(
+        &self,
+        Parameters(params): Parameters<GetRequestParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid request ID")])),
+        };
+
+        let req = match sqlx::query_as::<_, crate::models::Request>(
+            "SELECT * FROM requests WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.db)
+        .await
+        {
+            Ok(Some(r)) => r,
+            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Request not found")])),
+            Err(e) => {
+                return Ok(CallToolResult::error(vec![Content::text(format!(
+                    "Failed: {e}"
+                ))]))
+            }
+        };
+
+        let linked_req_ids: Vec<(Uuid,)> = sqlx::query_as(
+            "SELECT requirement_id FROM request_requirements WHERE request_id = $1",
+        )
+        .bind(req.id)
+        .fetch_all(&self.db)
+        .await
+        .unwrap_or_default();
+
+        let status_str = match req.status {
+            crate::models::RequestStatus::Pending => "pending",
+            crate::models::RequestStatus::Analyzing => "analyzing",
+            crate::models::RequestStatus::Decomposed => "decomposed",
+            crate::models::RequestStatus::Archived => "archived",
+        };
+
+        let mut text = format!(
+            "# {}\n\nID: {}\nStatus: {}\nCreated: {}\n\n## Body\n\n{}\n",
+            req.title, req.id, status_str, req.created_at, req.body
+        );
+
+        if let Some(ref analysis) = req.analysis {
+            text.push_str(&format!("\n## Analysis\n\n{}\n", analysis));
+        }
+
+        if !linked_req_ids.is_empty() {
+            text.push_str("\n## Linked Requirements\n\n");
+            for (rid,) in &linked_req_ids {
+                text.push_str(&format!("- {}\n", rid));
+            }
+        }
+
+        Ok(CallToolResult::success(vec![Content::text(text)]))
+    }
+
+    #[tool(description = "Update a request's title, body, status, or analysis. Status transitions: pending→analyzing/archived, analyzing→decomposed/pending/archived, decomposed→archived/pending, archived→pending.")]
+    async fn update_request(
+        &self,
+        Parameters(params): Parameters<UpdateRequestParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let session_id = self.state.lock().ok().and_then(|s| s.session_id);
+
+        let id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid request ID")])),
+        };
+
+        let current = match sqlx::query_as::<_, crate::models::Request>(
+            "SELECT * FROM requests WHERE id = $1 AND project_id = $2",
+        )
+        .bind(id)
+        .bind(project_id)
+        .fetch_optional(&self.db)
+        .await
+        {
+            Ok(Some(r)) => r,
+            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Request not found")])),
+            Err(e) => {
+                return Ok(CallToolResult::error(vec![Content::text(format!(
+                    "Failed: {e}"
+                ))]))
+            }
+        };
+
+        // Validate status transition
+        if let Some(ref new_status) = params.status {
+            let valid = match (current.status, new_status.as_str()) {
+                (crate::models::RequestStatus::Pending, "analyzing" | "archived") => true,
+                (crate::models::RequestStatus::Analyzing, "decomposed" | "pending" | "archived") => true,
+                (crate::models::RequestStatus::Decomposed, "archived" | "pending") => true,
+                (crate::models::RequestStatus::Archived, "pending") => true,
+                _ => false,
+            };
+            if !valid {
+                return Ok(CallToolResult::error(vec![Content::text(format!(
+                    "Invalid status transition from {:?} to {}",
+                    current.status, new_status
+                ))]));
+            }
+        }
+
+        let has_updates = params.title.is_some()
+            || params.body.is_some()
+            || params.status.is_some()
+            || params.analysis.is_some();
+
+        if !has_updates {
+            return Ok(CallToolResult::success(vec![Content::text("No changes provided")]));
+        }
+
+        let mut set_clauses = vec!["updated_at = NOW()".to_string()];
+        let mut bind_idx = 3u32;
+
+        if params.title.is_some() {
+            set_clauses.push(format!("title = ${bind_idx}"));
+            bind_idx += 1;
+        }
+        if params.body.is_some() {
+            set_clauses.push(format!("body = ${bind_idx}"));
+            bind_idx += 1;
+        }
+        if params.status.is_some() {
+            set_clauses.push(format!("status = ${bind_idx}"));
+            bind_idx += 1;
+        }
+        if params.analysis.is_some() {
+            set_clauses.push(format!("analysis = ${bind_idx}"));
+        }
+
+        let query = format!(
+            "UPDATE requests SET {} WHERE id = $1 AND project_id = $2 RETURNING *",
+            set_clauses.join(", ")
+        );
+
+        let mut q = sqlx::query_as::<_, crate::models::Request>(&query)
+            .bind(id)
+            .bind(project_id);
+
+        if let Some(ref title) = params.title {
+            q = q.bind(title);
+        }
+        if let Some(ref body) = params.body {
+            q = q.bind(body);
+        }
+        if let Some(ref status) = params.status {
+            q = q.bind(status);
+        }
+        if let Some(ref analysis) = params.analysis {
+            q = q.bind(analysis);
+        }
+
+        match q.fetch_one(&self.db).await {
+            Ok(req) => {
+                self.record_activity(
+                    project_id, session_id, participant_id,
+                    "request_updated", "request", req.id,
+                    &format!("updated request: {}", req.title),
+                    serde_json::json!({"title": req.title, "status": params.status}),
+                ).await;
+
+                Ok(CallToolResult::success(vec![Content::text(format!(
+                    "Updated request '{}' (id: {})",
+                    req.title, req.id
+                ))]))
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Failed to update request: {e}"
+            ))])),
+        }
+    }
+
+    #[tool(description = "Link a requirement to a request, indicating this requirement was created to satisfy the request.")]
+    async fn link_request_requirement(
+        &self,
+        Parameters(params): Parameters<LinkRequestRequirementParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let request_id = match Uuid::parse_str(&params.request_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid request_id")])),
+        };
+        let requirement_id = match Uuid::parse_str(&params.requirement_id) {
+            Ok(id) => id,
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid requirement_id",
+                )]))
+            }
+        };
+
+        match sqlx::query(
+            "INSERT INTO request_requirements (request_id, requirement_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(request_id)
+        .bind(requirement_id)
+        .execute(&self.db)
+        .await
+        {
+            Ok(_) => Ok(CallToolResult::success(vec![Content::text(
+                "Requirement linked to request",
+            )])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Failed: {e}"
+            ))])),
+        }
+    }
+
+    #[tool(description = "Unlink a requirement from a request.")]
+    async fn unlink_request_requirement(
+        &self,
+        Parameters(params): Parameters<UnlinkRequestRequirementParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let request_id = match Uuid::parse_str(&params.request_id) {
+            Ok(id) => id,
+            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid request_id")])),
+        };
+        let requirement_id = match Uuid::parse_str(&params.requirement_id) {
+            Ok(id) => id,
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid requirement_id",
+                )]))
+            }
+        };
+
+        match sqlx::query(
+            "DELETE FROM request_requirements WHERE request_id = $1 AND requirement_id = $2",
+        )
+        .bind(request_id)
+        .bind(requirement_id)
+        .execute(&self.db)
+        .await
+        {
+            Ok(result) if result.rows_affected() == 0 => {
+                Ok(CallToolResult::error(vec![Content::text("Link not found")]))
+            }
+            Ok(_) => Ok(CallToolResult::success(vec![Content::text(
+                "Requirement unlinked from request",
+            )])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Failed: {e}"
+            ))])),
         }
     }
 

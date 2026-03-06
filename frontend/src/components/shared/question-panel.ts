@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import './markdown-content.js';
 import { store } from '../../state/app-state.js';
 import { fetchQuestions, answerQuestion, cancelQuestion, type QuestionView } from '../../state/task-api.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
@@ -229,11 +230,11 @@ export class QuestionPanel extends LitElement {
   private _relativeTime(dateStr: string): string {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1) return t('time.justNow');
+    if (mins < 60) return t('time.minutesAgo', { count: mins });
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.floor(hrs / 24)}d ago`;
+    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
+    return t('time.daysAgo', { count: Math.floor(hrs / 24) });
   }
 
   get pendingCount(): number {
@@ -248,7 +249,7 @@ export class QuestionPanel extends LitElement {
     return html`
       <div class="section-label">
         <sl-icon name="question-circle"></sl-icon>
-        Questions
+        ${t('questions.label')}
         ${pendingCount > 0 ? html`
           <sl-badge variant="warning" pill>${pendingCount}</sl-badge>
         ` : nothing}
@@ -256,14 +257,14 @@ export class QuestionPanel extends LitElement {
 
       <div class="status-tabs">
         <button class="status-tab ${this._statusFilter === 'pending' ? 'active' : ''}"
-                @click=${() => this._setFilter('pending')}>Pending</button>
+                @click=${() => this._setFilter('pending')}>${t('questions.tab.pending')}</button>
         <button class="status-tab ${this._statusFilter === 'all' ? 'active' : ''}"
-                @click=${() => this._setFilter('all')}>All</button>
+                @click=${() => this._setFilter('all')}>${t('questions.tab.all')}</button>
       </div>
 
       <div class="question-list">
         ${this._questions.length === 0
-          ? html`<div class="empty-state">No ${this._statusFilter} questions</div>`
+          ? html`<div class="empty-state">${t('questions.empty', { filter: this._statusFilter })}</div>`
           : this._questions.map(q => this._renderQuestion(q))
         }
       </div>
@@ -286,7 +287,7 @@ export class QuestionPanel extends LitElement {
           ${isAnswering ? html`
             <div class="answer-form">
               <sl-textarea
-                placeholder="Type your answer..."
+                placeholder="${t('questions.answerPlaceholder')}"
                 rows="2"
                 size="small"
                 .value=${this._answerText}
@@ -302,21 +303,21 @@ export class QuestionPanel extends LitElement {
                 <sl-button size="small" variant="primary" ?loading=${this._submitting}
                            @click=${() => this._submitAnswer(q.id)}>
                   <sl-icon slot="prefix" name="send"></sl-icon>
-                  Answer
+                  ${t('questions.answerButton')}
                 </sl-button>
-                <sl-button size="small" variant="text" @click=${this._cancelAnswering}>Cancel</sl-button>
+                <sl-button size="small" variant="text" @click=${this._cancelAnswering}>${t('questions.cancelButton')}</sl-button>
                 <sl-button size="small" variant="text" style="margin-left: auto; color: var(--text-tertiary);"
-                           @click=${() => this._dismissQuestion(q.id)}>Dismiss</sl-button>
+                           @click=${() => this._dismissQuestion(q.id)}>${t('questions.dismissButton')}</sl-button>
               </div>
             </div>
           ` : html`
             <div class="answer-actions">
               <sl-button size="small" variant="primary" outline @click=${() => this._startAnswering(q.id)}>
                 <sl-icon slot="prefix" name="chat-dots"></sl-icon>
-                Answer
+                ${t('questions.answerButton')}
               </sl-button>
               <sl-button size="small" variant="text" style="color: var(--text-tertiary);"
-                         @click=${() => this._dismissQuestion(q.id)}>Dismiss</sl-button>
+                         @click=${() => this._dismissQuestion(q.id)}>${t('questions.dismissButton')}</sl-button>
             </div>
           `}
         ` : nothing}
@@ -324,7 +325,7 @@ export class QuestionPanel extends LitElement {
         ${q.status === 'answered' && q.answer_text ? html`
           <div class="answer-block">
             <div class="answer-label">
-              Answered by ${q.answered_by_name ?? 'Unknown'}
+              ${t('questions.answeredBy', { name: q.answered_by_name ?? 'Unknown' })}
               ${q.answered_at ? ` · ${this._relativeTime(q.answered_at)}` : ''}
             </div>
             <div class="answer-text"><markdown-content .content=${q.answer_text ?? ''}></markdown-content></div>

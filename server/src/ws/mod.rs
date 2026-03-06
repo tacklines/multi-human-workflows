@@ -18,12 +18,15 @@ pub struct ConnInfo {
 pub struct ConnectionManager {
     /// session_code -> list of connections
     sessions: DashMap<String, Vec<ConnInfo>>,
+    /// MCP-connected agent participant IDs (session_code -> set of participant_id strings)
+    mcp_agents: DashMap<String, HashSet<String>>,
 }
 
 impl ConnectionManager {
     pub fn new() -> Self {
         Self {
             sessions: DashMap::new(),
+            mcp_agents: DashMap::new(),
         }
     }
 
@@ -63,14 +66,19 @@ impl ConnectionManager {
     }
 
     pub fn online_participant_ids(&self, session_code: &str) -> Vec<String> {
-        self.sessions
+        let mut ids: Vec<String> = self.sessions
             .get(session_code)
             .map(|conns| {
                 conns.iter()
                     .filter_map(|c| c.participant_id.clone())
                     .collect()
             })
-            .unwrap_or_default()
+            .unwrap_or_default();
+        // Include MCP-connected agents
+        if let Some(agents) = self.mcp_agents.get(session_code) {
+            ids.extend(agents.iter().cloned());
+        }
+        ids
     }
 
     /// Returns participant IDs that are currently online across all sessions.
@@ -82,6 +90,14 @@ impl ConnectionManager {
                     if let Ok(uuid) = pid.parse::<uuid::Uuid>() {
                         ids.insert(uuid);
                     }
+                }
+            }
+        }
+        // Include MCP-connected agents
+        for entry in self.mcp_agents.iter() {
+            for pid in entry.value().iter() {
+                if let Ok(uuid) = pid.parse::<uuid::Uuid>() {
+                    ids.insert(uuid);
                 }
             }
         }
@@ -125,11 +141,24 @@ impl ConnectionManager {
         }
     }
 
-    /// Track an MCP agent as online (no-op stub; presence managed via NOTIFY).
-    pub fn set_mcp_agent_online(&self, _session_code: &str, _participant_id: &str) {}
+    /// Register an MCP-connected agent as online
+    pub fn set_mcp_agent_online(&self, session_code: &str, participant_id: &str) {
+        self.mcp_agents
+            .entry(session_code.to_string())
+            .or_default()
+            .insert(participant_id.to_string());
+    }
 
-    /// Track an MCP agent as offline (no-op stub; presence managed via NOTIFY).
-    pub fn set_mcp_agent_offline(&self, _session_code: &str, _participant_id: &str) {}
+    /// Remove an MCP-connected agent from the online set
+    pub fn set_mcp_agent_offline(&self, session_code: &str, participant_id: &str) {
+        if let Some(mut agents) = self.mcp_agents.get_mut(session_code) {
+            agents.remove(participant_id);
+            if agents.is_empty() {
+                drop(agents);
+                self.mcp_agents.remove(session_code);
+            }
+        }
+    }
 
     pub async fn send_to_participant(&self, session_code: &str, participant_id: &str, msg: &serde_json::Value) {
         let text = serde_json::to_string(msg).unwrap_or_default();

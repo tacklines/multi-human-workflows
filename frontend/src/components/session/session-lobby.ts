@@ -5,6 +5,7 @@ import { connectSession, disconnectSession } from '../../state/session-connectio
 import { authStore } from '../../state/auth-state.js';
 import { navigateTo } from '../../router.js';
 import type { RouterLocation } from '@vaadin/router';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -305,7 +306,7 @@ export class SessionLobby extends LitElement {
       connectSession(code);
       this._requestNotificationPermission();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to rejoin session';
+      this._error = err instanceof Error ? err.message : t('lobby.errorRejoin');
       this._lobbyState = 'landing';
     } finally {
       this._loading = false;
@@ -342,7 +343,7 @@ export class SessionLobby extends LitElement {
       connectSession(data.session.code);
       this._requestNotificationPermission();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to create session';
+      this._error = err instanceof Error ? err.message : t('lobby.errorCreate');
     } finally {
       this._loading = false;
     }
@@ -350,7 +351,7 @@ export class SessionLobby extends LitElement {
 
   private async _joinSession() {
     if (!this._joinCode.trim()) {
-      this._error = 'Please enter a join code';
+      this._error = t('lobby.errorJoinCode');
       return;
     }
     this._loading = true;
@@ -373,7 +374,7 @@ export class SessionLobby extends LitElement {
       connectSession(code);
       this._requestNotificationPermission();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to join session';
+      this._error = err instanceof Error ? err.message : t('lobby.errorJoin');
     } finally {
       this._loading = false;
     }
@@ -402,24 +403,24 @@ export class SessionLobby extends LitElement {
   private _renderLanding() {
     return html`
       <div class="landing">
-        <h1>Start Collaborating</h1>
-        <p class="subtitle">Create a session and invite humans and AI agents to work together in real time.</p>
+        <h1>${t('lobby.title')}</h1>
+        <p class="subtitle">${t('lobby.subtitle')}</p>
         <div class="landing-options">
           <div class="option-card option-card--create"
                role="button" tabindex="0"
                @click=${() => { this._lobbyState = 'creating'; this._error = ''; }}
                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._lobbyState = 'creating'; } }}>
             <sl-icon name="plus-circle-fill"></sl-icon>
-            <p class="option-title">New Session</p>
-            <p class="option-desc">Create a session and get a join code to share.</p>
+            <p class="option-title">${t('lobby.newSession')}</p>
+            <p class="option-desc">${t('lobby.newSessionDesc')}</p>
           </div>
           <div class="option-card option-card--join"
                role="button" tabindex="0"
                @click=${() => { this._lobbyState = 'joining'; this._error = ''; }}
                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._lobbyState = 'joining'; } }}>
             <sl-icon name="box-arrow-in-right"></sl-icon>
-            <p class="option-title">Join Session</p>
-            <p class="option-desc">Enter a code to join an existing session.</p>
+            <p class="option-title">${t('lobby.joinSession')}</p>
+            <p class="option-desc">${t('lobby.joinSessionDesc')}</p>
           </div>
         </div>
       </div>
@@ -432,20 +433,20 @@ export class SessionLobby extends LitElement {
         <div class="flow-card">
           <span class="back-link" role="button" tabindex="0"
                 @click=${() => { this._lobbyState = 'landing'; this._error = ''; }}>
-            <sl-icon name="arrow-left"></sl-icon> Back
+            <sl-icon name="arrow-left"></sl-icon> ${t('lobby.back')}
           </span>
-          <h2>New Session</h2>
+          <h2>${t('lobby.createTitle')}</h2>
           ${this._error ? html`<sl-alert variant="danger" open class="error-msg">${this._error}</sl-alert>` : nothing}
           <sl-input
-            label="Session Name"
-            placeholder="e.g. Sprint Planning, Bug Triage"
+            label="${t('lobby.sessionNameLabel')}"
+            placeholder="${t('lobby.sessionNamePlaceholder')}"
             value=${this._sessionName}
             @sl-input=${(e: CustomEvent) => { this._sessionName = (e.target as HTMLInputElement).value; }}
             @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createSession(); }}
           ></sl-input>
           <sl-button variant="primary" ?loading=${this._loading} @click=${() => void this._createSession()}>
             <sl-icon slot="prefix" name="arrow-right-circle"></sl-icon>
-            Create Session
+            ${t('lobby.createButton')}
           </sl-button>
         </div>
       </div>
@@ -458,18 +459,18 @@ export class SessionLobby extends LitElement {
         <div class="flow-card">
           <span class="back-link" role="button" tabindex="0"
                 @click=${() => { this._lobbyState = 'landing'; this._error = ''; }}>
-            <sl-icon name="arrow-left"></sl-icon> Back
+            <sl-icon name="arrow-left"></sl-icon> ${t('lobby.back')}
           </span>
-          <h2>Join Session</h2>
+          <h2>${t('lobby.joinTitle')}</h2>
           ${this._error ? html`<sl-alert variant="danger" open class="error-msg">${this._error}</sl-alert>` : nothing}
-          <sl-input label="Join Code" placeholder="e.g. ABC123"
+          <sl-input label="${t('lobby.joinCodeLabel')}" placeholder="${t('lobby.joinCodePlaceholder')}"
                     value=${this._joinCode}
                     @sl-input=${(e: CustomEvent) => { this._joinCode = (e.target as HTMLInputElement).value; }}
                     @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._joinSession(); }}
                     autocomplete="off"></sl-input>
           <sl-button variant="primary" ?loading=${this._loading} @click=${() => void this._joinSession()}>
             <sl-icon slot="prefix" name="box-arrow-in-right"></sl-icon>
-            Join
+            ${t('lobby.joinButton')}
           </sl-button>
         </div>
       </div>

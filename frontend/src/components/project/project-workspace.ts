@@ -8,6 +8,7 @@ import { connectSession } from '../../state/session-connection.js';
 import { authStore } from '../../state/auth-state.js';
 import { navigateTo } from '../../router.js';
 import type { RouterLocation } from '@vaadin/router';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -562,7 +563,7 @@ export class ProjectWorkspace extends LitElement {
       this._planCount = plans.length;
       this._workspaces = workspaces;
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to load project';
+      this._error = err instanceof Error ? err.message : t('workspace.errorLoad');
     } finally {
       this._loading = false;
     }
@@ -592,7 +593,7 @@ export class ProjectWorkspace extends LitElement {
       this._newSessionName = '';
       this._showNewSession = false;
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to create session';
+      this._error = err instanceof Error ? err.message : t('workspace.errorCreateSession');
     } finally {
       this._creatingSess = false;
     }
@@ -616,7 +617,7 @@ export class ProjectWorkspace extends LitElement {
       connectSession(code);
       navigateTo(`/sessions/${code}`);
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to join session';
+      this._error = err instanceof Error ? err.message : t('workspace.errorJoinSession');
     }
   }
 
@@ -645,7 +646,7 @@ export class ProjectWorkspace extends LitElement {
     }
 
     if (!this._project) {
-      return html`<div class="empty-state">Project not found</div>`;
+      return html`<div class="empty-state">${t('workspace.notFound')}</div>`;
     }
 
     const isGraph = this._activeTab === 'graph';
@@ -679,11 +680,11 @@ export class ProjectWorkspace extends LitElement {
         `}
       </div>
 
-      <sl-dialog label="New Session" ?open=${this._showNewSession}
+      <sl-dialog label=${t('workspace.newSession')} ?open=${this._showNewSession}
                  @sl-after-hide=${() => { this._showNewSession = false; }}>
         <div class="dialog-form">
-          <sl-input label="Session Name" placeholder="e.g. Sprint Planning"
-                    help-text="Optional — give it a name to help others find it"
+          <sl-input label=${t('workspace.newSession.nameLabel')} placeholder=${t('workspace.newSession.namePlaceholder')}
+                    help-text=${t('workspace.newSession.nameHelp')}
                     value=${this._newSessionName}
                     @sl-input=${(e: CustomEvent) => { this._newSessionName = (e.target as HTMLInputElement).value; }}
                     @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createSession(); }}
@@ -691,7 +692,7 @@ export class ProjectWorkspace extends LitElement {
         </div>
         <sl-button slot="footer" variant="primary" ?loading=${this._creatingSess}
                    @click=${() => void this._createSession()}>
-          Create Session
+          ${t('workspace.newSession.create')}
         </sl-button>
       </sl-dialog>
     `;
@@ -704,7 +705,7 @@ export class ProjectWorkspace extends LitElement {
         <span class="back-link" role="button" tabindex="0"
               @click=${() => { navigateTo('/projects'); }}
               @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') navigateTo('/projects'); }}>
-          <sl-icon name="arrow-left"></sl-icon> Projects
+          <sl-icon name="arrow-left"></sl-icon> ${t('workspace.backToProjects')}
         </span>
         <h1>${p.name}</h1>
         <span class="prefix-badge">${p.ticket_prefix}</span>
@@ -733,7 +734,7 @@ export class ProjectWorkspace extends LitElement {
         <div class="section-header">
           <span class="section-title">
             <sl-icon name="people-fill"></sl-icon>
-            Sessions
+            ${t('workspace.sessions')}
             <sl-badge variant="neutral" pill>${this._sessions.length}</sl-badge>
           </span>
         </div>
@@ -746,7 +747,7 @@ export class ProjectWorkspace extends LitElement {
                @click=${() => { this._showNewSession = true; }}
                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._showNewSession = true; } }}>
             <sl-icon name="plus-lg"></sl-icon>
-            <span>New Session</span>
+            <span>${t('workspace.newSession')}</span>
           </div>
         </div>
       </div>
@@ -763,13 +764,13 @@ export class ProjectWorkspace extends LitElement {
           <span class="code">${s.code}</span>
           <span class="date">${this._formatDate(s.created_at)}</span>
         </div>
-        <div class="name">${s.name || 'Untitled session'}</div>
+        <div class="name">${s.name || t('workspace.untitledSession')}</div>
         <div class="participants">
           ${hasOnline ? html`<span class="online-dot"></span>` : nothing}
           <sl-icon name="people"></sl-icon>
           ${hasOnline
-            ? html`${online} online`
-            : html`${s.participants.length} participant${s.participants.length !== 1 ? 's' : ''}`}
+            ? html`${t('workspace.online', { count: online })}`
+            : html`${t('workspace.participants', { count: s.participants.length, suffix: s.participants.length !== 1 ? 's' : '' })}`}
         </div>
       </div>
     `;
@@ -823,7 +824,7 @@ export class ProjectWorkspace extends LitElement {
         <div class="section-header">
           <span class="section-title">
             <sl-icon name="terminal"></sl-icon>
-            Workspaces
+            ${t('workspace.workspaces')}
             <sl-badge variant="neutral" pill>${active.length}</sl-badge>
           </span>
         </div>
@@ -843,7 +844,7 @@ export class ProjectWorkspace extends LitElement {
               <span style="flex: 1;"></span>
               ${w.started_at ? html`
                 <span style="font-size: 0.75rem; color: var(--text-tertiary);">
-                  Started ${this._relativeTime(w.started_at)}
+                  ${t('workspace.started', { time: this._relativeTime(w.started_at) })}
                 </span>
               ` : nothing}
             </div>
@@ -862,13 +863,13 @@ export class ProjectWorkspace extends LitElement {
     `;
     return html`
       <nav class="tab-nav">
-        ${tab('overview', 'Overview', 'grid-1x2')}
-        ${tab('tasks', 'Tasks', 'kanban')}
-        ${tab('plans', 'Plans', 'file-earmark-text')}
-        ${tab('agents', 'Agents', 'robot')}
-        ${tab('graph', 'Graph', 'diagram-3')}
-        ${tab('automations', 'Automations', 'lightning-charge')}
-        ${tab('settings', 'Settings', 'gear')}
+        ${tab('overview', t('workspace.tab.overview'), 'grid-1x2')}
+        ${tab('tasks', t('workspace.tab.tasks'), 'kanban')}
+        ${tab('plans', t('workspace.tab.plans'), 'file-earmark-text')}
+        ${tab('agents', t('workspace.tab.agents'), 'robot')}
+        ${tab('graph', t('workspace.tab.graph'), 'diagram-3')}
+        ${tab('automations', t('workspace.tab.automations'), 'lightning-charge')}
+        ${tab('settings', t('workspace.tab.settings'), 'gear')}
       </nav>
     `;
   }
@@ -922,10 +923,10 @@ export class ProjectWorkspace extends LitElement {
         default_branch: this._settingsDefaultBranch.trim() || undefined,
       });
       this._project = updated;
-      this._settingsMsg = 'Settings saved.';
+      this._settingsMsg = t('workspace.settings.saved');
       this._settingsMsgVariant = 'success';
     } catch (err) {
-      this._settingsMsg = err instanceof Error ? err.message : 'Failed to save settings';
+      this._settingsMsg = err instanceof Error ? err.message : t('workspace.settings.errorSave');
       this._settingsMsgVariant = 'danger';
     } finally {
       this._settingsSaving = false;
@@ -938,7 +939,7 @@ export class ProjectWorkspace extends LitElement {
         <div class="section-header">
           <span class="section-title">
             <sl-icon name="robot"></sl-icon>
-            Agents
+            ${t('workspace.tab.agents')}
           </span>
         </div>
 
@@ -962,26 +963,26 @@ export class ProjectWorkspace extends LitElement {
     return html`
       <div class="settings-panel">
         <div class="settings-section">
-          <h3>Project Settings</h3>
+          <h3>${t('workspace.settings.title')}</h3>
           <div class="settings-form">
-            <sl-input label="Project Name" value=${this._settingsName}
+            <sl-input label=${t('workspace.settings.nameLabel')} value=${this._settingsName}
               @sl-input=${(e: CustomEvent) => { this._settingsName = (e.target as HTMLInputElement).value; }}
             ></sl-input>
-            <sl-input label="Ticket Prefix" value=${this._settingsPrefix}
+            <sl-input label=${t('workspace.settings.prefixLabel')} value=${this._settingsPrefix}
               @sl-input=${(e: CustomEvent) => { this._settingsPrefix = (e.target as HTMLInputElement).value; }}
             ></sl-input>
-            <sl-input label="Repository URL" placeholder="https://github.com/org/repo"
+            <sl-input label=${t('workspace.settings.repoLabel')} placeholder=${t('workspace.settings.repoPlaceholder')}
               value=${this._settingsRepoUrl}
               @sl-input=${(e: CustomEvent) => { this._settingsRepoUrl = (e.target as HTMLInputElement).value; }}
             ></sl-input>
-            <sl-input label="Default Branch" placeholder="main"
+            <sl-input label=${t('workspace.settings.branchLabel')} placeholder=${t('workspace.settings.branchPlaceholder')}
               value=${this._settingsDefaultBranch}
               @sl-input=${(e: CustomEvent) => { this._settingsDefaultBranch = (e.target as HTMLInputElement).value; }}
             ></sl-input>
             <div class="settings-actions">
               <sl-button variant="primary" ?loading=${this._settingsSaving}
                 @click=${() => void this._saveSettings()}>
-                Save Changes
+                ${t('workspace.settings.save')}
               </sl-button>
               ${this._settingsMsg ? html`
                 <sl-alert variant=${this._settingsMsgVariant} open duration="4000"
@@ -996,51 +997,51 @@ export class ProjectWorkspace extends LitElement {
         <sl-divider></sl-divider>
 
         <div class="settings-section">
-          <h3>Coder Integration</h3>
+          <h3>${t('workspace.coder.title')}</h3>
           ${this._coderLoading ? html`
             <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-tertiary); font-size: 0.85rem;">
-              <sl-spinner style="font-size: 1rem;"></sl-spinner> Loading integration status...
+              <sl-spinner style="font-size: 1rem;"></sl-spinner> ${t('workspace.coder.loading')}
             </div>
           ` : this._coderStatus ? html`
             <div class="coder-info">
               <div class="coder-row">
-                <span class="coder-label">Status</span>
+                <span class="coder-label">${t('workspace.coder.status')}</span>
                 ${this._coderStatus.connected
-                  ? html`<sl-badge variant="success">Connected</sl-badge>`
+                  ? html`<sl-badge variant="success">${t('workspace.coder.connected')}</sl-badge>`
                   : this._coderStatus.enabled
-                    ? html`<sl-badge variant="warning">Enabled but not connected</sl-badge>`
-                    : html`<sl-badge variant="neutral">Disabled</sl-badge>`}
+                    ? html`<sl-badge variant="warning">${t('workspace.coder.enabledNotConnected')}</sl-badge>`
+                    : html`<sl-badge variant="neutral">${t('workspace.coder.disabled')}</sl-badge>`}
               </div>
               ${this._coderStatus.url ? html`
                 <div class="coder-row">
-                  <span class="coder-label">URL</span>
+                  <span class="coder-label">${t('workspace.coder.url')}</span>
                   <span class="coder-value">${this._coderStatus.url}</span>
                 </div>
               ` : nothing}
               ${this._coderStatus.user ? html`
                 <div class="coder-row">
-                  <span class="coder-label">User</span>
+                  <span class="coder-label">${t('workspace.coder.user')}</span>
                   <span class="coder-value">${this._coderStatus.user}</span>
                 </div>
               ` : nothing}
               ${this._coderStatus.error ? html`
                 <div class="coder-row">
-                  <span class="coder-label">Error</span>
+                  <span class="coder-label">${t('workspace.coder.error')}</span>
                   <span style="color: var(--sl-color-danger-500); font-size: 0.85rem;">${this._coderStatus.error}</span>
                 </div>
               ` : nothing}
               ${this._coderStatus.templates.length > 0 ? html`
                 <div class="coder-row" style="align-items: flex-start;">
-                  <span class="coder-label">Templates</span>
+                  <span class="coder-label">${t('workspace.coder.templates')}</span>
                   <div class="template-list">
-                    ${this._coderStatus.templates.map(t => html`<span class="template-chip">${t}</span>`)}
+                    ${this._coderStatus.templates.map(tmpl => html`<span class="template-chip">${tmpl}</span>`)}
                   </div>
                 </div>
               ` : nothing}
             </div>
           ` : html`
             <div style="color: var(--text-tertiary); font-size: 0.85rem;">
-              Could not load Coder integration status.
+              ${t('workspace.coder.loadError')}
             </div>
           `}
         </div>

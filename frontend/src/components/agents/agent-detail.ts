@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchProjectAgent, type ProjectAgentDetailView } from '../../state/agent-api.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -321,7 +322,7 @@ export class AgentDetail extends LitElement {
     try {
       this._detail = await fetchProjectAgent(this.projectId, this.agentId);
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to load agent';
+      this._error = err instanceof Error ? err.message : t('agentDetail.errorLoad');
     } finally {
       this._loading = false;
     }
@@ -350,7 +351,7 @@ export class AgentDetail extends LitElement {
     if (this._error) {
       return html`
         <span class="back-link" role="button" tabindex="0" @click=${this._goBack}>
-          <sl-icon name="arrow-left"></sl-icon> Back to agents
+          <sl-icon name="arrow-left"></sl-icon> ${t('agentDetail.back')}
         </span>
         <sl-alert variant="danger" open>${this._error}</sl-alert>
       `;
@@ -365,45 +366,45 @@ export class AgentDetail extends LitElement {
       <span class="back-link" role="button" tabindex="0"
             @click=${this._goBack}
             @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._goBack(); }}>
-        <sl-icon name="arrow-left"></sl-icon> Back to agents
+        <sl-icon name="arrow-left"></sl-icon> ${t('agentDetail.back')}
       </span>
 
       <div class="agent-header">
         <span class="status-indicator ${isOnline ? 'online' : 'offline'}"></span>
         <h2>${agent.display_name}</h2>
-        <sl-badge variant=${isOnline ? 'success' : 'neutral'}>${isOnline ? 'Online' : 'Offline'}</sl-badge>
+        <sl-badge variant=${isOnline ? 'success' : 'neutral'}>${isOnline ? t('agentDetail.online') : t('agentDetail.offline')}</sl-badge>
       </div>
 
       <div class="info-grid">
         ${agent.model ? html`
           <div class="info-card">
-            <div class="info-label">Model</div>
+            <div class="info-label">${t('agentDetail.model')}</div>
             <div class="info-value mono">${agent.model}</div>
           </div>
         ` : nothing}
         ${agent.client_name ? html`
           <div class="info-card">
-            <div class="info-label">Client</div>
+            <div class="info-label">${t('agentDetail.client')}</div>
             <div class="info-value mono">${agent.client_name}${agent.client_version ? ` v${agent.client_version}` : ''}</div>
           </div>
         ` : nothing}
         <div class="info-card">
-          <div class="info-label">Session</div>
+          <div class="info-label">${t('agentDetail.session')}</div>
           <div class="info-value">${agent.session_name || agent.session_code}</div>
         </div>
         ${agent.sponsor_name ? html`
           <div class="info-card">
-            <div class="info-label">Sponsored by</div>
+            <div class="info-label">${t('agentDetail.sponsoredBy')}</div>
             <div class="info-value">${agent.sponsor_name}</div>
           </div>
         ` : nothing}
         <div class="info-card">
-          <div class="info-label">Joined</div>
+          <div class="info-label">${t('agentDetail.joined')}</div>
           <div class="info-value">${this._relativeTime(agent.joined_at)}</div>
         </div>
         ${agent.disconnected_at ? html`
           <div class="info-card">
-            <div class="info-label">Disconnected</div>
+            <div class="info-label">${t('agentDetail.disconnected')}</div>
             <div class="info-value">${this._relativeTime(agent.disconnected_at)}</div>
           </div>
         ` : nothing}
@@ -415,7 +416,7 @@ export class AgentDetail extends LitElement {
       ${isOnline ? html`
         <div class="section">
           <div class="section-title">
-            <sl-icon name="terminal"></sl-icon> Live Activity
+            <sl-icon name="terminal"></sl-icon> ${t('agentDetail.liveActivity')}
             ${this._agentState ? html`
               <sl-badge variant=${this._agentState === 'working' ? 'primary' : this._agentState === 'idle' ? 'neutral' : 'warning'}>
                 ${this._agentState}
@@ -438,17 +439,17 @@ export class AgentDetail extends LitElement {
 
   private _renderTask(agent: ProjectAgentDetailView['agent']) {
     if (!agent.current_task) return nothing;
-    const t = agent.current_task;
+    const ct = agent.current_task;
     return html`
       <div class="section">
         <div class="section-title">
-          <sl-icon name="kanban"></sl-icon> Current Task
+          <sl-icon name="kanban"></sl-icon> ${t('agentDetail.currentTask')}
         </div>
         <div class="task-card">
-          <span class="task-ticket">${t.ticket_id}</span>
-          <span class="task-title">${t.title}</span>
-          <sl-badge variant=${t.status === 'in_progress' ? 'primary' : 'neutral'}>
-            ${t.status.replace('_', ' ')}
+          <span class="task-ticket">${ct.ticket_id}</span>
+          <span class="task-title">${ct.title}</span>
+          <sl-badge variant=${ct.status === 'in_progress' ? 'primary' : 'neutral'}>
+            ${ct.status.replace('_', ' ')}
           </sl-badge>
         </div>
       </div>
@@ -461,12 +462,12 @@ export class AgentDetail extends LitElement {
     return html`
       <div class="section">
         <div class="section-title">
-          <sl-icon name="terminal"></sl-icon> Workspace
+          <sl-icon name="terminal"></sl-icon> ${t('agentDetail.workspace')}
         </div>
         <div class="workspace-card">
           <div class="ws-header">
             <sl-icon name="terminal" style="color: var(--text-tertiary);"></sl-icon>
-            <span class="ws-name">${ws.coder_workspace_name ?? 'Workspace'}</span>
+            <span class="ws-name">${ws.coder_workspace_name ?? t('agentDetail.workspaceFallback')}</span>
             <sl-badge variant=${WS_STATUS_VARIANT[ws.status] ?? 'neutral'}>${ws.status}</sl-badge>
           </div>
           <div class="ws-details">
@@ -479,7 +480,7 @@ export class AgentDetail extends LitElement {
             ${ws.started_at ? html`
               <span class="ws-detail">
                 <sl-icon name="clock" style="font-size: 0.85rem;"></sl-icon>
-                Started ${this._relativeTime(ws.started_at)}
+                ${t('agentDetail.started', { time: this._relativeTime(ws.started_at) })}
               </span>
             ` : nothing}
           </div>
@@ -495,11 +496,11 @@ export class AgentDetail extends LitElement {
     return html`
       <div class="section">
         <div class="section-title">
-          <sl-icon name="activity"></sl-icon> Recent Activity
+          <sl-icon name="activity"></sl-icon> ${t('agentDetail.recentActivity')}
           <sl-badge variant="neutral" pill>${activity.length}</sl-badge>
         </div>
         ${activity.length === 0 ? html`
-          <span class="empty-hint">No activity recorded yet.</span>
+          <span class="empty-hint">${t('agentDetail.noActivity')}</span>
         ` : html`
           <div class="timeline">
             ${activity.slice(0, 20).map(a => html`
@@ -519,11 +520,11 @@ export class AgentDetail extends LitElement {
     return html`
       <div class="section">
         <div class="section-title">
-          <sl-icon name="chat-dots"></sl-icon> Recent Comments
+          <sl-icon name="chat-dots"></sl-icon> ${t('agentDetail.recentComments')}
           <sl-badge variant="neutral" pill>${comments.length}</sl-badge>
         </div>
         ${comments.length === 0 ? html`
-          <span class="empty-hint">No comments yet.</span>
+          <span class="empty-hint">${t('agentDetail.noComments')}</span>
         ` : html`
           <div class="comment-list">
             ${comments.slice(0, 15).map(c => html`

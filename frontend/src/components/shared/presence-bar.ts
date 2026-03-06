@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { SessionParticipant } from '../../state/app-state.js';
+import { t } from '../../lib/i18n.js';
 import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
 import '@shoelace-style/shoelace/dist/components/dropdown/dropdown.js';
 import '@shoelace-style/shoelace/dist/components/menu/menu.js';
@@ -193,7 +194,7 @@ export class PresenceBar extends LitElement {
     const overflow = this.participants.length - this.maxVisible;
 
     return html`
-      <div class="presence-row" role="list" aria-label="Session participants">
+      <div class="presence-row" role="list" aria-label="${t('presence.participants')}">
         ${visible.map((p, i) => {
           const isYou = p.id === this.currentId;
           const isAgent = p.participant_type === 'agent';
@@ -203,14 +204,14 @@ export class PresenceBar extends LitElement {
             ? this.participants.find((s) => s.id === p.sponsor_id)
             : null;
           const isOnline = p.is_online;
-          const statusLabel = isOnline ? 'Online' : 'Offline';
-          const tooltipContent = `${p.display_name}${isYou ? ' (you)' : ''} · ${isAgent ? 'AI Agent' : 'Participant'} · ${statusLabel}${sponsor ? ` · Agent of ${sponsor.display_name}` : ''}`;
+          const statusLabel = isOnline ? t('presence.online') : t('presence.offline');
+          const tooltipContent = `${p.display_name}${isYou ? ` ${t('presence.you')}` : ''} · ${isAgent ? t('presence.aiAgent') : t('presence.participant')} · ${statusLabel}${sponsor ? ` · ${t('presence.agentOf', { name: sponsor.display_name })}` : ''}`;
 
           const avatarButton = html`
             <button
               class="avatar ${isYou ? 'is-you' : ''} ${isAgent ? 'is-agent' : ''} ${!isOnline ? 'is-offline' : ''}"
               @click=${() => this._onClick(p.id)}
-              aria-label="${p.display_name}${isYou ? ' (you)' : ''}${isAgent ? ' (AI agent)' : ''}, ${statusLabel}"
+              aria-label="${p.display_name}${isYou ? ` ${t('presence.you')}` : ''}${isAgent ? ` (${t('presence.aiAgent')})` : ''}, ${statusLabel}"
             >
               <div class="avatar-inner" style="background: ${isAgent ? '' : bgColor}">
                 ${initials}
@@ -225,14 +226,14 @@ export class PresenceBar extends LitElement {
               ${isYou
                 ? html`<sl-tooltip content="${tooltipContent}" placement="bottom">${avatarButton}</sl-tooltip>`
                 : isAgent
-                  ? html`<sl-tooltip content="${tooltipContent} · Click to open console" placement="bottom">${avatarButton}</sl-tooltip>`
+                  ? html`<sl-tooltip content="${tooltipContent} · ${t('presence.clickToOpenConsole')}" placement="bottom">${avatarButton}</sl-tooltip>`
                   : html`
                     <sl-dropdown>
                       <sl-tooltip content="${tooltipContent}" placement="bottom" slot="trigger">
                         ${avatarButton}
                       </sl-tooltip>
                       <sl-menu @sl-select=${() => this._onRemove(p)}>
-                        <sl-menu-item>Remove from session</sl-menu-item>
+                        <sl-menu-item>${t('presence.removeFromSession')}</sl-menu-item>
                       </sl-menu>
                     </sl-dropdown>
                   `}
@@ -242,7 +243,7 @@ export class PresenceBar extends LitElement {
         ${overflow > 0 ? html`
           <button
             class="overflow"
-            aria-label="${overflow} more participants"
+            aria-label="${t('presence.moreParticipants', { count: overflow })}"
             @click=${() => this._onClick('overflow')}
           >+${overflow}</button>
         ` : nothing}

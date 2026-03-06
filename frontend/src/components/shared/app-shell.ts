@@ -6,6 +6,7 @@ import { disconnectSession } from '../../state/session-connection.js';
 import { fetchUnreadMentions, clearUnreadMentions, type UnreadMentionView } from '../../state/task-api.js';
 import { fetchOrgs, setOrgs, setCurrentOrg, getCurrentOrg, subscribeOrg, type OrgView } from '../../state/org-api.js';
 import { initRouter, navigateTo } from '../../router.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -459,9 +460,9 @@ export class AppShell extends LitElement {
     const { session: s, agentCode } = session;
     return html`
       <div class="sidebar-section">
-        <div class="sidebar-section-label">Session</div>
+        <div class="sidebar-section-label">${t('app.sidebar.session')}</div>
         ${s.name ? html`<div style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">${s.name}</div>` : nothing}
-        <sl-tooltip content="Click to copy">
+        <sl-tooltip content="${t('app.tooltip.clickToCopy')}">
           <div class="session-code-display" @click=${() => this._copyToClipboard(s.code)}>
             ${s.code}
           </div>
@@ -470,13 +471,13 @@ export class AppShell extends LitElement {
 
       ${agentCode ? html`
         <div class="sidebar-section">
-          <div class="sidebar-section-label">Agent Code</div>
-          <sl-tooltip content="Click to copy">
+          <div class="sidebar-section-label">${t('app.sidebar.agentCode')}</div>
+          <sl-tooltip content="${t('app.tooltip.clickToCopy')}">
             <div class="agent-code-display" @click=${() => this._copyToClipboard(agentCode)}>
               ${agentCode}
             </div>
           </sl-tooltip>
-          <div class="agent-code-hint">Share with your AI agents</div>
+          <div class="agent-code-hint">${t('app.sidebar.agentCodeHint')}</div>
         </div>
       ` : nothing}
 
@@ -484,7 +485,7 @@ export class AppShell extends LitElement {
 
       <div class="sidebar-section">
         <div class="sidebar-section-label">
-          Participants
+          ${t('app.sidebar.participants')}
           <sl-badge variant="neutral" pill style="margin-left: 0.3rem; vertical-align: middle;">${s.participants.length}</sl-badge>
         </div>
         <ul class="sidebar-participant-list">
@@ -498,7 +499,7 @@ export class AppShell extends LitElement {
               >
                 <sl-icon name=${isAgent ? 'robot' : 'person-fill'}></sl-icon>
                 <span class="name">${p.display_name}</span>
-                ${isMe ? html`<span class="you-tag">you</span>` : nothing}
+                ${isMe ? html`<span class="you-tag">${t('app.sidebar.youTag')}</span>` : nothing}
                 ${isAgent ? html`<sl-icon name="terminal" style="font-size: 0.7rem; opacity: 0.5;"></sl-icon>` : nothing}
               </li>
             `;
@@ -510,7 +511,7 @@ export class AppShell extends LitElement {
 
       <sl-button class="leave-btn" variant="neutral" size="small" outline @click=${this._leaveSession}>
         <sl-icon slot="prefix" name="box-arrow-left"></sl-icon>
-        Back to Project
+        ${t('app.sidebar.backToProject')}
       </sl-button>
 
       <sl-divider></sl-divider>
@@ -537,7 +538,7 @@ export class AppShell extends LitElement {
       return html`
         <div class="auth-loading">
           <sl-spinner style="font-size: 2rem;"></sl-spinner>
-          <span>Authenticating...</span>
+          <span>${t('app.auth.loading')}</span>
         </div>
       `;
     }
@@ -545,11 +546,11 @@ export class AppShell extends LitElement {
     if (!this._authState.isAuthenticated) {
       return html`
         <div class="login-screen">
-          <h1>Seam</h1>
-          <p>Collaborative sessions where humans and AI agents work together.</p>
+          <h1>${t('app.login.title')}</h1>
+          <p>${t('app.login.description')}</p>
           <sl-button variant="primary" size="large" @click=${() => authStore.login()}>
             <sl-icon slot="prefix" name="box-arrow-in-right"></sl-icon>
-            Sign in
+            ${t('app.login.signIn')}
           </sl-button>
           ${this._authState.error
             ? html`<p style="color: var(--sl-color-danger-500);">${this._authState.error}</p>`
@@ -568,10 +569,10 @@ export class AppShell extends LitElement {
           <div class="header-left">
             <sl-icon-button
               name="list"
-              label="Toggle sidebar"
+              label="${t('app.sidebar.toggleLabel')}"
               @click=${this._toggleSidebar}
             ></sl-icon-button>
-            <span class="logo-wordmark" @click=${() => navigateTo('/')} style="cursor: pointer;">Seam</span>
+            <span class="logo-wordmark" @click=${() => navigateTo('/')} style="cursor: pointer;">${t('app.brand')}</span>
             ${this._currentOrg && this._orgs.length > 0 ? html`
               <span class="org-divider">/</span>
               ${this._orgs.length === 1 ? html`
@@ -591,7 +592,7 @@ export class AppShell extends LitElement {
                     ${this._orgs.map(o => html`
                       <sl-menu-item value=${o.slug} ?checked=${o.slug === this._currentOrg?.slug}>
                         ${o.name}
-                        ${o.personal ? html`<sl-badge variant="neutral" pill slot="suffix" style="font-size: 0.6rem;">Personal</sl-badge>` : nothing}
+                        ${o.personal ? html`<sl-badge variant="neutral" pill slot="suffix" style="font-size: 0.6rem;">${t('app.header.orgPersonal')}</sl-badge>` : nothing}
                       </sl-menu-item>
                     `)}
                   </sl-menu>
@@ -610,7 +611,7 @@ export class AppShell extends LitElement {
 
           <div class="header-right">
             ${session && this._unreadMentions.length > 0 ? html`
-              <sl-tooltip content="You have ${this._unreadMentions.length} unread mention(s)">
+              <sl-tooltip content="${t('app.header.unreadMentions', { count: this._unreadMentions.length })}">
                 <sl-button size="small" variant="text" @click=${this._clearMentions} style="position: relative;">
                   <sl-icon name="bell-fill" style="color: var(--sl-color-warning-500);"></sl-icon>
                   <sl-badge variant="danger" pill style="position: absolute; top: -2px; right: -2px; font-size: 0.6rem;">
@@ -626,12 +627,12 @@ export class AppShell extends LitElement {
               <sl-menu>
                 <sl-menu-item @click=${() => navigateTo('/settings')}>
                   <sl-icon slot="prefix" name="gear"></sl-icon>
-                  Settings
+                  ${t('app.header.settings')}
                 </sl-menu-item>
                 <sl-divider></sl-divider>
                 <sl-menu-item @click=${() => authStore.logout()}>
                   <sl-icon slot="prefix" name="box-arrow-right"></sl-icon>
-                  Sign out
+                  ${t('app.header.signOut')}
                 </sl-menu-item>
               </sl-menu>
             </sl-dropdown>

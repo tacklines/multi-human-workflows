@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { fetchProjects, createProject, type ProjectView } from '../../state/project-api.js';
 import { navigateTo } from '../../router.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -150,7 +151,7 @@ export class ProjectList extends LitElement {
     try {
       this._projects = await fetchProjects();
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to load projects';
+      this._error = err instanceof Error ? err.message : t('projectList.errorLoad');
     } finally {
       this._loading = false;
     }
@@ -176,7 +177,7 @@ export class ProjectList extends LitElement {
       this._newProjectRepo = '';
       this._selectProject(project);
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to create project';
+      this._error = err instanceof Error ? err.message : t('projectList.errorCreate');
     } finally {
       this._creating = false;
     }
@@ -190,8 +191,8 @@ export class ProjectList extends LitElement {
     return html`
       <div class="container">
         <div class="header">
-          <h1>Projects</h1>
-          <p>Select a project to view tasks and sessions</p>
+          <h1>${t('projectList.title')}</h1>
+          <p>${t('projectList.subtitle')}</p>
         </div>
 
         ${this._error ? html`<sl-alert variant="danger" open style="margin-bottom: 1rem; max-width: 56rem; width: 100%;">${this._error}</sl-alert>` : nothing}
@@ -209,7 +210,7 @@ export class ProjectList extends LitElement {
                 <p class="name">${p.name}</p>
                 <div class="meta">
                   <span class="prefix">${p.ticket_prefix}</span>
-                  <span>Created ${this._formatDate(p.created_at)}</span>
+                  <span>${t('projectList.created', { date: this._formatDate(p.created_at) })}</span>
                 </div>
               </div>
             `)}
@@ -217,32 +218,32 @@ export class ProjectList extends LitElement {
                  @click=${() => { this._showCreateDialog = true; }}
                  @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._showCreateDialog = true; } }}>
               <sl-icon name="plus-lg"></sl-icon>
-              <span>New Project</span>
+              <span>${t('projectList.newProject')}</span>
             </div>
           </div>
         `}
 
-        <sl-dialog label="New Project" ?open=${this._showCreateDialog}
+        <sl-dialog label=${t('projectList.dialogLabel')} ?open=${this._showCreateDialog}
                    @sl-after-hide=${() => { this._showCreateDialog = false; }}>
           <div class="dialog-form">
-            <sl-input label="Project Name" placeholder="e.g. My App"
+            <sl-input label=${t('projectList.nameLabel')} placeholder=${t('projectList.namePlaceholder')}
                       value=${this._newProjectName}
                       @sl-input=${(e: CustomEvent) => { this._newProjectName = (e.target as HTMLInputElement).value; }}
                       @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createProject(); }}
             ></sl-input>
-            <sl-input label="Ticket Prefix" placeholder="TASK" help-text="Prefix for ticket IDs (e.g. TASK-1)"
+            <sl-input label=${t('projectList.prefixLabel')} placeholder=${t('projectList.prefixPlaceholder')} help-text=${t('projectList.prefixHelp')}
                       value=${this._newProjectPrefix}
                       @sl-input=${(e: CustomEvent) => { this._newProjectPrefix = (e.target as HTMLInputElement).value; }}
                       @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createProject(); }}
             ></sl-input>
-            <sl-input label="Repository URL" placeholder="https://github.com/org/repo" help-text="Optional — link to the project's git repository"
+            <sl-input label=${t('projectList.repoLabel')} placeholder=${t('projectList.repoPlaceholder')} help-text=${t('projectList.repoHelp')}
                       value=${this._newProjectRepo}
                       @sl-input=${(e: CustomEvent) => { this._newProjectRepo = (e.target as HTMLInputElement).value; }}
                       @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createProject(); }}
             ></sl-input>
           </div>
           <sl-button slot="footer" variant="primary" ?loading=${this._creating} @click=${() => void this._createProject()}>
-            Create
+            ${t('projectList.create')}
           </sl-button>
         </sl-dialog>
       </div>

@@ -61,9 +61,16 @@ class Store {
   }
 
   setSession(code: string, participantId: string, session: SessionView, agentCode: string) {
+    // Mark self as online — the HTTP response may say false because WS isn't connected yet
+    const fixedSession: SessionView = {
+      ...session,
+      participants: session.participants.map((p) =>
+        p.id === participantId ? { ...p, is_online: true } : p
+      ),
+    };
     this.state = {
       ...this.state,
-      sessionState: { code, participantId, session, agentCode },
+      sessionState: { code, participantId, session: fixedSession, agentCode },
     };
     this.notify({ type: 'session-connected', code, participantId });
   }

@@ -10,6 +10,7 @@ import {
 } from '../../state/org-api.js';
 import type { ProjectView } from '../../state/project-api.js';
 import { navigateTo } from '../../router.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -171,7 +172,7 @@ export class OrgDashboard extends LitElement {
       this._org = await loadAndSelectOrg(slug);
       this._projects = await fetchOrgProjects(this._org.slug);
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to load';
+      this._error = err instanceof Error ? err.message : t('orgDashboard.errorLoad');
     } finally {
       this._loading = false;
     }
@@ -201,7 +202,7 @@ export class OrgDashboard extends LitElement {
       this._newProjectRepo = '';
       this._selectProject(project);
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to create project';
+      this._error = err instanceof Error ? err.message : t('orgDashboard.errorCreate');
     } finally {
       this._creating = false;
     }
@@ -223,9 +224,9 @@ export class OrgDashboard extends LitElement {
     return html`
       <div class="container">
         <div class="header">
-          <h1>${this._org?.name ?? 'Organization'}</h1>
+          <h1>${this._org?.name ?? t('orgDashboard.fallbackName')}</h1>
           <p>
-            ${this._org?.personal ? 'Your personal workspace' : `${this._org?.member_count ?? 0} member${(this._org?.member_count ?? 0) !== 1 ? 's' : ''}`}
+            ${this._org?.personal ? t('orgDashboard.personalWorkspace') : t('orgDashboard.members', { count: this._org?.member_count ?? 0, suffix: (this._org?.member_count ?? 0) !== 1 ? 's' : '' })}
           </p>
         </div>
 
@@ -235,7 +236,7 @@ export class OrgDashboard extends LitElement {
           <div class="org-nav">
             <sl-button size="small" variant="text" @click=${() => navigateTo(`/orgs/${this._org!.slug}/settings`)}>
               <sl-icon slot="prefix" name="gear"></sl-icon>
-              Settings
+              ${t('orgDashboard.settings')}
             </sl-button>
           </div>
         ` : nothing}
@@ -248,7 +249,7 @@ export class OrgDashboard extends LitElement {
               <p class="name">${p.name}</p>
               <div class="meta">
                 <span class="prefix">${p.ticket_prefix}</span>
-                <span>Created ${this._formatDate(p.created_at)}</span>
+                <span>${t('orgDashboard.created', { date: this._formatDate(p.created_at) })}</span>
               </div>
             </div>
           `)}
@@ -256,31 +257,31 @@ export class OrgDashboard extends LitElement {
                @click=${() => { this._showCreateDialog = true; }}
                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._showCreateDialog = true; } }}>
             <sl-icon name="plus-lg"></sl-icon>
-            <span>New Project</span>
+            <span>${t('orgDashboard.newProject')}</span>
           </div>
         </div>
 
-        <sl-dialog label="New Project" ?open=${this._showCreateDialog}
+        <sl-dialog label=${t('orgDashboard.dialogLabel')} ?open=${this._showCreateDialog}
                    @sl-after-hide=${() => { this._showCreateDialog = false; }}>
           <div class="dialog-form">
-            <sl-input label="Project Name" placeholder="e.g. My App"
+            <sl-input label=${t('orgDashboard.nameLabel')} placeholder=${t('orgDashboard.namePlaceholder')}
                       value=${this._newProjectName}
                       @sl-input=${(e: CustomEvent) => { this._newProjectName = (e.target as HTMLInputElement).value; }}
                       @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createProject(); }}
             ></sl-input>
-            <sl-input label="Ticket Prefix" placeholder="TASK" help-text="Prefix for ticket IDs (e.g. TASK-1)"
+            <sl-input label=${t('orgDashboard.prefixLabel')} placeholder=${t('orgDashboard.prefixPlaceholder')} help-text=${t('orgDashboard.prefixHelp')}
                       value=${this._newProjectPrefix}
                       @sl-input=${(e: CustomEvent) => { this._newProjectPrefix = (e.target as HTMLInputElement).value; }}
                       @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createProject(); }}
             ></sl-input>
-            <sl-input label="Repository URL" placeholder="https://github.com/org/repo" help-text="Optional"
+            <sl-input label=${t('orgDashboard.repoLabel')} placeholder=${t('orgDashboard.repoPlaceholder')} help-text=${t('orgDashboard.repoHelp')}
                       value=${this._newProjectRepo}
                       @sl-input=${(e: CustomEvent) => { this._newProjectRepo = (e.target as HTMLInputElement).value; }}
                       @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._createProject(); }}
             ></sl-input>
           </div>
           <sl-button slot="footer" variant="primary" ?loading=${this._creating} @click=${() => void this._createProject()}>
-            Create
+            ${t('orgDashboard.create')}
           </sl-button>
         </sl-dialog>
       </div>

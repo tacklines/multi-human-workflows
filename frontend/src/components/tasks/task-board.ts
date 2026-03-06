@@ -3,6 +3,7 @@ import { customElement, state, property } from 'lit/decorators.js';
 import { store } from '../../state/app-state.js';
 import { fetchTasks, fetchProjectTasks, createTask, updateTask, deleteTask, addTasksToSession, removeTaskFromSession } from '../../state/task-api.js';
 import { navigateTo } from '../../router.js';
+import { t } from '../../lib/i18n.js';
 import {
   type TaskView, type TaskType, type TaskStatus, type TaskPriority, type TaskComplexity,
   TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
@@ -753,14 +754,14 @@ export class TaskBoard extends LitElement {
   private _restoreTaskFromUrl() {
     const ticketId = this._getTaskTicketMatch();
     if (!ticketId) return;
-    const task = this._tasks.find(t => t.ticket_id === ticketId);
+    const task = this._tasks.find(tk => tk.ticket_id === ticketId);
     if (task) this._selectedTaskId = task.id;
   }
 
   private _onNavigate() {
     const ticketId = this._getTaskTicketMatch();
     if (ticketId) {
-      const task = this._tasks.find(t => t.ticket_id === ticketId);
+      const task = this._tasks.find(tk => tk.ticket_id === ticketId);
       if (task && this._selectedTaskId !== task.id) {
         this._selectedTaskId = task.id;
       }
@@ -773,7 +774,7 @@ export class TaskBoard extends LitElement {
 
   private _selectTask(taskId: string) {
     this._selectedTaskId = taskId;
-    const task = this._tasks.find(t => t.id === taskId);
+    const task = this._tasks.find(tk => tk.id === taskId);
     if (task) {
       let path = '';
       if (this.sessionCode) {
@@ -801,18 +802,18 @@ export class TaskBoard extends LitElement {
     let tasks = this._tasks;
     // Hide completed unless toggled or explicitly filtering for a completed status
     if (this._hideCompleted && !this._filterStatus) {
-      tasks = tasks.filter(t => t.status !== 'done' && t.status !== 'closed');
+      tasks = tasks.filter(tk => tk.status !== 'done' && tk.status !== 'closed');
     }
     if (this._searchQuery.trim()) {
       const q = this._searchQuery.toLowerCase();
-      tasks = tasks.filter(t =>
-        t.title.toLowerCase().includes(q) ||
-        t.ticket_id.toLowerCase().includes(q) ||
-        (t.description?.toLowerCase().includes(q))
+      tasks = tasks.filter(tk =>
+        tk.title.toLowerCase().includes(q) ||
+        tk.ticket_id.toLowerCase().includes(q) ||
+        (tk.description?.toLowerCase().includes(q))
       );
     }
     if (this._filterAssignee) {
-      tasks = tasks.filter(t => t.assigned_to === this._filterAssignee);
+      tasks = tasks.filter(tk => tk.assigned_to === this._filterAssignee);
     }
     // Sort
     const sorted = [...tasks];
@@ -837,18 +838,18 @@ export class TaskBoard extends LitElement {
 
   /** Count of hidden completed tasks (for the toggle label). */
   private get _completedCount(): number {
-    return this._tasks.filter(t => t.status === 'done' || t.status === 'closed').length;
+    return this._tasks.filter(tk => tk.status === 'done' || tk.status === 'closed').length;
   }
 
   /** Get child tasks for a parent (from full task list, not filtered). */
   private _childrenOf(parentId: string): TaskView[] {
-    return this._tasks.filter(t => t.parent_id === parentId);
+    return this._tasks.filter(tk => tk.parent_id === parentId);
   }
 
   /** Progress for a parent: [done+closed, total children]. */
   private _childProgress(parentId: string): [number, number] {
     const children = this._childrenOf(parentId);
-    const complete = children.filter(t => t.status === 'done' || t.status === 'closed').length;
+    const complete = children.filter(tk => tk.status === 'done' || tk.status === 'closed').length;
     return [complete, children.length];
   }
 
@@ -1007,21 +1008,21 @@ export class TaskBoard extends LitElement {
     return html`
       <div class="board-header">
         <h2 class="board-title">
-          ${this.sessionName || 'Tasks'}
+          ${this.sessionName || t('taskBoard.title')}
           ${this._filteredTasks.length > 0
             ? html`<sl-badge variant="neutral" pill style="margin-left: 0.5rem; vertical-align: middle;">${this._filteredTasks.length}</sl-badge>`
             : nothing}
         </h2>
         <div class="board-actions">
           <div class="view-toggle">
-            <sl-tooltip content="List view">
+            <sl-tooltip content=${t('taskBoard.listView')}>
               <sl-icon-button
                 name="list-ul"
                 class=${this._viewMode === 'list' ? 'active' : ''}
                 @click=${() => { this._viewMode = 'list'; }}
               ></sl-icon-button>
             </sl-tooltip>
-            <sl-tooltip content="Board view">
+            <sl-tooltip content=${t('taskBoard.boardView')}>
               <sl-icon-button
                 name="kanban"
                 class=${this._viewMode === 'board' ? 'active' : ''}
@@ -1029,23 +1030,23 @@ export class TaskBoard extends LitElement {
               ></sl-icon-button>
             </sl-tooltip>
           </div>
-          <sl-tooltip content="Refresh">
+          <sl-tooltip content=${t('taskBoard.refresh')}>
             <sl-icon-button name="arrow-clockwise" @click=${() => this._loadTasks()}></sl-icon-button>
           </sl-tooltip>
           ${this._isProjectMode ? html`
             <sl-button variant=${this._sprintPanelOpen ? 'primary' : 'default'} size="small"
               @click=${() => { this._sprintPanelOpen = !this._sprintPanelOpen; }}>
               <sl-icon slot="prefix" name="calendar-week"></sl-icon>
-              Plan Sprint
+              ${t('taskBoard.planSprint')}
             </sl-button>
           ` : html`
             <sl-button variant="default" size="small" @click=${() => { this._showAgentDialog = true; this._agentError = ''; }}>
               <sl-icon slot="prefix" name="robot"></sl-icon>
-              Launch Agent
+              ${t('taskBoard.launchAgent')}
             </sl-button>
             <sl-button variant="primary" size="small" @click=${() => this._openCreateDialog()}>
               <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-              New Task
+              ${t('taskBoard.newTask')}
             </sl-button>
           `}
         </div>
@@ -1053,7 +1054,7 @@ export class TaskBoard extends LitElement {
 
       <div class="filters">
         <sl-input
-          placeholder="Search tasks..."
+          placeholder=${t('taskBoard.searchPlaceholder')}
           size="small"
           clearable
           value=${this._searchQuery}
@@ -1064,7 +1065,7 @@ export class TaskBoard extends LitElement {
           <sl-icon slot="prefix" name="search"></sl-icon>
         </sl-input>
         <sl-select
-          placeholder="All Types"
+          placeholder=${t('taskBoard.filterAllTypes')}
           size="small"
           clearable
           value=${this._filterType}
@@ -1073,17 +1074,17 @@ export class TaskBoard extends LitElement {
             this._loadTasks();
           }}
         >
-          ${(['epic', 'story', 'task', 'subtask', 'bug'] as TaskType[]).map(t => html`
-            <sl-option value=${t}>
-              <sl-icon slot="prefix" name=${TASK_TYPE_ICONS[t]} style="color: ${TASK_TYPE_COLORS[t]}"></sl-icon>
-              ${TASK_TYPE_LABELS[t]}
+          ${(['epic', 'story', 'task', 'subtask', 'bug'] as TaskType[]).map(tt => html`
+            <sl-option value=${tt}>
+              <sl-icon slot="prefix" name=${TASK_TYPE_ICONS[tt]} style="color: ${TASK_TYPE_COLORS[tt]}"></sl-icon>
+              ${TASK_TYPE_LABELS[tt]}
             </sl-option>
           `)}
         </sl-select>
 
         ${this._viewMode === 'list' ? html`
           <sl-select
-            placeholder="All Statuses"
+            placeholder=${t('taskBoard.filterAllStatuses')}
             size="small"
             clearable
             value=${this._filterStatus}
@@ -1100,7 +1101,7 @@ export class TaskBoard extends LitElement {
 
         ${this.participants.length > 0 ? html`
           <sl-select
-            placeholder="All Assignees"
+            placeholder=${t('taskBoard.filterAllAssignees')}
             size="small"
             clearable
             value=${this._filterAssignee}
@@ -1124,14 +1125,14 @@ export class TaskBoard extends LitElement {
           @sl-change=${(e: Event) => { this._sortBy = (e.target as HTMLSelectElement).value as any; }}
         >
           <sl-icon slot="prefix" name="sort-down" style="font-size: 0.85rem;"></sl-icon>
-          <sl-option value="created">Newest</sl-option>
-          <sl-option value="updated">Recently Updated</sl-option>
-          <sl-option value="title">Title A-Z</sl-option>
-          <sl-option value="type">Type</sl-option>
+          <sl-option value="created">${t('taskBoard.sortNewest')}</sl-option>
+          <sl-option value="updated">${t('taskBoard.sortRecentlyUpdated')}</sl-option>
+          <sl-option value="title">${t('taskBoard.sortTitleAZ')}</sl-option>
+          <sl-option value="type">${t('taskBoard.sortType')}</sl-option>
         </sl-select>
 
         ${!this._isProjectMode ? html`
-          <sl-tooltip content=${this._showAllProject ? 'Show only session tasks' : 'Show all project tasks'}>
+          <sl-tooltip content=${this._showAllProject ? t('taskBoard.scopeAllTooltip') : t('taskBoard.scopeSessionTooltip')}>
             <sl-button
               size="small"
               variant=${this._showAllProject ? 'primary' : 'default'}
@@ -1139,13 +1140,13 @@ export class TaskBoard extends LitElement {
               style="white-space: nowrap;"
             >
               <sl-icon slot="prefix" name=${this._showAllProject ? 'collection' : 'collection'}></sl-icon>
-              ${this._showAllProject ? 'All Project' : 'Session'}
+              ${this._showAllProject ? t('taskBoard.scopeAll') : t('taskBoard.scopeSession')}
             </sl-button>
           </sl-tooltip>
         ` : nothing}
 
         ${this._completedCount > 0 ? html`
-          <sl-tooltip content=${this._hideCompleted ? `Show ${this._completedCount} completed` : 'Hide completed'}>
+          <sl-tooltip content=${this._hideCompleted ? t('taskBoard.showCompleted', { count: this._completedCount }) : t('taskBoard.hideCompleted')}>
             <sl-button
               size="small"
               variant=${this._hideCompleted ? 'default' : 'primary'}
@@ -1153,7 +1154,7 @@ export class TaskBoard extends LitElement {
               style="white-space: nowrap;"
             >
               <sl-icon slot="prefix" name=${this._hideCompleted ? 'eye' : 'eye-slash'}></sl-icon>
-              ${this._hideCompleted ? `${this._completedCount} done` : 'Hide done'}
+              ${this._hideCompleted ? t('taskBoard.completedDone', { count: this._completedCount }) : t('taskBoard.hideDone')}
             </sl-button>
           </sl-tooltip>
         ` : nothing}
@@ -1187,19 +1188,19 @@ export class TaskBoard extends LitElement {
   private _renderStats() {
     const filtered = this._filteredTasks;
     const total = this._tasks.length;
-    const open = filtered.filter(t => t.status === 'open').length;
-    const inProgress = filtered.filter(t => t.status === 'in_progress').length;
-    const done = filtered.filter(t => t.status === 'done').length;
-    const closed = filtered.filter(t => t.status === 'closed').length;
+    const open = filtered.filter(tk => tk.status === 'open').length;
+    const inProgress = filtered.filter(tk => tk.status === 'in_progress').length;
+    const done = filtered.filter(tk => tk.status === 'done').length;
+    const closed = filtered.filter(tk => tk.status === 'closed').length;
     const hidden = total - filtered.length;
 
     return html`
       <div class="stats-bar">
-        <div class="stat"><span class="stat-value">${open}</span> open</div>
-        <div class="stat"><span class="stat-value">${inProgress}</span> in progress</div>
-        ${done > 0 ? html`<div class="stat"><span class="stat-value">${done}</span> done</div>` : nothing}
-        ${closed > 0 ? html`<div class="stat"><span class="stat-value">${closed}</span> closed</div>` : nothing}
-        ${hidden > 0 ? html`<div class="stat" style="margin-left: auto; color: var(--text-tertiary);">${hidden} hidden</div>` : nothing}
+        <div class="stat"><span class="stat-value">${open}</span> ${t('taskBoard.stat.open')}</div>
+        <div class="stat"><span class="stat-value">${inProgress}</span> ${t('taskBoard.stat.inProgress')}</div>
+        ${done > 0 ? html`<div class="stat"><span class="stat-value">${done}</span> ${t('taskBoard.stat.done')}</div>` : nothing}
+        ${closed > 0 ? html`<div class="stat"><span class="stat-value">${closed}</span> ${t('taskBoard.stat.closed')}</div>` : nothing}
+        ${hidden > 0 ? html`<div class="stat" style="margin-left: auto; color: var(--text-tertiary);">${hidden} ${t('taskBoard.stat.hidden')}</div>` : nothing}
       </div>
     `;
   }
@@ -1208,10 +1209,10 @@ export class TaskBoard extends LitElement {
     return html`
       <div class="empty-state">
         <sl-icon name="kanban"></sl-icon>
-        <p>No tasks yet. Create one to get started.</p>
+        <p>${t('taskBoard.empty')}</p>
         <sl-button variant="primary" @click=${() => this._openCreateDialog()}>
           <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-          Create Task
+          ${t('taskBoard.createTask')}
         </sl-button>
       </div>
     `;
@@ -1221,14 +1222,14 @@ export class TaskBoard extends LitElement {
     if (this._selectedIds.size === 0) return nothing;
     return html`
       <div class="batch-bar">
-        <span class="batch-count">${this._selectedIds.size} selected</span>
-        <sl-button size="small" variant="text" @click=${() => this._clearSelection()}>Clear</sl-button>
+        <span class="batch-count">${t('taskBoard.batch.selected', { count: this._selectedIds.size })}</span>
+        <sl-button size="small" variant="text" @click=${() => this._clearSelection()}>${t('taskBoard.batch.clear')}</sl-button>
         <div class="batch-actions">
-          <sl-button size="small" @click=${() => this._batchSetStatus('in_progress')} ?loading=${this._batchLoading}>Start</sl-button>
-          <sl-button size="small" @click=${() => this._batchSetStatus('done')} ?loading=${this._batchLoading}>Done</sl-button>
-          <sl-button size="small" @click=${() => this._batchSetStatus('closed')} ?loading=${this._batchLoading}>Close</sl-button>
-          <sl-button size="small" @click=${() => this._batchSetStatus('open')} ?loading=${this._batchLoading}>Reopen</sl-button>
-          <sl-button size="small" variant="danger" @click=${() => this._batchDelete()} ?loading=${this._batchLoading}>Delete</sl-button>
+          <sl-button size="small" @click=${() => this._batchSetStatus('in_progress')} ?loading=${this._batchLoading}>${t('taskBoard.batch.start')}</sl-button>
+          <sl-button size="small" @click=${() => this._batchSetStatus('done')} ?loading=${this._batchLoading}>${t('taskBoard.batch.done')}</sl-button>
+          <sl-button size="small" @click=${() => this._batchSetStatus('closed')} ?loading=${this._batchLoading}>${t('taskBoard.batch.close')}</sl-button>
+          <sl-button size="small" @click=${() => this._batchSetStatus('open')} ?loading=${this._batchLoading}>${t('taskBoard.batch.reopen')}</sl-button>
+          <sl-button size="small" variant="danger" @click=${() => this._batchDelete()} ?loading=${this._batchLoading}>${t('taskBoard.batch.delete')}</sl-button>
         </div>
       </div>
     `;
@@ -1246,8 +1247,8 @@ export class TaskBoard extends LitElement {
 
   private _renderTaskList() {
     const tasks = this._filteredTasks;
-    const topLevel = tasks.filter(t => !t.parent_id);
-    const childrenOf = (id: string) => tasks.filter(t => t.parent_id === id);
+    const topLevel = tasks.filter(tk => !tk.parent_id);
+    const childrenOf = (id: string) => tasks.filter(tk => tk.parent_id === id);
 
     return html`
       ${this._renderBatchBar()}
@@ -1308,37 +1309,37 @@ export class TaskBoard extends LitElement {
 
         <div class="task-actions" @click=${(e: Event) => e.stopPropagation()}>
           <sl-dropdown>
-            <sl-icon-button slot="trigger" name="three-dots-vertical" label="Actions"></sl-icon-button>
+            <sl-icon-button slot="trigger" name="three-dots-vertical" label=${t('taskBoard.action.actions')}></sl-icon-button>
             <sl-menu>
               ${task.status !== 'in_progress' ? html`
                 <sl-menu-item @click=${() => this._handleStatusChange(task, 'in_progress')}>
-                  Start Work
+                  ${t('taskBoard.action.startWork')}
                 </sl-menu-item>
               ` : nothing}
               ${task.status !== 'done' ? html`
                 <sl-menu-item @click=${() => this._handleStatusChange(task, 'done')}>
-                  Mark Done
+                  ${t('taskBoard.action.markDone')}
                 </sl-menu-item>
               ` : nothing}
               ${task.status !== 'closed' ? html`
                 <sl-menu-item @click=${() => this._handleStatusChange(task, 'closed')}>
-                  Close
+                  ${t('taskBoard.action.close')}
                 </sl-menu-item>
               ` : nothing}
               ${task.status !== 'open' ? html`
                 <sl-menu-item @click=${() => this._handleStatusChange(task, 'open')}>
-                  Reopen
+                  ${t('taskBoard.action.reopen')}
                 </sl-menu-item>
               ` : nothing}
               <sl-divider></sl-divider>
               ${!isChild ? html`
                 <sl-menu-item @click=${() => this._openCreateDialog(task.id, 'subtask')}>
-                  Add Child Task
+                  ${t('taskBoard.action.addChild')}
                 </sl-menu-item>
               ` : nothing}
               <sl-divider></sl-divider>
               <sl-menu-item type="checkbox" @click=${() => this._handleDelete(task.id)}>
-                Delete
+                ${t('taskBoard.action.delete')}
               </sl-menu-item>
             </sl-menu>
           </sl-dropdown>
@@ -1355,10 +1356,10 @@ export class TaskBoard extends LitElement {
     const tasks = this._filteredTasks;
     // In kanban, hide subtasks that have a parent — they show as progress on the parent card
     const kanbanTasks = this._collapseSubtasks
-      ? tasks.filter(t => !t.parent_id)
+      ? tasks.filter(tk => !tk.parent_id)
       : tasks;
     const tasksByStatus = (status: TaskStatus) =>
-      kanbanTasks.filter(t => t.status === status);
+      kanbanTasks.filter(tk => tk.status === status);
 
     return html`
       <div class="kanban" style="grid-template-columns: repeat(${statuses.length}, 1fr);">
@@ -1368,7 +1369,7 @@ export class TaskBoard extends LitElement {
               <span>${STATUS_LABELS[status]}</span>
               <span style="display: flex; align-items: center; gap: 0.35rem;">
                 <sl-badge variant="neutral" pill>${tasksByStatus(status).length}</sl-badge>
-                <sl-tooltip content="Add task">
+                <sl-tooltip content=${t('taskBoard.kanban.addTask')}>
                   <sl-icon-button
                     name="plus"
                     style="font-size: 0.75rem;"
@@ -1392,7 +1393,7 @@ export class TaskBoard extends LitElement {
               }}
             >
               ${tasksByStatus(status).length === 0
-                ? html`<div class="kanban-empty">No tasks</div>`
+                ? html`<div class="kanban-empty">${t('taskBoard.kanban.noTasks')}</div>`
                 : tasksByStatus(status).map(task => this._renderKanbanCard(task))}
             </div>
           </div>
@@ -1403,7 +1404,7 @@ export class TaskBoard extends LitElement {
 
   private _handleDrop(newStatus: TaskStatus) {
     if (!this._dragTaskId) return;
-    const task = this._tasks.find(t => t.id === this._dragTaskId);
+    const task = this._tasks.find(tk => tk.id === this._dragTaskId);
     if (task && task.status !== newStatus) {
       this._handleStatusChange(task, newStatus);
     }
@@ -1431,7 +1432,7 @@ export class TaskBoard extends LitElement {
           <sl-icon name=${TASK_TYPE_ICONS[task.task_type]} style="color: ${typeColor}"></sl-icon>
           <span class="kanban-card-title">${task.title}</span>
           ${task.priority !== 'medium' ? html`<sl-icon name=${PRIORITY_ICONS[task.priority]} style="color: ${PRIORITY_COLORS[task.priority]}; font-size: 0.75rem; flex-shrink: 0;"></sl-icon>` : nothing}
-          ${this._isTaskInSprint(task) ? html`<sl-icon name="calendar-week" style="color: var(--sl-color-primary-500); font-size: 0.7rem; flex-shrink: 0;" title="In sprint"></sl-icon>` : nothing}
+          ${this._isTaskInSprint(task) ? html`<sl-icon name="calendar-week" style="color: var(--sl-color-primary-500); font-size: 0.7rem; flex-shrink: 0;" title=${t('taskBoard.sprint.title')}></sl-icon>` : nothing}
         </div>
         ${total > 0 ? html`
           <div class="kanban-progress">
@@ -1467,7 +1468,7 @@ export class TaskBoard extends LitElement {
     const selectedSession = this.sessions.find(s => s.code === this._sprintSessionCode);
     const sprintSessionId = selectedSession?.id ?? '';
     const sprintTasks = sprintSessionId
-      ? this._tasks.filter(t => t.session_ids?.includes(sprintSessionId))
+      ? this._tasks.filter(tk => tk.session_ids?.includes(sprintSessionId))
       : [];
 
     return html`
@@ -1596,8 +1597,8 @@ export class TaskBoard extends LitElement {
 
   private _renderCreateDialog() {
     // Compute available parent tasks (epics, stories, and tasks can have children)
-    const parentCandidates = this._tasks.filter(t =>
-      t.task_type === 'epic' || t.task_type === 'story' || t.task_type === 'task'
+    const parentCandidates = this._tasks.filter(tk =>
+      tk.task_type === 'epic' || tk.task_type === 'story' || tk.task_type === 'task'
     );
 
     return html`
@@ -1616,10 +1617,10 @@ export class TaskBoard extends LitElement {
             value=${this._createType}
             @sl-change=${(e: Event) => { this._createType = (e.target as HTMLSelectElement).value as TaskType; }}
           >
-            ${(['epic', 'story', 'task', 'subtask', 'bug'] as TaskType[]).map(t => html`
-              <sl-option value=${t}>
-                <sl-icon slot="prefix" name=${TASK_TYPE_ICONS[t]} style="color: ${TASK_TYPE_COLORS[t]}"></sl-icon>
-                ${TASK_TYPE_LABELS[t]}
+            ${(['epic', 'story', 'task', 'subtask', 'bug'] as TaskType[]).map(tt => html`
+              <sl-option value=${tt}>
+                <sl-icon slot="prefix" name=${TASK_TYPE_ICONS[tt]} style="color: ${TASK_TYPE_COLORS[tt]}"></sl-icon>
+                ${TASK_TYPE_LABELS[tt]}
               </sl-option>
             `)}
           </sl-select>
@@ -1692,10 +1693,10 @@ export class TaskBoard extends LitElement {
               value=${this._createParentId}
               @sl-change=${(e: Event) => { this._createParentId = (e.target as HTMLSelectElement).value; }}
             >
-              ${parentCandidates.map(t => html`
-                <sl-option value=${t.id}>
-                  <sl-icon slot="prefix" name=${TASK_TYPE_ICONS[t.task_type]}></sl-icon>
-                  ${t.title}
+              ${parentCandidates.map(pc => html`
+                <sl-option value=${pc.id}>
+                  <sl-icon slot="prefix" name=${TASK_TYPE_ICONS[pc.task_type]}></sl-icon>
+                  ${pc.title}
                 </sl-option>
               `)}
             </sl-select>

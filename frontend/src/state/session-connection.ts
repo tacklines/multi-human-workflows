@@ -15,10 +15,20 @@ let backoffMs = INITIAL_BACKOFF_MS;
 let intentionalDisconnect = false;
 
 export function connectSession(code: string): void {
+  // Clean up any existing socket without poisoning reconnect state
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (activeSocket) {
+    intentionalDisconnect = true; // prevent old socket's close handler from reconnecting
+    activeSocket.close();
+    activeSocket = null;
+  }
+
   intentionalDisconnect = false;
   activeSessionCode = code;
   backoffMs = INITIAL_BACKOFF_MS;
-  disconnectSession();
   openSocket(code);
 }
 
@@ -62,6 +72,19 @@ function openSocket(code: string): void {
         participantId?: string;
         message?: string;
       };
+
+      // When our own WS join is acknowledged, mark self as online
+      if (msg.type === 'joined') {
+        const current = store.get().sessionState;
+        if (current?.participantId) {
+          store.updateSession({
+            ...current.session,
+            participants: current.session.participants.map((p) =>
+              p.id === current.participantId ? { ...p, is_online: true } : p
+            ),
+          });
+        }
+      }
 
       if (msg.type === 'participant_joined' && msg.participant) {
         const current = store.get().sessionState;

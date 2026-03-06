@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchActivity, type ActivityEvent } from '../../state/task-api.js';
 import { store } from '../../state/app-state.js';
+import { t } from '../../lib/i18n.js';
 
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
@@ -32,13 +33,13 @@ function timeAgo(dateStr: string): string {
   const then = new Date(dateStr).getTime();
   const seconds = Math.floor((now - then) / 1000);
 
-  if (seconds < 60) return 'just now';
+  if (seconds < 60) return t('time.justNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t('time.minutesAgo', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t('time.hoursAgo', { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t('time.daysAgo', { count: days });
 }
 
 @customElement('activity-feed')
@@ -204,7 +205,7 @@ export class ActivityFeed extends LitElement {
     return html`
       <div class="feed-header">
         <span class="feed-label">
-          Activity
+          ${t('activity.label')}
           ${this._events.length > 0 ? html`<sl-badge variant="neutral" pill style="margin-left: 0.3rem; vertical-align: middle;">${this._events.length}</sl-badge>` : nothing}
         </span>
       </div>
@@ -212,7 +213,7 @@ export class ActivityFeed extends LitElement {
       ${this._loading
         ? html`<div class="loading"><sl-spinner></sl-spinner></div>`
         : this._events.length === 0
-          ? html`<div class="empty-state">No activity yet</div>`
+          ? html`<div class="empty-state">${t('activity.empty')}</div>`
           : html`
             <div class="feed-list">
               ${this._visibleEvents.map(e => this._renderEvent(e))}
@@ -224,7 +225,7 @@ export class ActivityFeed extends LitElement {
                   this.dispatchEvent(new CustomEvent('show-all-activity', { bubbles: true, composed: true }));
                   import('../../router.js').then(m => m.navigateTo(`/sessions/${this.sessionCode}/activity`));
                 }}
-              >Show all activity</a>
+              >${t('activity.showAll')}</a>
             ` : nothing}
           `}
     `;
