@@ -61,8 +61,21 @@ pub async fn list_tool_invocations(
     }
     sql.push_str(&format!(" ORDER BY ti.created_at DESC LIMIT ${param_idx}"));
 
-    let mut q = sqlx::query_as::<_, (Uuid, Uuid, String, String, Option<serde_json::Value>, Option<serde_json::Value>, bool, i32, chrono::DateTime<chrono::Utc>)>(&sql)
-        .bind(session.id);
+    let mut q = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Uuid,
+            String,
+            String,
+            Option<serde_json::Value>,
+            Option<serde_json::Value>,
+            bool,
+            i32,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(&sql)
+    .bind(session.id);
 
     if let Some(participant_id) = query.participant_id {
         q = q.bind(participant_id);
@@ -71,24 +84,21 @@ pub async fn list_tool_invocations(
         q = q.bind(tool_name);
     }
     if let Some(ref before) = query.before {
-        let before_time: chrono::DateTime<chrono::Utc> = before
-            .parse()
-            .map_err(|_| StatusCode::BAD_REQUEST)?;
+        let before_time: chrono::DateTime<chrono::Utc> =
+            before.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
         q = q.bind(before_time);
     }
     q = q.bind(limit);
 
-    let rows = q.fetch_all(&state.db)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to fetch tool invocations: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let rows = q.fetch_all(&state.db).await.map_err(|e| {
+        tracing::error!("Failed to fetch tool invocations: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let views: Vec<ToolInvocationView> = rows
         .into_iter()
-        .map(|(id, participant_id, participant_name, tool_name, request_params, response, is_error, duration_ms, created_at)| {
-            ToolInvocationView {
+        .map(
+            |(
                 id,
                 participant_id,
                 participant_name,
@@ -98,8 +108,20 @@ pub async fn list_tool_invocations(
                 is_error,
                 duration_ms,
                 created_at,
-            }
-        })
+            )| {
+                ToolInvocationView {
+                    id,
+                    participant_id,
+                    participant_name,
+                    tool_name,
+                    request_params,
+                    response,
+                    is_error,
+                    duration_ms,
+                    created_at,
+                }
+            },
+        )
         .collect();
 
     Ok(Json(views))

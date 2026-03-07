@@ -159,29 +159,42 @@ pub async fn create_invocation(
 ) -> Result<(StatusCode, Json<InvocationView>), (StatusCode, Json<serde_json::Value>)> {
     let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
         tracing::error!("Failed to upsert user: {e}");
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "internal error"})),
+        )
     })?;
     verify_project_member(&state.db, project_id, user.id)
         .await
-        .map_err(|s| (s, Json(serde_json::json!({"error": "not found or forbidden"}))))?;
+        .map_err(|s| {
+            (
+                s,
+                Json(serde_json::json!({"error": "not found or forbidden"})),
+            )
+        })?;
 
     // Resolve workspace: use provided ID or find/create from pool
     let workspace_id = match req.workspace_id {
         Some(ws_id) => {
             // Verify workspace belongs to this project
-            let ws_exists: Option<(Uuid,)> = sqlx::query_as(
-                "SELECT id FROM workspaces WHERE id = $1 AND project_id = $2",
-            )
-            .bind(ws_id)
-            .bind(project_id)
-            .fetch_optional(&state.db)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to check workspace: {e}");
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"})))
-            })?;
+            let ws_exists: Option<(Uuid,)> =
+                sqlx::query_as("SELECT id FROM workspaces WHERE id = $1 AND project_id = $2")
+                    .bind(ws_id)
+                    .bind(project_id)
+                    .fetch_optional(&state.db)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Failed to check workspace: {e}");
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(serde_json::json!({"error": "internal error"})),
+                        )
+                    })?;
             if ws_exists.is_none() {
-                return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "workspace not found"}))));
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({"error": "workspace not found"})),
+                ));
             }
             ws_id
         }
@@ -196,7 +209,10 @@ pub async fn create_invocation(
             .await
             .map_err(|e| {
                 tracing::error!("Failed to resolve workspace from pool: {e}");
-                (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error": "workspace unavailable"})))
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(serde_json::json!({"error": "workspace unavailable"})),
+                )
             })?
         }
     };
@@ -253,7 +269,10 @@ pub async fn create_invocation(
     .await
     .map_err(|e| {
         tracing::error!("Failed to create invocation: {e}");
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "internal error"})),
+        )
     })?;
 
     let event = crate::events::DomainEvent::new(
@@ -343,17 +362,15 @@ pub async fn get_invocation(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let inv = sqlx::query_as::<_, Invocation>(
-        "SELECT * FROM invocations WHERE id = $1",
-    )
-    .bind(invocation_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to get invocation: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let inv = sqlx::query_as::<_, Invocation>("SELECT * FROM invocations WHERE id = $1")
+        .bind(invocation_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get invocation: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     // Verify the requesting user is a member of the invocation's project
     verify_project_member(&state.db, inv.project_id, user.id).await?;

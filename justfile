@@ -90,8 +90,8 @@ check:
 check-frontend:
     cd frontend && npx tsc --noEmit
 
-# Check everything
-check-all: check check-frontend
+# Check everything (compile + type-check + lint)
+check-all: check check-frontend lint
 
 # Build frontend for production
 build-frontend:
@@ -118,6 +118,23 @@ test-frontend:
 
 # Run all tests
 test-all: test test-frontend
+
+# Lint everything (clippy + oxlint + fmt check)
+lint:
+    cd server && cargo clippy --all-targets -- -D warnings
+    cd server && cargo fmt -- --check
+    cd frontend && npx oxlint src/
+
+# Security audit (CVEs + licenses + secrets)
+audit:
+    cd server && cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2024-0384 --ignore RUSTSEC-2025-0134 --ignore RUSTSEC-2026-0002
+    cd server && cargo deny check advisories bans sources
+    gitleaks detect --no-banner
+
+# Format code
+fmt:
+    cd server && cargo fmt
+    cd frontend && npx oxlint src/ --fix || true
 
 # Show Docker container status
 ps:

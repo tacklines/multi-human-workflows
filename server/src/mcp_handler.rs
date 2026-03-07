@@ -1,25 +1,22 @@
+use crate::knowledge;
+use crate::models::{AgentJoinCode, Participant, Session, User};
+use crate::models::{Task, TaskComment, TaskStatus};
+use chrono::Utc;
 use rmcp::{
-    ErrorData as McpError,
-    RoleServer,
-    ServerHandler,
     handler::server::tool::{ToolCallContext, ToolRouter},
-    model::{
-        CallToolRequestParams, CallToolResult, Content, ListToolsResult,
-        PaginatedRequestParams, ServerCapabilities, ServerInfo,
-    },
-    service::RequestContext,
-    tool, tool_router,
     handler::server::wrapper::Parameters,
+    model::{
+        CallToolRequestParams, CallToolResult, Content, ListToolsResult, PaginatedRequestParams,
+        ServerCapabilities, ServerInfo,
+    },
     schemars::JsonSchema,
+    service::RequestContext,
+    tool, tool_router, ErrorData as McpError, RoleServer, ServerHandler,
 };
 use serde::Deserialize;
 use sqlx::PgPool;
 use std::sync::Mutex;
 use uuid::Uuid;
-use chrono::Utc;
-use crate::knowledge;
-use crate::models::{Task, TaskComment, TaskStatus};
-use crate::models::{AgentJoinCode, Participant, Session, User};
 
 // --- Tool parameter schemas ---
 
@@ -420,22 +417,28 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Join a Seam session using an agent join code. The code identifies both the session and your sponsoring user.")]
+    #[tool(
+        description = "Join a Seam session using an agent join code. The code identifies both the session and your sponsoring user."
+    )]
     async fn join_session(
         &self,
         Parameters(params): Parameters<JoinSessionParams>,
     ) -> Result<CallToolResult, McpError> {
-        match self.do_agent_join(
-            &params.code,
-            params.display_name.as_deref(),
-            params.client_name.as_deref(),
-            params.client_version.as_deref(),
-            params.model.as_deref(),
-        ).await {
+        match self
+            .do_agent_join(
+                &params.code,
+                params.display_name.as_deref(),
+                params.client_name.as_deref(),
+                params.client_version.as_deref(),
+                params.model.as_deref(),
+            )
+            .await
+        {
             Ok(result) => {
                 // Persist session state so subsequent tools work
                 let session_code = result["session"]["code"].as_str().map(|s| s.to_string());
-                let participant_id = result["participant_id"].as_str()
+                let participant_id = result["participant_id"]
+                    .as_str()
                     .and_then(|s| Uuid::parse_str(s).ok());
                 let sponsor_name = result["sponsor_name"].as_str().map(|s| s.to_string());
 
@@ -443,19 +446,27 @@ impl SeamMcp {
                 let mut project_id = None;
                 let mut ticket_prefix = None;
                 if let Some(ref code) = session_code {
-                    if let Ok(Some(session)) = sqlx::query_as::<_, Session>(
-                        "SELECT * FROM sessions WHERE code = $1"
-                    ).bind(code).fetch_optional(&self.db).await {
+                    if let Ok(Some(session)) =
+                        sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE code = $1")
+                            .bind(code)
+                            .fetch_optional(&self.db)
+                            .await
+                    {
                         if let Ok(Some(project)) = sqlx::query_as::<_, crate::models::Project>(
-                            "SELECT * FROM projects WHERE id = $1"
-                        ).bind(session.project_id).fetch_optional(&self.db).await {
+                            "SELECT * FROM projects WHERE id = $1",
+                        )
+                        .bind(session.project_id)
+                        .fetch_optional(&self.db)
+                        .await
+                        {
                             project_id = Some(project.id);
                             ticket_prefix = Some(project.ticket_prefix);
                         }
                     }
                 }
 
-                let session_id = result["session"]["id"].as_str()
+                let session_id = result["session"]["id"]
+                    .as_str()
                     .and_then(|s| Uuid::parse_str(s).ok());
 
                 if let Ok(mut state) = self.state.lock() {
@@ -477,7 +488,9 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Update your agent's composition metadata (model, client info). Call after model routing to report which model you are using.")]
+    #[tool(
+        description = "Update your agent's composition metadata (model, client info). Call after model routing to report which model you are using."
+    )]
     async fn update_composition(
         &self,
         Parameters(params): Parameters<UpdateCompositionParams>,
@@ -509,10 +522,7 @@ impl SeamMcp {
             )]));
         }
 
-        let sql = format!(
-            "UPDATE participants SET {} WHERE id = $1",
-            sets.join(", "),
-        );
+        let sql = format!("UPDATE participants SET {} WHERE id = $1", sets.join(", "),);
 
         let mut query = sqlx::query(&sql).bind(pid);
         if let Some(ref v) = params.client_name {
@@ -533,20 +543,28 @@ impl SeamMcp {
             serde_json::json!({
                 "updated": true,
                 "participant_id": pid,
-            }).to_string(),
+            })
+            .to_string(),
         )]))
     }
 
-    #[tool(description = "Get session state including all participants. Provide session code or omit to use your current session.")]
+    #[tool(
+        description = "Get session state including all participants. Provide session code or omit to use your current session."
+    )]
     async fn get_session(
         &self,
         Parameters(params): Parameters<GetSessionParams>,
     ) -> Result<CallToolResult, McpError> {
-        let code = match params.code.or_else(|| self.state.lock().ok().and_then(|s| s.session_code.clone())) {
+        let code = match params
+            .code
+            .or_else(|| self.state.lock().ok().and_then(|s| s.session_code.clone()))
+        {
             Some(c) => c,
-            None => return Ok(CallToolResult::error(vec![Content::text(
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(
                 "No session code provided and not currently in a session. Use join_session first.",
-            )])),
+            )]))
+            }
         };
 
         match self.fetch_session(&code).await {
@@ -557,9 +575,14 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Get your own participant info including ID, session code, and sponsor name. Only available after joining a session.")]
+    #[tool(
+        description = "Get your own participant info including ID, session code, and sponsor name. Only available after joining a session."
+    )]
     async fn my_info(&self) -> Result<CallToolResult, McpError> {
-        let state = self.state.lock().map_err(|_| McpError::internal_error("Lock poisoned", None))?;
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| McpError::internal_error("Lock poisoned", None))?;
         let Some(ref session_code) = state.session_code else {
             return Ok(CallToolResult::error(vec![Content::text(
                 "Not in a session. Use join_session first.",
@@ -577,7 +600,9 @@ impl SeamMcp {
         )]))
     }
 
-    #[tool(description = "Create a task in the current session's project. Types: epic, story, task, subtask, bug. Use parent_id for hierarchy (e.g. stories under epics).")]
+    #[tool(
+        description = "Create a task in the current session's project. Types: epic, story, task, subtask, bug. Use parent_id for hierarchy (e.g. stories under epics)."
+    )]
     async fn create_task(
         &self,
         Parameters(params): Parameters<CreateTaskParams>,
@@ -596,20 +621,28 @@ impl SeamMcp {
         };
 
         if params.title.trim().is_empty() {
-            return Ok(CallToolResult::error(vec![Content::text("Title cannot be empty")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Title cannot be empty",
+            )]));
         }
 
         let valid_types = ["epic", "story", "task", "subtask", "bug"];
         if !valid_types.contains(&params.task_type.as_str()) {
-            return Ok(CallToolResult::error(vec![Content::text(
-                format!("Invalid task_type '{}'. Must be one of: {}", params.task_type, valid_types.join(", ")),
-            )]));
+            return Ok(CallToolResult::error(vec![Content::text(format!(
+                "Invalid task_type '{}'. Must be one of: {}",
+                params.task_type,
+                valid_types.join(", ")
+            ))]));
         }
 
         let parent_id = match params.parent_id {
             Some(ref s) => match Uuid::parse_str(s) {
                 Ok(id) => Some(id),
-                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid parent_id UUID")])),
+                Err(_) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        "Invalid parent_id UUID",
+                    )]))
+                }
             },
             None => None,
         };
@@ -617,7 +650,11 @@ impl SeamMcp {
         let assigned_to = match params.assigned_to {
             Some(ref s) => match Uuid::parse_str(s) {
                 Ok(id) => Some(id),
-                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid assigned_to UUID")])),
+                Err(_) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        "Invalid assigned_to UUID",
+                    )]))
+                }
             },
             None => None,
         };
@@ -625,7 +662,11 @@ impl SeamMcp {
         let source_task_id = match params.source_task_id {
             Some(ref s) => match Uuid::parse_str(s) {
                 Ok(id) => Some(id),
-                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid source_task_id UUID")])),
+                Err(_) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        "Invalid source_task_id UUID",
+                    )]))
+                }
             },
             None => None,
         };
@@ -713,7 +754,9 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "List tasks in the current project. Filter by task_type, status, parent_id, or assigned_to.")]
+    #[tool(
+        description = "List tasks in the current project. Filter by task_type, status, parent_id, or assigned_to."
+    )]
     async fn list_tasks(
         &self,
         Parameters(params): Parameters<ListTasksParams>,
@@ -815,7 +858,8 @@ impl SeamMcp {
                 .fetch_all(&self.db)
                 .await
                 .unwrap_or_default();
-                let child_map: std::collections::HashMap<Uuid, i64> = child_counts.into_iter().collect();
+                let child_map: std::collections::HashMap<Uuid, i64> =
+                    child_counts.into_iter().collect();
 
                 // Batch comment counts
                 let comment_counts: Vec<(Uuid, i64)> = sqlx::query_as(
@@ -825,30 +869,36 @@ impl SeamMcp {
                 .fetch_all(&self.db)
                 .await
                 .unwrap_or_default();
-                let comment_map: std::collections::HashMap<Uuid, i64> = comment_counts.into_iter().collect();
+                let comment_map: std::collections::HashMap<Uuid, i64> =
+                    comment_counts.into_iter().collect();
 
-                let summary: Vec<serde_json::Value> = tasks.iter().map(|t| {
-                    serde_json::json!({
-                        "id": t.id,
-                        "ticket_id": format!("{}-{}", ticket_prefix, t.ticket_number),
-                        "ticket_number": t.ticket_number,
-                        "task_type": serde_json::to_value(&t.task_type).unwrap(),
-                        "title": t.title,
-                        "status": serde_json::to_value(&t.status).unwrap(),
-                        "priority": serde_json::to_value(&t.priority).unwrap(),
-                        "complexity": serde_json::to_value(&t.complexity).unwrap(),
-                        "parent_id": t.parent_id,
-                        "assigned_to": t.assigned_to,
-                        "created_at": t.created_at,
-                        "child_count": child_map.get(&t.id).unwrap_or(&0),
-                        "comment_count": comment_map.get(&t.id).unwrap_or(&0),
+                let summary: Vec<serde_json::Value> = tasks
+                    .iter()
+                    .map(|t| {
+                        serde_json::json!({
+                            "id": t.id,
+                            "ticket_id": format!("{}-{}", ticket_prefix, t.ticket_number),
+                            "ticket_number": t.ticket_number,
+                            "task_type": serde_json::to_value(t.task_type).unwrap(),
+                            "title": t.title,
+                            "status": serde_json::to_value(t.status).unwrap(),
+                            "priority": serde_json::to_value(t.priority).unwrap(),
+                            "complexity": serde_json::to_value(t.complexity).unwrap(),
+                            "parent_id": t.parent_id,
+                            "assigned_to": t.assigned_to,
+                            "created_at": t.created_at,
+                            "child_count": child_map.get(&t.id).unwrap_or(&0),
+                            "comment_count": comment_map.get(&t.id).unwrap_or(&0),
+                        })
                     })
-                }).collect();
+                    .collect();
                 Ok(CallToolResult::success(vec![Content::text(
                     serde_json::to_string_pretty(&summary).unwrap(),
                 )]))
             }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Query error: {e}"))])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Query error: {e}"
+            ))])),
         }
     }
 
@@ -859,7 +909,11 @@ impl SeamMcp {
     ) -> Result<CallToolResult, McpError> {
         let task_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid task ID",
+                )]))
+            }
         };
 
         match self.fetch_task_with_comments(task_id).await {
@@ -870,7 +924,9 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Update a task's title, description, status, assignee, or parent. Only provided fields are changed.")]
+    #[tool(
+        description = "Update a task's title, description, status, assignee, or parent. Only provided fields are changed."
+    )]
     async fn update_task(
         &self,
         Parameters(params): Parameters<UpdateTaskParams>,
@@ -890,20 +946,31 @@ impl SeamMcp {
 
         let task_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid task ID",
+                )]))
+            }
         };
 
         // Fetch current task (scoped to project for cross-project security)
-        let task: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND project_id = $2")
-            .bind(task_id)
-            .bind(project_id)
-            .fetch_optional(&self.db)
-            .await
-        {
-            Ok(Some(t)) => t,
-            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Task not found")])),
-            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
-        };
+        let task: Task =
+            match sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND project_id = $2")
+                .bind(task_id)
+                .bind(project_id)
+                .fetch_optional(&self.db)
+                .await
+            {
+                Ok(Some(t)) => t,
+                Ok(None) => {
+                    return Ok(CallToolResult::error(vec![Content::text("Task not found")]))
+                }
+                Err(e) => {
+                    return Ok(CallToolResult::error(vec![Content::text(format!(
+                        "Database error: {e}"
+                    ))]))
+                }
+            };
 
         let title = params.title.as_deref().unwrap_or(&task.title);
         let description = match &params.description {
@@ -911,46 +978,49 @@ impl SeamMcp {
             None => task.description.as_deref(),
         };
 
-        let status = params.status.as_deref().unwrap_or(
-            match task.status {
-                TaskStatus::Open => "open",
-                TaskStatus::InProgress => "in_progress",
-                TaskStatus::Done => "done",
-                TaskStatus::Closed => "closed",
-            }
-        );
+        let status = params.status.as_deref().unwrap_or(match task.status {
+            TaskStatus::Open => "open",
+            TaskStatus::InProgress => "in_progress",
+            TaskStatus::Done => "done",
+            TaskStatus::Closed => "closed",
+        });
 
         let valid_statuses = ["open", "in_progress", "done", "closed"];
         if !valid_statuses.contains(&status) {
-            return Ok(CallToolResult::error(vec![Content::text(
-                format!("Invalid status '{}'. Must be one of: {}", status, valid_statuses.join(", ")),
-            )]));
+            return Ok(CallToolResult::error(vec![Content::text(format!(
+                "Invalid status '{}'. Must be one of: {}",
+                status,
+                valid_statuses.join(", ")
+            ))]));
         }
 
-        let priority = params.priority.as_deref().unwrap_or(
-            match task.priority {
-                crate::models::TaskPriority::Critical => "critical",
-                crate::models::TaskPriority::High => "high",
-                crate::models::TaskPriority::Medium => "medium",
-                crate::models::TaskPriority::Low => "low",
-            }
-        );
+        let priority = params.priority.as_deref().unwrap_or(match task.priority {
+            crate::models::TaskPriority::Critical => "critical",
+            crate::models::TaskPriority::High => "high",
+            crate::models::TaskPriority::Medium => "medium",
+            crate::models::TaskPriority::Low => "low",
+        });
 
-        let complexity = params.complexity.as_deref().unwrap_or(
-            match task.complexity {
+        let complexity = params
+            .complexity
+            .as_deref()
+            .unwrap_or(match task.complexity {
                 crate::models::TaskComplexity::Xl => "xl",
                 crate::models::TaskComplexity::Large => "large",
                 crate::models::TaskComplexity::Medium => "medium",
                 crate::models::TaskComplexity::Small => "small",
                 crate::models::TaskComplexity::Trivial => "trivial",
-            }
-        );
+            });
 
         let assigned_to = match &params.assigned_to {
             Some(s) if s == "none" || s == "null" => None,
             Some(s) => match Uuid::parse_str(s) {
                 Ok(id) => Some(id),
-                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid assigned_to UUID")])),
+                Err(_) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        "Invalid assigned_to UUID",
+                    )]))
+                }
             },
             None => task.assigned_to,
         };
@@ -959,14 +1029,24 @@ impl SeamMcp {
             Some(s) if s == "none" || s == "null" => None,
             Some(s) => match Uuid::parse_str(s) {
                 Ok(id) => Some(id),
-                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid parent_id UUID")])),
+                Err(_) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        "Invalid parent_id UUID",
+                    )]))
+                }
             },
             None => task.parent_id,
         };
 
         // Merge model config (request value wins; fall back to current)
-        let model_hint = params.model_hint.clone().or_else(|| task.model_hint.clone());
-        let budget_tier = params.budget_tier.clone().or_else(|| task.budget_tier.clone());
+        let model_hint = params
+            .model_hint
+            .clone()
+            .or_else(|| task.model_hint.clone());
+        let budget_tier = params
+            .budget_tier
+            .clone()
+            .or_else(|| task.budget_tier.clone());
         let provider = params.provider.clone().or_else(|| task.provider.clone());
 
         // Merge commit_hashes
@@ -989,11 +1069,7 @@ impl SeamMcp {
             )]));
         }
 
-        let closed_at = if is_closing {
-            Some(Utc::now())
-        } else {
-            None
-        };
+        let closed_at = if is_closing { Some(Utc::now()) } else { None };
 
         match sqlx::query(
             "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, commit_hashes = $8, no_code_change = $9, closed_at = COALESCE($10, closed_at), model_hint = $11, budget_tier = $12, provider = $13, updated_at = NOW() WHERE id = $14 AND project_id = $15"
@@ -1062,7 +1138,9 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Add a comment to a task. Use for evidence, code references, discussion, or status updates.")]
+    #[tool(
+        description = "Add a comment to a task. Use for evidence, code references, discussion, or status updates."
+    )]
     async fn add_comment(
         &self,
         Parameters(params): Parameters<AddCommentParams>,
@@ -1073,12 +1151,18 @@ impl SeamMcp {
         };
 
         if params.content.trim().is_empty() {
-            return Ok(CallToolResult::error(vec![Content::text("Comment content cannot be empty")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Comment content cannot be empty",
+            )]));
         }
 
         let task_id = match Uuid::parse_str(&params.task_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task_id")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid task_id",
+                )]))
+            }
         };
 
         // Verify task exists
@@ -1142,7 +1226,9 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Close a task. Requires either commit_hashes (git SHAs for traceability) or no_code_change=true (for tasks that don't produce code, e.g. planning, docs review).")]
+    #[tool(
+        description = "Close a task. Requires either commit_hashes (git SHAs for traceability) or no_code_change=true (for tasks that don't produce code, e.g. planning, docs review)."
+    )]
     async fn close_task(
         &self,
         Parameters(params): Parameters<CloseTaskParams>,
@@ -1162,23 +1248,34 @@ impl SeamMcp {
 
         let task_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid task ID",
+                )]))
+            }
         };
 
         let no_code_change = params.no_code_change.unwrap_or(false);
         let new_hashes = params.commit_hashes.unwrap_or_default();
 
         // Fetch current task to merge commit_hashes (scoped to project for cross-project security)
-        let current: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND project_id = $2")
-            .bind(task_id)
-            .bind(project_id)
-            .fetch_optional(&self.db)
-            .await
-        {
-            Ok(Some(t)) => t,
-            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Task not found")])),
-            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("DB error: {e}"))])),
-        };
+        let current: Task =
+            match sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND project_id = $2")
+                .bind(task_id)
+                .bind(project_id)
+                .fetch_optional(&self.db)
+                .await
+            {
+                Ok(Some(t)) => t,
+                Ok(None) => {
+                    return Ok(CallToolResult::error(vec![Content::text("Task not found")]))
+                }
+                Err(e) => {
+                    return Ok(CallToolResult::error(vec![Content::text(format!(
+                        "DB error: {e}"
+                    ))]))
+                }
+            };
 
         let mut merged_hashes = current.commit_hashes.clone();
         for h in &new_hashes {
@@ -1243,7 +1340,9 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Claim a task — assigns it to yourself. Useful for preventing duplicate work in multi-agent sessions.")]
+    #[tool(
+        description = "Claim a task — assigns it to yourself. Useful for preventing duplicate work in multi-agent sessions."
+    )]
     async fn claim_task(
         &self,
         Parameters(params): Parameters<ClaimTaskParams>,
@@ -1263,29 +1362,43 @@ impl SeamMcp {
 
         let task_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid task ID",
+                )]))
+            }
         };
 
         // Check task exists and isn't already claimed by someone else (scoped to project)
-        let task: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND project_id = $2")
-            .bind(task_id)
-            .bind(project_id)
-            .fetch_optional(&self.db)
-            .await
-        {
-            Ok(Some(t)) => t,
-            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Task not found")])),
-            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
-        };
+        let task: Task =
+            match sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND project_id = $2")
+                .bind(task_id)
+                .bind(project_id)
+                .fetch_optional(&self.db)
+                .await
+            {
+                Ok(Some(t)) => t,
+                Ok(None) => {
+                    return Ok(CallToolResult::error(vec![Content::text("Task not found")]))
+                }
+                Err(e) => {
+                    return Ok(CallToolResult::error(vec![Content::text(format!(
+                        "Database error: {e}"
+                    ))]))
+                }
+            };
 
         if task.assigned_to == Some(participant_id) {
-            return Ok(CallToolResult::success(vec![Content::text("Already assigned to you")]));
+            return Ok(CallToolResult::success(vec![Content::text(
+                "Already assigned to you",
+            )]));
         }
 
         if task.assigned_to.is_some() {
-            return Ok(CallToolResult::error(vec![Content::text(
-                format!("Task is already assigned to {}. Use update_task to reassign.", task.assigned_to.unwrap()),
-            )]));
+            return Ok(CallToolResult::error(vec![Content::text(format!(
+                "Task is already assigned to {}. Use update_task to reassign.",
+                task.assigned_to.unwrap()
+            ))]));
         }
 
         match sqlx::query("UPDATE tasks SET assigned_to = $1, updated_at = NOW() WHERE id = $2 AND project_id = $3")
@@ -1319,7 +1432,9 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Unclaim a task — removes your assignment. Only works if you are the current assignee.")]
+    #[tool(
+        description = "Unclaim a task — removes your assignment. Only works if you are the current assignee."
+    )]
     async fn unclaim_task(
         &self,
         Parameters(params): Parameters<ClaimTaskParams>,
@@ -1339,22 +1454,35 @@ impl SeamMcp {
 
         let task_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid task ID",
+                )]))
+            }
         };
 
-        let task: Task = match sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND project_id = $2")
-            .bind(task_id)
-            .bind(project_id)
-            .fetch_optional(&self.db)
-            .await
-        {
-            Ok(Some(t)) => t,
-            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Task not found")])),
-            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
-        };
+        let task: Task =
+            match sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND project_id = $2")
+                .bind(task_id)
+                .bind(project_id)
+                .fetch_optional(&self.db)
+                .await
+            {
+                Ok(Some(t)) => t,
+                Ok(None) => {
+                    return Ok(CallToolResult::error(vec![Content::text("Task not found")]))
+                }
+                Err(e) => {
+                    return Ok(CallToolResult::error(vec![Content::text(format!(
+                        "Database error: {e}"
+                    ))]))
+                }
+            };
 
         if task.assigned_to != Some(participant_id) {
-            return Ok(CallToolResult::error(vec![Content::text("You are not assigned to this task")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "You are not assigned to this task",
+            )]));
         }
 
         match sqlx::query("UPDATE tasks SET assigned_to = NULL, updated_at = NOW() WHERE id = $1 AND project_id = $2")
@@ -1385,7 +1513,9 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Get a summary of task counts by status and type for the current project. Useful for orientation.")]
+    #[tool(
+        description = "Get a summary of task counts by status and type for the current project. Useful for orientation."
+    )]
     async fn task_summary(&self) -> Result<CallToolResult, McpError> {
         let project_id = match self.require_project() {
             Ok(id) => id,
@@ -1393,7 +1523,7 @@ impl SeamMcp {
         };
 
         let by_status: Vec<(String, i64)> = sqlx::query_as(
-            "SELECT status::text, COUNT(*) FROM tasks WHERE project_id = $1 GROUP BY status"
+            "SELECT status::text, COUNT(*) FROM tasks WHERE project_id = $1 GROUP BY status",
         )
         .bind(project_id)
         .fetch_all(&self.db)
@@ -1401,7 +1531,7 @@ impl SeamMcp {
         .unwrap_or_default();
 
         let by_type: Vec<(String, i64)> = sqlx::query_as(
-            "SELECT task_type::text, COUNT(*) FROM tasks WHERE project_id = $1 GROUP BY task_type"
+            "SELECT task_type::text, COUNT(*) FROM tasks WHERE project_id = $1 GROUP BY task_type",
         )
         .bind(project_id)
         .fetch_all(&self.db)
@@ -1431,7 +1561,9 @@ impl SeamMcp {
         )]))
     }
 
-    #[tool(description = "List recent activity events in the project. Shows who did what and when — task creates, updates, comments, etc.")]
+    #[tool(
+        description = "List recent activity events in the project. Shows who did what and when — task creates, updates, comments, etc."
+    )]
     async fn list_activity(
         &self,
         Parameters(params): Parameters<ListActivityParams>,
@@ -1460,25 +1592,42 @@ impl SeamMcp {
             Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Failed to fetch activity: {e}"))])),
         };
 
-        let items: Vec<serde_json::Value> = events.into_iter().map(|(id, actor_id, actor_name, event_type, _target_type, target_id, summary, metadata, created_at)| {
-            serde_json::json!({
-                "id": id,
-                "actor_id": actor_id,
-                "actor_name": actor_name,
-                "event_type": event_type,
-                "target_id": target_id,
-                "summary": summary,
-                "metadata": metadata,
-                "created_at": created_at.to_rfc3339(),
-            })
-        }).collect();
+        let items: Vec<serde_json::Value> = events
+            .into_iter()
+            .map(
+                |(
+                    id,
+                    actor_id,
+                    actor_name,
+                    event_type,
+                    _target_type,
+                    target_id,
+                    summary,
+                    metadata,
+                    created_at,
+                )| {
+                    serde_json::json!({
+                        "id": id,
+                        "actor_id": actor_id,
+                        "actor_name": actor_name,
+                        "event_type": event_type,
+                        "target_id": target_id,
+                        "summary": summary,
+                        "metadata": metadata,
+                        "created_at": created_at.to_rfc3339(),
+                    })
+                },
+            )
+            .collect();
 
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&items).unwrap(),
         )]))
     }
 
-    #[tool(description = "Ask a question that humans in the session can answer. Returns the question ID — use check_answer to poll for the response.")]
+    #[tool(
+        description = "Ask a question that humans in the session can answer. Returns the question ID — use check_answer to poll for the response."
+    )]
     async fn ask_question(
         &self,
         Parameters(params): Parameters<AskQuestionParams>,
@@ -1497,13 +1646,19 @@ impl SeamMcp {
         };
 
         if params.question.trim().is_empty() {
-            return Ok(CallToolResult::error(vec![Content::text("Question cannot be empty")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Question cannot be empty",
+            )]));
         }
 
         let directed_to = match &params.directed_to {
             Some(id_str) => match Uuid::parse_str(id_str) {
                 Ok(id) => Some(id),
-                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid directed_to participant ID")])),
+                Err(_) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        "Invalid directed_to participant ID",
+                    )]))
+                }
             },
             None => None,
         };
@@ -1511,13 +1666,17 @@ impl SeamMcp {
         let context_json: Option<serde_json::Value> = match &params.context {
             Some(ctx) => match serde_json::from_str(ctx) {
                 Ok(v) => Some(v),
-                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid context JSON")])),
+                Err(_) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        "Invalid context JSON",
+                    )]))
+                }
             },
             None => None,
         };
 
         let expires_at = params.expires_in_seconds.map(|secs| {
-            let secs = secs.min(3600).max(10);
+            let secs = secs.clamp(10, 3600);
             Utc::now() + chrono::Duration::seconds(secs)
         });
 
@@ -1557,14 +1716,20 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Check if a question has been answered. Returns the current status and answer if available.")]
+    #[tool(
+        description = "Check if a question has been answered. Returns the current status and answer if available."
+    )]
     async fn check_answer(
         &self,
         Parameters(params): Parameters<CheckAnswerParams>,
     ) -> Result<CallToolResult, McpError> {
         let question_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid question ID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid question ID",
+                )]))
+            }
         };
 
         // Lazy expiry
@@ -1585,7 +1750,15 @@ impl SeamMcp {
         };
 
         match row {
-            Some((id, question_text, status, answer_text, answered_by, created_at, answered_at)) => {
+            Some((
+                id,
+                question_text,
+                status,
+                answer_text,
+                answered_by,
+                created_at,
+                answered_at,
+            )) => {
                 let mut result = serde_json::json!({
                     "id": id,
                     "question_text": question_text,
@@ -1598,9 +1771,12 @@ impl SeamMcp {
                 }
                 if let Some(by) = answered_by {
                     // Look up the answerer's display name
-                    if let Ok(Some(p)) = sqlx::query_as::<_, Participant>(
-                        "SELECT * FROM participants WHERE id = $1"
-                    ).bind(by).fetch_optional(&self.db).await {
+                    if let Ok(Some(p)) =
+                        sqlx::query_as::<_, Participant>("SELECT * FROM participants WHERE id = $1")
+                            .bind(by)
+                            .fetch_optional(&self.db)
+                            .await
+                    {
                         result["answered_by_name"] = serde_json::json!(p.display_name);
                     }
                     result["answered_by"] = serde_json::json!(by);
@@ -1613,11 +1789,15 @@ impl SeamMcp {
                     serde_json::to_string_pretty(&result).unwrap(),
                 )]))
             }
-            None => Ok(CallToolResult::error(vec![Content::text("Question not found")])),
+            None => Ok(CallToolResult::error(vec![Content::text(
+                "Question not found",
+            )])),
         }
     }
 
-    #[tool(description = "List questions in the current session. Defaults to pending questions. Use status='all' to see everything.")]
+    #[tool(
+        description = "List questions in the current session. Defaults to pending questions. Use status='all' to see everything."
+    )]
     async fn list_questions(
         &self,
         Parameters(params): Parameters<ListQuestionsParams>,
@@ -1656,7 +1836,18 @@ impl SeamMcp {
         })?;
 
         let mut items: Vec<serde_json::Value> = Vec::new();
-        for (id, question_text, status, answer_text, asked_by, directed_to, answered_by, created_at, answered_at) in questions {
+        for (
+            id,
+            question_text,
+            status,
+            answer_text,
+            asked_by,
+            directed_to,
+            answered_by,
+            created_at,
+            answered_at,
+        ) in questions
+        {
             let mut item = serde_json::json!({
                 "id": id,
                 "question_text": question_text,
@@ -1689,7 +1880,9 @@ impl SeamMcp {
         )]))
     }
 
-    #[tool(description = "Cancel one of your own pending questions. The question will no longer appear as pending for humans.")]
+    #[tool(
+        description = "Cancel one of your own pending questions. The question will no longer appear as pending for humans."
+    )]
     async fn cancel_question(
         &self,
         Parameters(params): Parameters<CancelQuestionParams>,
@@ -1701,7 +1894,11 @@ impl SeamMcp {
 
         let question_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid question ID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid question ID",
+                )]))
+            }
         };
 
         let result = sqlx::query(
@@ -1713,15 +1910,21 @@ impl SeamMcp {
         .await;
 
         match result {
-            Ok(r) if r.rows_affected() > 0 => {
-                Ok(CallToolResult::success(vec![Content::text("Question cancelled")]))
-            }
-            Ok(_) => Ok(CallToolResult::error(vec![Content::text("Question not found, not yours, or not pending")])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
+            Ok(r) if r.rows_affected() > 0 => Ok(CallToolResult::success(vec![Content::text(
+                "Question cancelled",
+            )])),
+            Ok(_) => Ok(CallToolResult::error(vec![Content::text(
+                "Question not found, not yours, or not pending",
+            )])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Database error: {e}"
+            ))])),
         }
     }
 
-    #[tool(description = "Get a shared note by slug. Notes are session-scoped collaborative documents for sharing context, decisions, and findings.")]
+    #[tool(
+        description = "Get a shared note by slug. Notes are session-scoped collaborative documents for sharing context, decisions, and findings."
+    )]
     async fn get_note(
         &self,
         Parameters(params): Parameters<GetNoteParams>,
@@ -1731,14 +1934,13 @@ impl SeamMcp {
             Err(e) => return Ok(e),
         };
 
-        let note: Option<crate::models::Note> = sqlx::query_as(
-            "SELECT * FROM notes WHERE session_id = $1 AND slug = $2"
-        )
-        .bind(session_id)
-        .bind(&params.slug)
-        .fetch_optional(&self.db)
-        .await
-        .map_err(|e| McpError::internal_error(format!("Database error: {e}"), None))?;
+        let note: Option<crate::models::Note> =
+            sqlx::query_as("SELECT * FROM notes WHERE session_id = $1 AND slug = $2")
+                .bind(session_id)
+                .bind(&params.slug)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| McpError::internal_error(format!("Database error: {e}"), None))?;
 
         match note {
             Some(n) => {
@@ -1752,13 +1954,16 @@ impl SeamMcp {
                     serde_json::to_string_pretty(&result).unwrap(),
                 )]))
             }
-            None => Ok(CallToolResult::error(vec![Content::text(
-                format!("Note '{}' not found. Use update_note to create it.", params.slug)
-            )])),
+            None => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Note '{}' not found. Use update_note to create it.",
+                params.slug
+            ))])),
         }
     }
 
-    #[tool(description = "Create or update a shared note. Notes are session-scoped markdown documents. Use slugs like 'scratchpad', 'decisions', 'findings', etc.")]
+    #[tool(
+        description = "Create or update a shared note. Notes are session-scoped markdown documents. Use slugs like 'scratchpad', 'decisions', 'findings', etc."
+    )]
     async fn update_note(
         &self,
         Parameters(params): Parameters<UpdateNoteParams>,
@@ -1809,22 +2014,24 @@ impl SeamMcp {
             Err(e) => return Ok(e),
         };
 
-        let notes: Vec<crate::models::Note> = sqlx::query_as(
-            "SELECT * FROM notes WHERE session_id = $1 ORDER BY created_at"
-        )
-        .bind(session_id)
-        .fetch_all(&self.db)
-        .await
-        .map_err(|e| McpError::internal_error(format!("Database error: {e}"), None))?;
+        let notes: Vec<crate::models::Note> =
+            sqlx::query_as("SELECT * FROM notes WHERE session_id = $1 ORDER BY created_at")
+                .bind(session_id)
+                .fetch_all(&self.db)
+                .await
+                .map_err(|e| McpError::internal_error(format!("Database error: {e}"), None))?;
 
-        let items: Vec<serde_json::Value> = notes.iter().map(|n| {
-            serde_json::json!({
-                "slug": n.slug,
-                "title": n.title,
-                "content_length": n.content.len(),
-                "updated_at": n.updated_at.to_rfc3339(),
+        let items: Vec<serde_json::Value> = notes
+            .iter()
+            .map(|n| {
+                serde_json::json!({
+                    "slug": n.slug,
+                    "title": n.title,
+                    "content_length": n.content.len(),
+                    "updated_at": n.updated_at.to_rfc3339(),
+                })
             })
-        }).collect();
+            .collect();
 
         let result = serde_json::json!({
             "count": items.len(),
@@ -1835,7 +2042,9 @@ impl SeamMcp {
         )]))
     }
 
-    #[tool(description = "Delete a task and all its children. Use with caution — this is irreversible.")]
+    #[tool(
+        description = "Delete a task and all its children. Use with caution — this is irreversible."
+    )]
     async fn delete_task(
         &self,
         Parameters(params): Parameters<GetTaskParams>,
@@ -1847,13 +2056,17 @@ impl SeamMcp {
 
         let task_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task ID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid task ID",
+                )]))
+            }
         };
 
         // Fetch task data before deleting for the domain event payload
         // Scoped to project_id to prevent cross-project deletion
         let task: Option<(String, i32)> = sqlx::query_as(
-            "SELECT title, ticket_number FROM tasks WHERE id = $1 AND project_id = $2"
+            "SELECT title, ticket_number FROM tasks WHERE id = $1 AND project_id = $2",
         )
         .bind(task_id)
         .bind(project_id)
@@ -1874,7 +2087,9 @@ impl SeamMcp {
             Ok(_) => {
                 // Emit domain event after successful delete
                 if let Some((title, ticket_number)) = task {
-                    let (session_id, participant_id) = self.state.lock()
+                    let (session_id, participant_id) = self
+                        .state
+                        .lock()
                         .map(|s| (s.session_id, s.participant_id))
                         .unwrap_or((None, None));
                     if let Some(sid) = session_id {
@@ -1897,11 +2112,15 @@ impl SeamMcp {
                 }
                 Ok(CallToolResult::success(vec![Content::text("Task deleted")]))
             }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Delete failed: {e}"))])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Delete failed: {e}"
+            ))])),
         }
     }
 
-    #[tool(description = "Add a dependency: blocker_id blocks blocked_id. The blocked task cannot be started until the blocker is done. Prevents circular dependencies.")]
+    #[tool(
+        description = "Add a dependency: blocker_id blocks blocked_id. The blocked task cannot be started until the blocker is done. Prevents circular dependencies."
+    )]
     async fn add_dependency(
         &self,
         Parameters(params): Parameters<AddDependencyParams>,
@@ -1913,20 +2132,30 @@ impl SeamMcp {
 
         let blocker_id = match Uuid::parse_str(&params.blocker_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid blocker_id")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid blocker_id",
+                )]))
+            }
         };
         let blocked_id = match Uuid::parse_str(&params.blocked_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid blocked_id")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid blocked_id",
+                )]))
+            }
         };
 
         if blocker_id == blocked_id {
-            return Ok(CallToolResult::error(vec![Content::text("A task cannot block itself")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "A task cannot block itself",
+            )]));
         }
 
         // Verify both tasks belong to this project
         let task_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM tasks WHERE id IN ($1, $2) AND project_id = $3"
+            "SELECT COUNT(*) FROM tasks WHERE id IN ($1, $2) AND project_id = $3",
         )
         .bind(blocker_id)
         .bind(blocked_id)
@@ -1936,7 +2165,9 @@ impl SeamMcp {
         .unwrap_or(0);
 
         if task_count != 2 {
-            return Ok(CallToolResult::error(vec![Content::text("One or both tasks not found in this project")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "One or both tasks not found in this project",
+            )]));
         }
 
         // Check for circular dependency: walk upstream from the proposed blocker
@@ -1956,7 +2187,9 @@ impl SeamMcp {
         .unwrap_or(false);
 
         if would_cycle {
-            return Ok(CallToolResult::error(vec![Content::text("Cannot add dependency: would create a cycle")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Cannot add dependency: would create a cycle",
+            )]));
         }
 
         match sqlx::query(
@@ -2002,36 +2235,52 @@ impl SeamMcp {
 
         let blocker_id = match Uuid::parse_str(&params.blocker_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid blocker_id")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid blocker_id",
+                )]))
+            }
         };
         let blocked_id = match Uuid::parse_str(&params.blocked_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid blocked_id")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid blocked_id",
+                )]))
+            }
         };
 
         // Only delete if both tasks belong to this project
         match sqlx::query(
             "DELETE FROM task_dependencies WHERE blocker_id = $1 AND blocked_id = $2
              AND EXISTS (SELECT 1 FROM tasks WHERE id = $1 AND project_id = $3)
-             AND EXISTS (SELECT 1 FROM tasks WHERE id = $2 AND project_id = $3)"
+             AND EXISTS (SELECT 1 FROM tasks WHERE id = $2 AND project_id = $3)",
         )
-            .bind(blocker_id)
-            .bind(blocked_id)
-            .bind(project_id)
-            .execute(&self.db)
-            .await
+        .bind(blocker_id)
+        .bind(blocked_id)
+        .bind(project_id)
+        .execute(&self.db)
+        .await
         {
             Ok(result) if result.rows_affected() == 0 => {
-                Ok(CallToolResult::error(vec![Content::text("Dependency not found")]))
+                Ok(CallToolResult::error(vec![Content::text(
+                    "Dependency not found",
+                )]))
             }
-            Ok(_) => Ok(CallToolResult::success(vec![Content::text("Dependency removed")])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
+            Ok(_) => Ok(CallToolResult::success(vec![Content::text(
+                "Dependency removed",
+            )])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Failed: {e}"
+            ))])),
         }
     }
 
     // --- Requirements tools ---
 
-    #[tool(description = "Create a requirement — a high-level goal that drives research and task creation. Examples: 'Ensure full i18n coverage', 'Achieve WCAG 2.1 AA compliance'. Use parent_id for decomposition.")]
+    #[tool(
+        description = "Create a requirement — a high-level goal that drives research and task creation. Examples: 'Ensure full i18n coverage', 'Achieve WCAG 2.1 AA compliance'. Use parent_id for decomposition."
+    )]
     async fn create_requirement(
         &self,
         Parameters(params): Parameters<CreateRequirementParams>,
@@ -2050,15 +2299,19 @@ impl SeamMcp {
         };
 
         if params.title.trim().is_empty() {
-            return Ok(CallToolResult::error(vec![Content::text("Title cannot be empty")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Title cannot be empty",
+            )]));
         }
 
         let priority = params.priority.as_deref().unwrap_or("medium");
         let valid_priorities = ["critical", "high", "medium", "low"];
         if !valid_priorities.contains(&priority) {
-            return Ok(CallToolResult::error(vec![Content::text(
-                format!("Invalid priority '{}'. Must be one of: {}", priority, valid_priorities.join(", ")),
-            )]));
+            return Ok(CallToolResult::error(vec![Content::text(format!(
+                "Invalid priority '{}'. Must be one of: {}",
+                priority,
+                valid_priorities.join(", ")
+            ))]));
         }
 
         let description = params.description.as_deref().unwrap_or("");
@@ -2066,24 +2319,31 @@ impl SeamMcp {
         let parent_id = if let Some(ref pid) = params.parent_id {
             match Uuid::parse_str(pid) {
                 Ok(id) => Some(id),
-                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid parent_id")])),
+                Err(_) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        "Invalid parent_id",
+                    )]))
+                }
             }
         } else {
             None
         };
 
         // Look up the user_id for this participant
-        let user_id: Option<(Uuid,)> = sqlx::query_as(
-            "SELECT user_id FROM participants WHERE id = $1"
-        )
-        .bind(participant_id)
-        .fetch_optional(&self.db)
-        .await
-        .unwrap_or(None);
+        let user_id: Option<(Uuid,)> =
+            sqlx::query_as("SELECT user_id FROM participants WHERE id = $1")
+                .bind(participant_id)
+                .fetch_optional(&self.db)
+                .await
+                .unwrap_or(None);
 
         let user_id = match user_id {
             Some((uid,)) => uid,
-            None => return Ok(CallToolResult::error(vec![Content::text("Participant not found")])),
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Participant not found",
+                )]))
+            }
         };
 
         match sqlx::query_as::<_, crate::models::Requirement>(
@@ -2125,7 +2385,9 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "List requirements in the current project. Defaults to top-level requirements (no parent). Use parent_id to list children of a specific requirement.")]
+    #[tool(
+        description = "List requirements in the current project. Defaults to top-level requirements (no parent). Use parent_id to list children of a specific requirement."
+    )]
     async fn list_requirements(
         &self,
         Parameters(params): Parameters<ListRequirementsParams>,
@@ -2152,8 +2414,7 @@ impl SeamMcp {
         }
         sql.push_str(" ORDER BY priority, created_at");
 
-        let mut q = sqlx::query_as::<_, crate::models::Requirement>(&sql)
-            .bind(project_id);
+        let mut q = sqlx::query_as::<_, crate::models::Requirement>(&sql).bind(project_id);
         if let Some(ref status) = params.status {
             q = q.bind(status);
         }
@@ -2163,7 +2424,11 @@ impl SeamMcp {
         if let Some(ref parent_id) = params.parent_id {
             match Uuid::parse_str(parent_id) {
                 Ok(pid) => q = q.bind(pid),
-                Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid parent_id")])),
+                Err(_) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        "Invalid parent_id",
+                    )]))
+                }
             }
         }
 
@@ -2172,12 +2437,20 @@ impl SeamMcp {
                 let mut items = Vec::new();
                 for r in &reqs {
                     let child_count: i64 = sqlx::query_scalar(
-                        "SELECT COUNT(*) FROM requirements WHERE parent_id = $1"
-                    ).bind(r.id).fetch_one(&self.db).await.unwrap_or(0);
+                        "SELECT COUNT(*) FROM requirements WHERE parent_id = $1",
+                    )
+                    .bind(r.id)
+                    .fetch_one(&self.db)
+                    .await
+                    .unwrap_or(0);
 
                     let task_count: i64 = sqlx::query_scalar(
-                        "SELECT COUNT(*) FROM requirement_tasks WHERE requirement_id = $1"
-                    ).bind(r.id).fetch_one(&self.db).await.unwrap_or(0);
+                        "SELECT COUNT(*) FROM requirement_tasks WHERE requirement_id = $1",
+                    )
+                    .bind(r.id)
+                    .fetch_one(&self.db)
+                    .await
+                    .unwrap_or(0);
 
                     items.push(serde_json::json!({
                         "id": r.id,
@@ -2195,42 +2468,74 @@ impl SeamMcp {
                     serde_json::to_string_pretty(&items).unwrap(),
                 )]))
             }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Failed: {e}"
+            ))])),
         }
     }
 
-    #[tool(description = "Get a requirement by ID with full details including description, children, and linked tasks.")]
+    #[tool(
+        description = "Get a requirement by ID with full details including description, children, and linked tasks."
+    )]
     async fn get_requirement(
         &self,
         Parameters(params): Parameters<GetRequirementParams>,
     ) -> Result<CallToolResult, McpError> {
         let req_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid requirement ID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid requirement ID",
+                )]))
+            }
         };
 
         let req = match sqlx::query_as::<_, crate::models::Requirement>(
-            "SELECT * FROM requirements WHERE id = $1"
-        ).bind(req_id).fetch_optional(&self.db).await {
+            "SELECT * FROM requirements WHERE id = $1",
+        )
+        .bind(req_id)
+        .fetch_optional(&self.db)
+        .await
+        {
             Ok(Some(r)) => r,
-            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Requirement not found")])),
-            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
+            Ok(None) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Requirement not found",
+                )]))
+            }
+            Err(e) => {
+                return Ok(CallToolResult::error(vec![Content::text(format!(
+                    "Database error: {e}"
+                ))]))
+            }
         };
 
         let children = sqlx::query_as::<_, crate::models::Requirement>(
-            "SELECT * FROM requirements WHERE parent_id = $1 ORDER BY priority, created_at"
-        ).bind(req_id).fetch_all(&self.db).await.unwrap_or_default();
+            "SELECT * FROM requirements WHERE parent_id = $1 ORDER BY priority, created_at",
+        )
+        .bind(req_id)
+        .fetch_all(&self.db)
+        .await
+        .unwrap_or_default();
 
-        let linked_tasks: Vec<(Uuid,)> = sqlx::query_as(
-            "SELECT task_id FROM requirement_tasks WHERE requirement_id = $1"
-        ).bind(req_id).fetch_all(&self.db).await.unwrap_or_default();
+        let linked_tasks: Vec<(Uuid,)> =
+            sqlx::query_as("SELECT task_id FROM requirement_tasks WHERE requirement_id = $1")
+                .bind(req_id)
+                .fetch_all(&self.db)
+                .await
+                .unwrap_or_default();
 
-        let child_items: Vec<_> = children.iter().map(|c| serde_json::json!({
-            "id": c.id,
-            "title": c.title,
-            "status": c.status,
-            "priority": c.priority,
-        })).collect();
+        let child_items: Vec<_> = children
+            .iter()
+            .map(|c| {
+                serde_json::json!({
+                    "id": c.id,
+                    "title": c.title,
+                    "status": c.status,
+                    "priority": c.priority,
+                })
+            })
+            .collect();
 
         let result = serde_json::json!({
             "id": req.id,
@@ -2253,7 +2558,9 @@ impl SeamMcp {
         )]))
     }
 
-    #[tool(description = "Update a requirement's title, description, status, priority, or parent. Only provided fields are changed. Status transitions: draft→active, active→satisfied/archived, satisfied→active/archived, archived→draft.")]
+    #[tool(
+        description = "Update a requirement's title, description, status, priority, or parent. Only provided fields are changed. Status transitions: draft→active, active→satisfied/archived, satisfied→active/archived, archived→draft."
+    )]
     async fn update_requirement(
         &self,
         Parameters(params): Parameters<UpdateRequirementParams>,
@@ -2273,15 +2580,32 @@ impl SeamMcp {
 
         let req_id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid requirement ID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid requirement ID",
+                )]))
+            }
         };
 
         let current = match sqlx::query_as::<_, crate::models::Requirement>(
-            "SELECT * FROM requirements WHERE id = $1 AND project_id = $2"
-        ).bind(req_id).bind(project_id).fetch_optional(&self.db).await {
+            "SELECT * FROM requirements WHERE id = $1 AND project_id = $2",
+        )
+        .bind(req_id)
+        .bind(project_id)
+        .fetch_optional(&self.db)
+        .await
+        {
             Ok(Some(r)) => r,
-            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Requirement not found")])),
-            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Database error: {e}"))])),
+            Ok(None) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Requirement not found",
+                )]))
+            }
+            Err(e) => {
+                return Ok(CallToolResult::error(vec![Content::text(format!(
+                    "Database error: {e}"
+                ))]))
+            }
         };
 
         // Build dynamic update
@@ -2309,7 +2633,9 @@ impl SeamMcp {
         }
 
         if set_clauses.len() == 1 {
-            return Ok(CallToolResult::error(vec![Content::text("No fields to update")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "No fields to update",
+            )]));
         }
 
         let query = format!(
@@ -2329,17 +2655,24 @@ impl SeamMcp {
         }
         if let Some(ref status) = params.status {
             // Validate transition
-            let valid = match (current.status, status.as_str()) {
-                (crate::models::RequirementStatus::Draft, "active" | "archived") => true,
-                (crate::models::RequirementStatus::Active, "satisfied" | "archived") => true,
-                (crate::models::RequirementStatus::Satisfied, "active" | "archived") => true,
-                (crate::models::RequirementStatus::Archived, "draft") => true,
-                _ => false,
-            };
+            let valid = matches!(
+                (current.status, status.as_str()),
+                (
+                    crate::models::RequirementStatus::Draft,
+                    "active" | "archived"
+                ) | (
+                    crate::models::RequirementStatus::Active,
+                    "satisfied" | "archived"
+                ) | (
+                    crate::models::RequirementStatus::Satisfied,
+                    "active" | "archived"
+                ) | (crate::models::RequirementStatus::Archived, "draft")
+            );
             if !valid {
-                return Ok(CallToolResult::error(vec![Content::text(
-                    format!("Invalid status transition: {:?} → {status}", current.status)
-                )]));
+                return Ok(CallToolResult::error(vec![Content::text(format!(
+                    "Invalid status transition: {:?} → {status}",
+                    current.status
+                ))]));
             }
             q = q.bind(status);
         }
@@ -2353,11 +2686,17 @@ impl SeamMcp {
                 match Uuid::parse_str(parent_id) {
                     Ok(pid) => {
                         if pid == req_id {
-                            return Ok(CallToolResult::error(vec![Content::text("A requirement cannot be its own parent")]));
+                            return Ok(CallToolResult::error(vec![Content::text(
+                                "A requirement cannot be its own parent",
+                            )]));
                         }
                         q = q.bind(Some(pid));
                     }
-                    Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid parent_id")])),
+                    Err(_) => {
+                        return Ok(CallToolResult::error(vec![Content::text(
+                            "Invalid parent_id",
+                        )]))
+                    }
                 }
             }
         }
@@ -2373,20 +2712,30 @@ impl SeamMcp {
                     "parent_id": req.parent_id,
                     "updated_at": req.updated_at,
                 });
-                self.record_activity(project_id, Some(session_id), participant_id,
-                    "requirement_updated", "requirement", req.id,
+                self.record_activity(
+                    project_id,
+                    Some(session_id),
+                    participant_id,
+                    "requirement_updated",
+                    "requirement",
+                    req.id,
                     &format!("updated requirement: {}", req.title),
                     serde_json::json!({"title": req.title}),
-                ).await;
+                )
+                .await;
                 Ok(CallToolResult::success(vec![Content::text(
                     serde_json::to_string_pretty(&result).unwrap(),
                 )]))
             }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Failed: {e}"
+            ))])),
         }
     }
 
-    #[tool(description = "Link a task to a requirement, indicating the task was created to satisfy this requirement.")]
+    #[tool(
+        description = "Link a task to a requirement, indicating the task was created to satisfy this requirement."
+    )]
     async fn link_requirement_task(
         &self,
         Parameters(params): Parameters<LinkRequirementTaskParams>,
@@ -2398,24 +2747,44 @@ impl SeamMcp {
 
         let req_id = match Uuid::parse_str(&params.requirement_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid requirement_id")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid requirement_id",
+                )]))
+            }
         };
         let task_id = match Uuid::parse_str(&params.task_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task_id")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid task_id",
+                )]))
+            }
         };
 
         // Verify both entities belong to this project
         let req_exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1 AND project_id = $2)"
-        ).bind(req_id).bind(project_id).fetch_one(&self.db).await.unwrap_or(false);
+            "SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1 AND project_id = $2)",
+        )
+        .bind(req_id)
+        .bind(project_id)
+        .fetch_one(&self.db)
+        .await
+        .unwrap_or(false);
 
         let task_exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1 AND project_id = $2)"
-        ).bind(task_id).bind(project_id).fetch_one(&self.db).await.unwrap_or(false);
+            "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1 AND project_id = $2)",
+        )
+        .bind(task_id)
+        .bind(project_id)
+        .fetch_one(&self.db)
+        .await
+        .unwrap_or(false);
 
         if !req_exists || !task_exists {
-            return Ok(CallToolResult::error(vec![Content::text("Requirement or task not found in this project")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Requirement or task not found in this project",
+            )]));
         }
 
         match sqlx::query(
@@ -2443,18 +2812,26 @@ impl SeamMcp {
 
         let req_id = match Uuid::parse_str(&params.requirement_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid requirement_id")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid requirement_id",
+                )]))
+            }
         };
         let task_id = match Uuid::parse_str(&params.task_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid task_id")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid task_id",
+                )]))
+            }
         };
 
         // Only delete if both entities belong to this project
         match sqlx::query(
             "DELETE FROM requirement_tasks WHERE requirement_id = $1 AND task_id = $2
              AND EXISTS (SELECT 1 FROM requirements WHERE id = $1 AND project_id = $3)
-             AND EXISTS (SELECT 1 FROM tasks WHERE id = $2 AND project_id = $3)"
+             AND EXISTS (SELECT 1 FROM tasks WHERE id = $2 AND project_id = $3)",
         )
         .bind(req_id)
         .bind(task_id)
@@ -2465,14 +2842,20 @@ impl SeamMcp {
             Ok(result) if result.rows_affected() == 0 => {
                 Ok(CallToolResult::error(vec![Content::text("Link not found")]))
             }
-            Ok(_) => Ok(CallToolResult::success(vec![Content::text("Task unlinked from requirement")])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
+            Ok(_) => Ok(CallToolResult::success(vec![Content::text(
+                "Task unlinked from requirement",
+            )])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Failed: {e}"
+            ))])),
         }
     }
 
     // --- Request tools ---
 
-    #[tool(description = "Create a feature request — captures human intent that drives requirement decomposition. The request will be analyzed and broken into requirements and tasks.")]
+    #[tool(
+        description = "Create a feature request — captures human intent that drives requirement decomposition. The request will be analyzed and broken into requirements and tasks."
+    )]
     async fn create_request(
         &self,
         Parameters(params): Parameters<CreateRequestParams>,
@@ -2491,21 +2874,26 @@ impl SeamMcp {
         };
 
         // Look up user_id for this participant
-        let user_id: Option<(Uuid,)> = sqlx::query_as(
-            "SELECT user_id FROM participants WHERE id = $1",
-        )
-        .bind(participant_id)
-        .fetch_optional(&self.db)
-        .await
-        .unwrap_or(None);
+        let user_id: Option<(Uuid,)> =
+            sqlx::query_as("SELECT user_id FROM participants WHERE id = $1")
+                .bind(participant_id)
+                .fetch_optional(&self.db)
+                .await
+                .unwrap_or(None);
 
         let user_id = match user_id {
             Some((uid,)) => uid,
-            None => return Ok(CallToolResult::error(vec![Content::text("Participant not found")])),
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Participant not found",
+                )]))
+            }
         };
 
         if params.title.trim().is_empty() {
-            return Ok(CallToolResult::error(vec![Content::text("Title cannot be empty")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Title cannot be empty",
+            )]));
         }
 
         match sqlx::query_as::<_, crate::models::Request>(
@@ -2523,15 +2911,23 @@ impl SeamMcp {
         {
             Ok(req) => {
                 self.record_activity(
-                    project_id, Some(session_id), participant_id,
-                    "request_created", "request", req.id,
+                    project_id,
+                    Some(session_id),
+                    participant_id,
+                    "request_created",
+                    "request",
+                    req.id,
                     &format!("created request: {}", req.title),
                     serde_json::json!({"title": req.title}),
-                ).await;
+                )
+                .await;
 
                 // Also emit domain event for event bridge (automated dispatch)
                 let event = crate::events::DomainEvent::new(
-                    "request_created", "request", req.id, Some(user_id),
+                    "request_created",
+                    "request",
+                    req.id,
+                    Some(user_id),
                     serde_json::json!({
                         "project_id": project_id,
                         "title": req.title,
@@ -2554,7 +2950,9 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "List feature requests in the current project. Optionally filter by status.")]
+    #[tool(
+        description = "List feature requests in the current project. Optionally filter by status."
+    )]
     async fn list_requests(
         &self,
         Parameters(params): Parameters<ListRequestsParams>,
@@ -2582,9 +2980,9 @@ impl SeamMcp {
         };
 
         match reqs {
-            Ok(reqs) if reqs.is_empty() => {
-                Ok(CallToolResult::success(vec![Content::text("No requests found.")]))
-            }
+            Ok(reqs) if reqs.is_empty() => Ok(CallToolResult::success(vec![Content::text(
+                "No requests found.",
+            )])),
             Ok(reqs) => {
                 let mut lines = Vec::new();
                 for r in &reqs {
@@ -2609,7 +3007,9 @@ impl SeamMcp {
                         req_count,
                     ));
                 }
-                Ok(CallToolResult::success(vec![Content::text(lines.join("\n"))]))
+                Ok(CallToolResult::success(vec![Content::text(
+                    lines.join("\n"),
+                )]))
             }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
                 "Failed to list requests: {e}"
@@ -2617,14 +3017,20 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Get a request by ID with full details including body, analysis, and linked requirements.")]
+    #[tool(
+        description = "Get a request by ID with full details including body, analysis, and linked requirements."
+    )]
     async fn get_request(
         &self,
         Parameters(params): Parameters<GetRequestParams>,
     ) -> Result<CallToolResult, McpError> {
         let id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid request ID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid request ID",
+                )]))
+            }
         };
 
         let req = match sqlx::query_as::<_, crate::models::Request>(
@@ -2635,7 +3041,11 @@ impl SeamMcp {
         .await
         {
             Ok(Some(r)) => r,
-            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Request not found")])),
+            Ok(None) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Request not found",
+                )]))
+            }
             Err(e) => {
                 return Ok(CallToolResult::error(vec![Content::text(format!(
                     "Failed: {e}"
@@ -2643,13 +3053,12 @@ impl SeamMcp {
             }
         };
 
-        let linked_req_ids: Vec<(Uuid,)> = sqlx::query_as(
-            "SELECT requirement_id FROM request_requirements WHERE request_id = $1",
-        )
-        .bind(req.id)
-        .fetch_all(&self.db)
-        .await
-        .unwrap_or_default();
+        let linked_req_ids: Vec<(Uuid,)> =
+            sqlx::query_as("SELECT requirement_id FROM request_requirements WHERE request_id = $1")
+                .bind(req.id)
+                .fetch_all(&self.db)
+                .await
+                .unwrap_or_default();
 
         let status_str = match req.status {
             crate::models::RequestStatus::Pending => "pending",
@@ -2688,7 +3097,9 @@ impl SeamMcp {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(description = "Update a request's title, body, status, or analysis. Status transitions: pending→analyzing/archived, analyzing→decomposed/pending/archived, decomposed→archived/pending, archived→pending.")]
+    #[tool(
+        description = "Update a request's title, body, status, or analysis. Status transitions: pending→analyzing/archived, analyzing→decomposed/pending/archived, decomposed→archived/pending, archived→pending."
+    )]
     async fn update_request(
         &self,
         Parameters(params): Parameters<UpdateRequestParams>,
@@ -2705,7 +3116,11 @@ impl SeamMcp {
 
         let id = match Uuid::parse_str(&params.id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid request ID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid request ID",
+                )]))
+            }
         };
 
         let current = match sqlx::query_as::<_, crate::models::Request>(
@@ -2717,7 +3132,11 @@ impl SeamMcp {
         .await
         {
             Ok(Some(r)) => r,
-            Ok(None) => return Ok(CallToolResult::error(vec![Content::text("Request not found")])),
+            Ok(None) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Request not found",
+                )]))
+            }
             Err(e) => {
                 return Ok(CallToolResult::error(vec![Content::text(format!(
                     "Failed: {e}"
@@ -2727,13 +3146,19 @@ impl SeamMcp {
 
         // Validate status transition
         if let Some(ref new_status) = params.status {
-            let valid = match (current.status, new_status.as_str()) {
-                (crate::models::RequestStatus::Pending, "analyzing" | "archived") => true,
-                (crate::models::RequestStatus::Analyzing, "decomposed" | "pending" | "archived") => true,
-                (crate::models::RequestStatus::Decomposed, "archived" | "pending") => true,
-                (crate::models::RequestStatus::Archived, "pending") => true,
-                _ => false,
-            };
+            let valid = matches!(
+                (current.status, new_status.as_str()),
+                (
+                    crate::models::RequestStatus::Pending,
+                    "analyzing" | "archived"
+                ) | (
+                    crate::models::RequestStatus::Analyzing,
+                    "decomposed" | "pending" | "archived"
+                ) | (
+                    crate::models::RequestStatus::Decomposed,
+                    "archived" | "pending"
+                ) | (crate::models::RequestStatus::Archived, "pending")
+            );
             if !valid {
                 return Ok(CallToolResult::error(vec![Content::text(format!(
                     "Invalid status transition from {:?} to {}",
@@ -2748,7 +3173,9 @@ impl SeamMcp {
             || params.analysis.is_some();
 
         if !has_updates {
-            return Ok(CallToolResult::success(vec![Content::text("No changes provided")]));
+            return Ok(CallToolResult::success(vec![Content::text(
+                "No changes provided",
+            )]));
         }
 
         let mut set_clauses = vec!["updated_at = NOW()".to_string()];
@@ -2795,11 +3222,16 @@ impl SeamMcp {
         match q.fetch_one(&self.db).await {
             Ok(req) => {
                 self.record_activity(
-                    project_id, session_id, participant_id,
-                    "request_updated", "request", req.id,
+                    project_id,
+                    session_id,
+                    participant_id,
+                    "request_updated",
+                    "request",
+                    req.id,
                     &format!("updated request: {}", req.title),
                     serde_json::json!({"title": req.title, "status": params.status}),
-                ).await;
+                )
+                .await;
 
                 Ok(CallToolResult::success(vec![Content::text(format!(
                     "Updated request '{}' (id: {})",
@@ -2812,7 +3244,9 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Link a requirement to a request, indicating this requirement was created to satisfy the request.")]
+    #[tool(
+        description = "Link a requirement to a request, indicating this requirement was created to satisfy the request."
+    )]
     async fn link_request_requirement(
         &self,
         Parameters(params): Parameters<LinkRequestRequirementParams>,
@@ -2824,7 +3258,11 @@ impl SeamMcp {
 
         let request_id = match Uuid::parse_str(&params.request_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid request_id")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid request_id",
+                )]))
+            }
         };
         let requirement_id = match Uuid::parse_str(&params.requirement_id) {
             Ok(id) => id,
@@ -2837,15 +3275,27 @@ impl SeamMcp {
 
         // Verify both entities belong to this project
         let req_exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM requests WHERE id = $1 AND project_id = $2)"
-        ).bind(request_id).bind(project_id).fetch_one(&self.db).await.unwrap_or(false);
+            "SELECT EXISTS(SELECT 1 FROM requests WHERE id = $1 AND project_id = $2)",
+        )
+        .bind(request_id)
+        .bind(project_id)
+        .fetch_one(&self.db)
+        .await
+        .unwrap_or(false);
 
         let requirement_exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1 AND project_id = $2)"
-        ).bind(requirement_id).bind(project_id).fetch_one(&self.db).await.unwrap_or(false);
+            "SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1 AND project_id = $2)",
+        )
+        .bind(requirement_id)
+        .bind(project_id)
+        .fetch_one(&self.db)
+        .await
+        .unwrap_or(false);
 
         if !req_exists || !requirement_exists {
-            return Ok(CallToolResult::error(vec![Content::text("Request or requirement not found in this project")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Request or requirement not found in this project",
+            )]));
         }
 
         match sqlx::query(
@@ -2877,7 +3327,11 @@ impl SeamMcp {
 
         let request_id = match Uuid::parse_str(&params.request_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid request_id")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid request_id",
+                )]))
+            }
         };
         let requirement_id = match Uuid::parse_str(&params.requirement_id) {
             Ok(id) => id,
@@ -2912,7 +3366,9 @@ impl SeamMcp {
         }
     }
 
-    #[tool(description = "Check for directed messages sent to you by humans in the session. Returns messages in chronological order.")]
+    #[tool(
+        description = "Check for directed messages sent to you by humans in the session. Returns messages in chronological order."
+    )]
     async fn check_messages(
         &self,
         Parameters(params): Parameters<CheckMessagesParams>,
@@ -2945,16 +3401,21 @@ impl SeamMcp {
              LIMIT $3"
         };
 
-        let rows: Vec<(Uuid, Uuid, String, String, chrono::DateTime<Utc>)> = match sqlx::query_as(query)
-            .bind(session_id)
-            .bind(participant_id)
-            .bind(limit)
-            .fetch_all(&self.db)
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Failed: {e}"))])),
-        };
+        let rows: Vec<(Uuid, Uuid, String, String, chrono::DateTime<Utc>)> =
+            match sqlx::query_as(query)
+                .bind(session_id)
+                .bind(participant_id)
+                .bind(limit)
+                .fetch_all(&self.db)
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    return Ok(CallToolResult::error(vec![Content::text(format!(
+                        "Failed: {e}"
+                    ))]))
+                }
+            };
 
         if rows.is_empty() {
             return Ok(CallToolResult::success(vec![Content::text("No messages.")]));
@@ -2962,22 +3423,23 @@ impl SeamMcp {
 
         // Mark messages as read
         let msg_ids: Vec<Uuid> = rows.iter().map(|r| r.0).collect();
-        let _ = sqlx::query(
-            "UPDATE messages SET read_at = now() WHERE id = ANY($1)"
-        )
-        .bind(&msg_ids)
-        .execute(&self.db)
-        .await;
+        let _ = sqlx::query("UPDATE messages SET read_at = now() WHERE id = ANY($1)")
+            .bind(&msg_ids)
+            .execute(&self.db)
+            .await;
 
-        let items: Vec<serde_json::Value> = rows.into_iter().map(|(id, sender_id, sender_name, content, created_at)| {
-            serde_json::json!({
-                "id": id,
-                "from_id": sender_id,
-                "from": sender_name,
-                "content": content,
-                "created_at": created_at.to_rfc3339(),
+        let items: Vec<serde_json::Value> = rows
+            .into_iter()
+            .map(|(id, sender_id, sender_name, content, created_at)| {
+                serde_json::json!({
+                    "id": id,
+                    "from_id": sender_id,
+                    "from": sender_name,
+                    "content": content,
+                    "created_at": created_at.to_rfc3339(),
+                })
             })
-        }).collect();
+            .collect();
 
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&items).unwrap(),
@@ -3000,17 +3462,23 @@ impl SeamMcp {
 
         let recipient_id = match Uuid::parse_str(&params.recipient_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid recipient_id")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid recipient_id",
+                )]))
+            }
         };
 
         if params.content.trim().is_empty() {
-            return Ok(CallToolResult::error(vec![Content::text("Message content cannot be empty")]));
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Message content cannot be empty",
+            )]));
         }
 
         match sqlx::query_as::<_, (Uuid, chrono::DateTime<Utc>)>(
             "INSERT INTO messages (session_id, sender_id, recipient_id, content)
              VALUES ($1, $2, $3, $4)
-             RETURNING id, created_at"
+             RETURNING id, created_at",
         )
         .bind(session_id)
         .bind(participant_id)
@@ -3019,20 +3487,23 @@ impl SeamMcp {
         .fetch_one(&self.db)
         .await
         {
-            Ok((id, created_at)) => {
-                Ok(CallToolResult::success(vec![Content::text(
-                    serde_json::to_string_pretty(&serde_json::json!({
-                        "id": id,
-                        "status": "sent",
-                        "created_at": created_at.to_rfc3339(),
-                    })).unwrap(),
-                )]))
-            }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("Failed to send: {e}"))])),
+            Ok((id, created_at)) => Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "id": id,
+                    "status": "sent",
+                    "created_at": created_at.to_rfc3339(),
+                }))
+                .unwrap(),
+            )])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "Failed to send: {e}"
+            ))])),
         }
     }
 
-    #[tool(description = "Search the project knowledge base using full-text search. Returns relevant knowledge chunks (task descriptions, plan content, comments) ranked by relevance.")]
+    #[tool(
+        description = "Search the project knowledge base using full-text search. Returns relevant knowledge chunks (task descriptions, plan content, comments) ranked by relevance."
+    )]
     async fn search_knowledge(
         &self,
         Parameters(params): Parameters<SearchKnowledgeParams>,
@@ -3042,15 +3513,14 @@ impl SeamMcp {
             Err(e) => return Ok(e),
         };
 
-        let org_id = sqlx::query_scalar::<_, uuid::Uuid>(
-            "SELECT org_id FROM projects WHERE id = $1",
-        )
-        .bind(project_id)
-        .fetch_one(&self.db)
-        .await
-        .map_err(|_| McpError::internal_error("Failed to look up project", None))?;
+        let org_id =
+            sqlx::query_scalar::<_, uuid::Uuid>("SELECT org_id FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_one(&self.db)
+                .await
+                .map_err(|_| McpError::internal_error("Failed to look up project", None))?;
 
-        let limit = params.limit.unwrap_or(10).min(50).max(1);
+        let limit = params.limit.unwrap_or(10).clamp(1, 50);
 
         // project_wide=true searches the entire org; default is current-project only
         let search_project_id = if params.project_wide.unwrap_or(false) {
@@ -3059,9 +3529,21 @@ impl SeamMcp {
             Some(project_id)
         };
 
-        let mut results = match knowledge::search_fts_only(&self.db, org_id, search_project_id, &params.query, limit * 5).await {
+        let mut results = match knowledge::search_fts_only(
+            &self.db,
+            org_id,
+            search_project_id,
+            &params.query,
+            limit * 5,
+        )
+        .await
+        {
             Ok(r) => r,
-            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Search failed: {e}"))])),
+            Err(e) => {
+                return Ok(CallToolResult::error(vec![Content::text(format!(
+                    "Search failed: {e}"
+                ))]))
+            }
         };
 
         // Post-filter by content_type if specified
@@ -3097,7 +3579,9 @@ impl SeamMcp {
         )]))
     }
 
-    #[tool(description = "Retrieve the full knowledge base content for a specific source entity (task, plan, etc.) by its ID. Returns all indexed chunks with their full text.")]
+    #[tool(
+        description = "Retrieve the full knowledge base content for a specific source entity (task, plan, etc.) by its ID. Returns all indexed chunks with their full text."
+    )]
     async fn get_knowledge_detail(
         &self,
         Parameters(params): Parameters<GetKnowledgeDetailParams>,
@@ -3109,16 +3593,19 @@ impl SeamMcp {
 
         let source_id = match Uuid::parse_str(&params.source_id) {
             Ok(id) => id,
-            Err(_) => return Ok(CallToolResult::error(vec![Content::text("Invalid source_id: must be a UUID")])),
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid source_id: must be a UUID",
+                )]))
+            }
         };
 
-        let org_id = sqlx::query_scalar::<_, uuid::Uuid>(
-            "SELECT org_id FROM projects WHERE id = $1",
-        )
-        .bind(project_id)
-        .fetch_one(&self.db)
-        .await
-        .map_err(|_| McpError::internal_error("Failed to look up project", None))?;
+        let org_id =
+            sqlx::query_scalar::<_, uuid::Uuid>("SELECT org_id FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_one(&self.db)
+                .await
+                .map_err(|_| McpError::internal_error("Failed to look up project", None))?;
 
         #[derive(sqlx::FromRow)]
         struct ChunkRow {
@@ -3183,7 +3670,9 @@ impl SeamMcp {
         )]))
     }
 
-    #[tool(description = "Search source code in the project repository. Returns matching files with relevant snippets. Useful for finding function definitions, usages, patterns, or any code construct.")]
+    #[tool(
+        description = "Search source code in the project repository. Returns matching files with relevant snippets. Useful for finding function definitions, usages, patterns, or any code construct."
+    )]
     async fn search_code(
         &self,
         Parameters(params): Parameters<SearchCodeParams>,
@@ -3202,24 +3691,30 @@ impl SeamMcp {
             }
         };
 
-        let org_id = sqlx::query_scalar::<_, uuid::Uuid>(
-            "SELECT org_id FROM projects WHERE id = $1",
-        )
-        .bind(project_id)
-        .fetch_one(&self.db)
-        .await
-        .map_err(|_| McpError::internal_error("Failed to look up project", None))?;
+        let org_id =
+            sqlx::query_scalar::<_, uuid::Uuid>("SELECT org_id FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_one(&self.db)
+                .await
+                .map_err(|_| McpError::internal_error("Failed to look up project", None))?;
 
-        let limit = params.limit.unwrap_or(10).min(30).max(1) as usize;
+        let limit = params.limit.unwrap_or(10).clamp(1, 30) as usize;
         // Fetch more to allow post-filtering by language
-        let fetch_limit = if params.language.is_some() { limit * 3 } else { limit };
-
-        let mut results = match code_index.search(org_id, Some(project_id), &params.query, fetch_limit) {
-            Ok(r) => r,
-            Err(e) => {
-                return Ok(CallToolResult::error(vec![Content::text(format!("Search failed: {e}"))]));
-            }
+        let fetch_limit = if params.language.is_some() {
+            limit * 3
+        } else {
+            limit
         };
+
+        let mut results =
+            match code_index.search(org_id, Some(project_id), &params.query, fetch_limit) {
+                Ok(r) => r,
+                Err(e) => {
+                    return Ok(CallToolResult::error(vec![Content::text(format!(
+                        "Search failed: {e}"
+                    ))]));
+                }
+            };
 
         // Post-filter by language if specified
         if let Some(ref lang) = params.language {
@@ -3239,10 +3734,7 @@ impl SeamMcp {
             .map(|r| {
                 format!(
                     "<code_result path=\"{}\" language=\"{}\" score=\"{:.2}\">\n{}\n</code_result>",
-                    r.path,
-                    r.language,
-                    r.score,
-                    r.snippet,
+                    r.path, r.language, r.score, r.snippet,
                 )
             })
             .collect::<Vec<_>>()
@@ -3255,9 +3747,7 @@ impl SeamMcp {
 impl ServerHandler for SeamMcp {
     fn get_info(&self) -> ServerInfo {
         let mut info = ServerInfo::default();
-        info.capabilities = ServerCapabilities::builder()
-            .enable_tools()
-            .build();
+        info.capabilities = ServerCapabilities::builder().enable_tools().build();
         info.server_info.name = "seam-mcp".into();
         info.server_info.version = env!("CARGO_PKG_VERSION").into();
         info.instructions = Some(
@@ -3272,7 +3762,9 @@ impl ServerHandler for SeamMcp {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
         let tool_name = request.name.to_string();
-        let request_params = request.arguments.as_ref()
+        let request_params = request
+            .arguments
+            .as_ref()
             .map(|a| serde_json::Value::Object(a.clone().into_iter().collect()));
         let start = std::time::Instant::now();
 
@@ -3297,9 +3789,15 @@ impl ServerHandler for SeamMcp {
             };
 
             self.record_tool_invocation(
-                session_id, participant_id, &tool_name,
-                request_params, response_json, is_error, duration_ms,
-            ).await;
+                session_id,
+                participant_id,
+                &tool_name,
+                request_params,
+                response_json,
+                is_error,
+                duration_ms,
+            )
+            .await;
         }
 
         result
@@ -3318,7 +3816,8 @@ impl ServerHandler for SeamMcp {
 // --- Internal helpers ---
 impl SeamMcp {
     fn require_project(&self) -> Result<Uuid, CallToolResult> {
-        self.state.lock()
+        self.state
+            .lock()
             .ok()
             .and_then(|s| s.project_id)
             .ok_or_else(|| {
@@ -3333,14 +3832,16 @@ impl SeamMcp {
     }
 
     fn get_ticket_prefix(&self) -> String {
-        self.state.lock()
+        self.state
+            .lock()
             .ok()
             .and_then(|s| s.ticket_prefix.clone())
             .unwrap_or_else(|| "TASK".to_string())
     }
 
     fn require_participant(&self) -> Result<Uuid, CallToolResult> {
-        self.state.lock()
+        self.state
+            .lock()
             .ok()
             .and_then(|s| s.participant_id)
             .ok_or_else(|| {
@@ -3351,20 +3852,23 @@ impl SeamMcp {
     }
 
     async fn require_session(&self) -> Result<Uuid, CallToolResult> {
-        let code = self.state.lock()
+        let code = self
+            .state
+            .lock()
             .ok()
             .and_then(|s| s.session_code.clone())
-            .ok_or_else(|| CallToolResult::error(vec![Content::text(
-                "Not in a session. Use join_session first.",
-            )]))?;
+            .ok_or_else(|| {
+                CallToolResult::error(vec![Content::text(
+                    "Not in a session. Use join_session first.",
+                )])
+            })?;
 
-        let session: Option<Session> = sqlx::query_as(
-            "SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL",
-        )
-        .bind(&code)
-        .fetch_optional(&self.db)
-        .await
-        .map_err(|_| CallToolResult::error(vec![Content::text("Database error")]))?;
+        let session: Option<Session> =
+            sqlx::query_as("SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL")
+                .bind(&code)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|_| CallToolResult::error(vec![Content::text("Database error")]))?;
 
         session.map(|s| s.id).ok_or_else(|| {
             CallToolResult::error(vec![Content::text("Session not found or closed")])
@@ -3389,12 +3893,12 @@ impl SeamMcp {
             "project_id": task.project_id,
             "session_id": task.session_id,
             "parent_id": task.parent_id,
-            "task_type": serde_json::to_value(&task.task_type).unwrap(),
+            "task_type": serde_json::to_value(task.task_type).unwrap(),
             "title": task.title,
             "description": task.description,
-            "status": serde_json::to_value(&task.status).unwrap(),
-            "priority": serde_json::to_value(&task.priority).unwrap(),
-            "complexity": serde_json::to_value(&task.complexity).unwrap(),
+            "status": serde_json::to_value(task.status).unwrap(),
+            "priority": serde_json::to_value(task.priority).unwrap(),
+            "complexity": serde_json::to_value(task.complexity).unwrap(),
             "assigned_to": task.assigned_to,
             "created_by": task.created_by,
             "commit_hashes": task.commit_hashes,
@@ -3429,12 +3933,12 @@ impl SeamMcp {
             "project_id": task.project_id,
             "session_id": task.session_id,
             "parent_id": task.parent_id,
-            "task_type": serde_json::to_value(&task.task_type).unwrap(),
+            "task_type": serde_json::to_value(task.task_type).unwrap(),
             "title": task.title,
             "description": task.description,
-            "status": serde_json::to_value(&task.status).unwrap(),
-            "priority": serde_json::to_value(&task.priority).unwrap(),
-            "complexity": serde_json::to_value(&task.complexity).unwrap(),
+            "status": serde_json::to_value(task.status).unwrap(),
+            "priority": serde_json::to_value(task.priority).unwrap(),
+            "complexity": serde_json::to_value(task.complexity).unwrap(),
             "assigned_to": task.assigned_to,
             "created_by": task.created_by,
             "commit_hashes": task.commit_hashes,
@@ -3460,50 +3964,54 @@ impl SeamMcp {
                 task_json["parent"] = serde_json::json!({
                     "id": parent.id,
                     "ticket_id": format!("{}-{}", ticket_prefix, parent.ticket_number),
-                    "task_type": serde_json::to_value(&parent.task_type).unwrap(),
+                    "task_type": serde_json::to_value(parent.task_type).unwrap(),
                     "title": parent.title,
-                    "status": serde_json::to_value(&parent.status).unwrap(),
+                    "status": serde_json::to_value(parent.status).unwrap(),
                     "assigned_to": parent.assigned_to,
                 });
             }
         }
 
-        let comments: Vec<TaskComment> = sqlx::query_as(
-            "SELECT * FROM task_comments WHERE task_id = $1 ORDER BY created_at",
-        )
-        .bind(id)
-        .fetch_all(&self.db)
-        .await
-        .map_err(|e| format!("Database error: {e}"))?;
+        let comments: Vec<TaskComment> =
+            sqlx::query_as("SELECT * FROM task_comments WHERE task_id = $1 ORDER BY created_at")
+                .bind(id)
+                .fetch_all(&self.db)
+                .await
+                .map_err(|e| format!("Database error: {e}"))?;
 
-        let comment_views: Vec<serde_json::Value> = comments.iter().map(|c| {
-            serde_json::json!({
-                "id": c.id,
-                "author_id": c.author_id,
-                "content": c.content,
-                "created_at": c.created_at,
+        let comment_views: Vec<serde_json::Value> = comments
+            .iter()
+            .map(|c| {
+                serde_json::json!({
+                    "id": c.id,
+                    "author_id": c.author_id,
+                    "content": c.content,
+                    "created_at": c.created_at,
+                })
             })
-        }).collect();
+            .collect();
 
         // Also fetch children
-        let children: Vec<Task> = sqlx::query_as(
-            "SELECT * FROM tasks WHERE parent_id = $1 ORDER BY created_at",
-        )
-        .bind(id)
-        .fetch_all(&self.db)
-        .await
-        .map_err(|e| format!("Database error: {e}"))?;
+        let children: Vec<Task> =
+            sqlx::query_as("SELECT * FROM tasks WHERE parent_id = $1 ORDER BY created_at")
+                .bind(id)
+                .fetch_all(&self.db)
+                .await
+                .map_err(|e| format!("Database error: {e}"))?;
 
-        let child_views: Vec<serde_json::Value> = children.iter().map(|t| {
-            serde_json::json!({
-                "id": t.id,
-                "ticket_id": format!("{}-{}", ticket_prefix, t.ticket_number),
-                "task_type": serde_json::to_value(&t.task_type).unwrap(),
-                "title": t.title,
-                "status": serde_json::to_value(&t.status).unwrap(),
-                "assigned_to": t.assigned_to,
+        let child_views: Vec<serde_json::Value> = children
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "id": t.id,
+                    "ticket_id": format!("{}-{}", ticket_prefix, t.ticket_number),
+                    "task_type": serde_json::to_value(t.task_type).unwrap(),
+                    "title": t.title,
+                    "status": serde_json::to_value(t.status).unwrap(),
+                    "assigned_to": t.assigned_to,
+                })
             })
-        }).collect();
+            .collect();
 
         // Fetch dependencies: tasks this task blocks
         let blocks: Vec<Task> = sqlx::query_as(
@@ -3514,14 +4022,17 @@ impl SeamMcp {
         .await
         .unwrap_or_default();
 
-        let blocks_views: Vec<serde_json::Value> = blocks.iter().map(|t| {
-            serde_json::json!({
-                "id": t.id,
-                "ticket_id": format!("{}-{}", ticket_prefix, t.ticket_number),
-                "title": t.title,
-                "status": serde_json::to_value(&t.status).unwrap(),
+        let blocks_views: Vec<serde_json::Value> = blocks
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "id": t.id,
+                    "ticket_id": format!("{}-{}", ticket_prefix, t.ticket_number),
+                    "title": t.title,
+                    "status": serde_json::to_value(t.status).unwrap(),
+                })
             })
-        }).collect();
+            .collect();
 
         // Fetch dependencies: tasks that block this task
         let blocked_by: Vec<Task> = sqlx::query_as(
@@ -3532,14 +4043,17 @@ impl SeamMcp {
         .await
         .unwrap_or_default();
 
-        let blocked_by_views: Vec<serde_json::Value> = blocked_by.iter().map(|t| {
-            serde_json::json!({
-                "id": t.id,
-                "ticket_id": format!("{}-{}", ticket_prefix, t.ticket_number),
-                "title": t.title,
-                "status": serde_json::to_value(&t.status).unwrap(),
+        let blocked_by_views: Vec<serde_json::Value> = blocked_by
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "id": t.id,
+                    "ticket_id": format!("{}-{}", ticket_prefix, t.ticket_number),
+                    "title": t.title,
+                    "status": serde_json::to_value(t.status).unwrap(),
+                })
             })
-        }).collect();
+            .collect();
 
         task_json["comments"] = serde_json::json!(comment_views);
         task_json["children"] = serde_json::json!(child_views);
@@ -3652,13 +4166,12 @@ impl SeamMcp {
             return;
         }
 
-        let participants: Vec<(Uuid, String)> = sqlx::query_as(
-            "SELECT id, display_name FROM participants WHERE session_id = $1"
-        )
-        .bind(session_id)
-        .fetch_all(&self.db)
-        .await
-        .unwrap_or_default();
+        let participants: Vec<(Uuid, String)> =
+            sqlx::query_as("SELECT id, display_name FROM participants WHERE session_id = $1")
+                .bind(session_id)
+                .fetch_all(&self.db)
+                .await
+                .unwrap_or_default();
 
         for (pid, name) in &participants {
             if *pid == author_id {
@@ -3700,23 +4213,21 @@ impl SeamMcp {
         client_version: Option<&str>,
         model: Option<&str>,
     ) -> Result<serde_json::Value, String> {
-        let agent_code: AgentJoinCode = sqlx::query_as(
-            "SELECT * FROM agent_join_codes WHERE code = $1",
-        )
-        .bind(code)
-        .fetch_optional(&self.db)
-        .await
-        .map_err(|e| format!("Database error: {e}"))?
-        .ok_or_else(|| "Invalid agent code".to_string())?;
+        let agent_code: AgentJoinCode =
+            sqlx::query_as("SELECT * FROM agent_join_codes WHERE code = $1")
+                .bind(code)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| format!("Database error: {e}"))?
+                .ok_or_else(|| "Invalid agent code".to_string())?;
 
-        let session: Session = sqlx::query_as(
-            "SELECT * FROM sessions WHERE id = $1 AND closed_at IS NULL",
-        )
-        .bind(agent_code.session_id)
-        .fetch_optional(&self.db)
-        .await
-        .map_err(|e| format!("Database error: {e}"))?
-        .ok_or_else(|| "Session is closed or not found".to_string())?;
+        let session: Session =
+            sqlx::query_as("SELECT * FROM sessions WHERE id = $1 AND closed_at IS NULL")
+                .bind(agent_code.session_id)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| format!("Database error: {e}"))?
+                .ok_or_else(|| "Session is closed or not found".to_string())?;
 
         let sponsor: Participant = sqlx::query_as(
             "SELECT * FROM participants WHERE session_id = $1 AND user_id = $2 AND participant_type = 'human'",
@@ -3728,13 +4239,11 @@ impl SeamMcp {
         .map_err(|e| format!("Database error: {e}"))?
         .ok_or_else(|| "Sponsor participant not found".to_string())?;
 
-        let sponsor_user: User = sqlx::query_as(
-            "SELECT * FROM users WHERE id = $1",
-        )
-        .bind(agent_code.user_id)
-        .fetch_one(&self.db)
-        .await
-        .map_err(|e| format!("Database error: {e}"))?;
+        let sponsor_user: User = sqlx::query_as("SELECT * FROM users WHERE id = $1")
+            .bind(agent_code.user_id)
+            .fetch_one(&self.db)
+            .await
+            .map_err(|e| format!("Database error: {e}"))?;
 
         // Mark any existing agent participants from this sponsor as disconnected
         let old_agents: Vec<(Uuid,)> = sqlx::query_as(
@@ -3828,14 +4337,13 @@ impl SeamMcp {
     }
 
     async fn fetch_session(&self, code: &str) -> Result<serde_json::Value, String> {
-        let session: Session = sqlx::query_as(
-            "SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL",
-        )
-        .bind(code)
-        .fetch_optional(&self.db)
-        .await
-        .map_err(|e| format!("Database error: {e}"))?
-        .ok_or_else(|| "Session not found".to_string())?;
+        let session: Session =
+            sqlx::query_as("SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL")
+                .bind(code)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| format!("Database error: {e}"))?
+                .ok_or_else(|| "Session not found".to_string())?;
 
         let participants: Vec<Participant> = sqlx::query_as(
             "SELECT * FROM participants WHERE session_id = $1 AND disconnected_at IS NULL ORDER BY joined_at",
@@ -3867,4 +4375,3 @@ impl SeamMcp {
         }))
     }
 }
-

@@ -11,10 +11,7 @@ use crate::auth::AuthUser;
 use crate::models::*;
 use crate::AppState;
 
-pub async fn resolve_project(
-    db: &sqlx::PgPool,
-    project_id: Uuid,
-) -> Result<Project, StatusCode> {
+pub async fn resolve_project(db: &sqlx::PgPool, project_id: Uuid) -> Result<Project, StatusCode> {
     sqlx::query_as::<_, Project>("SELECT * FROM projects WHERE id = $1")
         .bind(project_id)
         .fetch_optional(db)
@@ -223,18 +220,13 @@ async fn resolve_participant(
     .ok_or(StatusCode::FORBIDDEN)
 }
 
-pub async fn resolve_session_pub(
-    db: &sqlx::PgPool,
-    code: &str,
-) -> Result<Session, StatusCode> {
-    sqlx::query_as::<_, Session>(
-        "SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL"
-    )
-    .bind(code)
-    .fetch_optional(db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)
+pub async fn resolve_session_pub(db: &sqlx::PgPool, code: &str) -> Result<Session, StatusCode> {
+    sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL")
+        .bind(code)
+        .fetch_optional(db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
 // --- Handlers ---
@@ -245,7 +237,8 @@ pub async fn create_task(
     AuthUser(claims): AuthUser,
     Json(req): Json<CreateTaskRequest>,
 ) -> Result<Json<TaskView>, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let session = resolve_session_pub(&state.db, &session_code).await?;
     let participant = resolve_participant(&state.db, session.id, user.id).await?;
@@ -423,14 +416,16 @@ pub async fn list_tasks(
         q = q.bind(val);
     }
 
-    let tasks = q.fetch_all(&state.db).await
+    let tasks = q
+        .fetch_all(&state.db)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let task_ids: Vec<Uuid> = tasks.iter().map(|t| t.id).collect();
 
     // Batch-fetch child counts
     let child_counts: Vec<(Uuid, i64)> = sqlx::query_as(
-        "SELECT parent_id, COUNT(*) FROM tasks WHERE parent_id = ANY($1) GROUP BY parent_id"
+        "SELECT parent_id, COUNT(*) FROM tasks WHERE parent_id = ANY($1) GROUP BY parent_id",
     )
     .bind(&task_ids)
     .fetch_all(&state.db)
@@ -441,7 +436,7 @@ pub async fn list_tasks(
 
     // Batch-fetch comment counts
     let comment_counts: Vec<(Uuid, i64)> = sqlx::query_as(
-        "SELECT task_id, COUNT(*) FROM task_comments WHERE task_id = ANY($1) GROUP BY task_id"
+        "SELECT task_id, COUNT(*) FROM task_comments WHERE task_id = ANY($1) GROUP BY task_id",
     )
     .bind(&task_ids)
     .fetch_all(&state.db)
@@ -451,27 +446,30 @@ pub async fn list_tasks(
     let comment_map: std::collections::HashMap<Uuid, i64> = comment_counts.into_iter().collect();
 
     // Batch-fetch session memberships
-    let session_memberships: Vec<(Uuid, Uuid)> = sqlx::query_as(
-        "SELECT task_id, session_id FROM session_tasks WHERE task_id = ANY($1)"
-    )
-    .bind(&task_ids)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    let session_memberships: Vec<(Uuid, Uuid)> =
+        sqlx::query_as("SELECT task_id, session_id FROM session_tasks WHERE task_id = ANY($1)")
+            .bind(&task_ids)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default();
 
-    let mut session_map: std::collections::HashMap<Uuid, Vec<Uuid>> = std::collections::HashMap::new();
+    let mut session_map: std::collections::HashMap<Uuid, Vec<Uuid>> =
+        std::collections::HashMap::new();
     for (task_id, session_id) in session_memberships {
         session_map.entry(task_id).or_default().push(session_id);
     }
 
-    let views: Vec<TaskView> = tasks.into_iter().map(|t| {
-        let id = t.id;
-        let mut view = TaskView::from_task(t, &project.ticket_prefix);
-        view.child_count = *child_map.get(&id).unwrap_or(&0);
-        view.comment_count = *comment_map.get(&id).unwrap_or(&0);
-        view.session_ids = session_map.remove(&id).unwrap_or_default();
-        view
-    }).collect();
+    let views: Vec<TaskView> = tasks
+        .into_iter()
+        .map(|t| {
+            let id = t.id;
+            let mut view = TaskView::from_task(t, &project.ticket_prefix);
+            view.child_count = *child_map.get(&id).unwrap_or(&0);
+            view.comment_count = *comment_map.get(&id).unwrap_or(&0);
+            view.session_ids = session_map.remove(&id).unwrap_or_default();
+            view
+        })
+        .collect();
 
     Ok(Json(views))
 }
@@ -500,21 +498,19 @@ pub async fn get_task(
         None
     };
 
-    let comments: Vec<TaskComment> = sqlx::query_as(
-        "SELECT * FROM task_comments WHERE task_id = $1 ORDER BY created_at"
-    )
-    .bind(task_id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let comments: Vec<TaskComment> =
+        sqlx::query_as("SELECT * FROM task_comments WHERE task_id = $1 ORDER BY created_at")
+            .bind(task_id)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let children: Vec<Task> = sqlx::query_as(
-        "SELECT * FROM tasks WHERE parent_id = $1 ORDER BY created_at"
-    )
-    .bind(task_id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let children: Vec<Task> =
+        sqlx::query_as("SELECT * FROM tasks WHERE parent_id = $1 ORDER BY created_at")
+            .bind(task_id)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Fetch tasks this task blocks (this task is the blocker)
     let blocks: Vec<Task> = sqlx::query_as(
@@ -537,15 +533,27 @@ pub async fn get_task(
     Ok(Json(TaskDetailView {
         task: TaskView::from_task(task, prefix),
         parent: parent.map(|p| task_summary_view(&p, prefix)),
-        comments: comments.into_iter().map(|c| CommentView {
-            id: c.id,
-            author_id: c.author_id,
-            content: c.content,
-            created_at: c.created_at,
-        }).collect(),
-        children: children.iter().map(|t| task_summary_view(t, prefix)).collect(),
-        blocks: blocks.iter().map(|t| task_summary_view(t, prefix)).collect(),
-        blocked_by: blocked_by.iter().map(|t| task_summary_view(t, prefix)).collect(),
+        comments: comments
+            .into_iter()
+            .map(|c| CommentView {
+                id: c.id,
+                author_id: c.author_id,
+                content: c.content,
+                created_at: c.created_at,
+            })
+            .collect(),
+        children: children
+            .iter()
+            .map(|t| task_summary_view(t, prefix))
+            .collect(),
+        blocks: blocks
+            .iter()
+            .map(|t| task_summary_view(t, prefix))
+            .collect(),
+        blocked_by: blocked_by
+            .iter()
+            .map(|t| task_summary_view(t, prefix))
+            .collect(),
     }))
 }
 
@@ -593,7 +601,10 @@ pub async fn update_task(
         None => task.assigned_to,
     };
     let parent_id = req.parent_id.or(task.parent_id);
-    let commit_hashes = req.commit_hashes.clone().unwrap_or_else(|| task.commit_hashes.clone());
+    let commit_hashes = req
+        .commit_hashes
+        .clone()
+        .unwrap_or_else(|| task.commit_hashes.clone());
     let no_code_change = req.no_code_change.unwrap_or(task.no_code_change);
     let model_hint = req.model_hint.clone().or_else(|| task.model_hint.clone());
     let budget_tier = req.budget_tier.clone().or_else(|| task.budget_tier.clone());
@@ -644,7 +655,10 @@ pub async fn update_task(
 
     // Record activity for meaningful changes
     let ticket_id = format!("{}-{}", project.ticket_prefix, task.ticket_number);
-    let event_type = if req.status.is_some() && (status_str == "closed" || status_str == "done") && task.closed_at.is_none() {
+    let event_type = if req.status.is_some()
+        && (status_str == "closed" || status_str == "done")
+        && task.closed_at.is_none()
+    {
         "task_closed"
     } else {
         "task_updated"
@@ -758,7 +772,8 @@ pub async fn add_comment(
     AuthUser(claims): AuthUser,
     Json(req): Json<AddCommentRequest>,
 ) -> Result<Json<CommentView>, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Verify task exists
@@ -793,8 +808,15 @@ pub async fn add_comment(
 
     // Extract @mentions and create records
     let mentioned = extract_and_record_mentions(
-        &state.db, &state.connections, &session, comment_id, task_id, &req.content, participant.id,
-    ).await;
+        &state.db,
+        &state.connections,
+        &session,
+        comment_id,
+        task_id,
+        &req.content,
+        participant.id,
+    )
+    .await;
 
     // Record activity
     let task: Task = sqlx::query_as("SELECT * FROM tasks WHERE id = $1")
@@ -857,7 +879,8 @@ pub async fn list_unread_mentions(
     Path(session_code): Path<String>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<Vec<UnreadMentionView>>, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let session = resolve_session_pub(&state.db, &session_code).await?;
     let participant = resolve_participant(&state.db, session.id, user.id).await?;
@@ -871,9 +894,15 @@ pub async fn list_unread_mentions(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let views: Vec<UnreadMentionView> = mentions.into_iter().map(|(id, comment_id, task_id, created_at)| {
-        UnreadMentionView { id, comment_id, task_id, created_at }
-    }).collect();
+    let views: Vec<UnreadMentionView> = mentions
+        .into_iter()
+        .map(|(id, comment_id, task_id, created_at)| UnreadMentionView {
+            id,
+            comment_id,
+            task_id,
+            created_at,
+        })
+        .collect();
 
     Ok(Json(views))
 }
@@ -883,7 +912,8 @@ pub async fn clear_unread_mentions(
     Path(session_code): Path<String>,
     AuthUser(claims): AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let session = resolve_session_pub(&state.db, &session_code).await?;
     let participant = resolve_participant(&state.db, session.id, user.id).await?;
@@ -938,7 +968,7 @@ pub async fn add_dependency(
             UNION
             SELECT d.blocker_id FROM task_dependencies d JOIN chain c ON d.blocked_id = c.blocker_id
         )
-        SELECT EXISTS(SELECT 1 FROM chain WHERE blocker_id = $2)"
+        SELECT EXISTS(SELECT 1 FROM chain WHERE blocker_id = $2)",
     )
     .bind(blocker_id)
     .bind(req.blocked_id)
@@ -1012,14 +1042,13 @@ pub async fn remove_dependency(
     Path((_session_code, blocker_id, blocked_id)): Path<(String, Uuid, Uuid)>,
     AuthUser(_claims): AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    let result = sqlx::query(
-        "DELETE FROM task_dependencies WHERE blocker_id = $1 AND blocked_id = $2"
-    )
-    .bind(blocker_id)
-    .bind(blocked_id)
-    .execute(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let result =
+        sqlx::query("DELETE FROM task_dependencies WHERE blocker_id = $1 AND blocked_id = $2")
+            .bind(blocker_id)
+            .bind(blocked_id)
+            .execute(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if result.rows_affected() == 0 {
         Err(StatusCode::NOT_FOUND)
@@ -1053,13 +1082,12 @@ async fn extract_and_record_mentions(
     }
 
     // Resolve display names to participant IDs in this session
-    let participants: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, display_name FROM participants WHERE session_id = $1"
-    )
-    .bind(session.id)
-    .fetch_all(db)
-    .await
-    .unwrap_or_default();
+    let participants: Vec<(Uuid, String)> =
+        sqlx::query_as("SELECT id, display_name FROM participants WHERE session_id = $1")
+            .bind(session.id)
+            .fetch_all(db)
+            .await
+            .unwrap_or_default();
 
     let mut mentioned_ids = Vec::new();
     for (pid, name) in &participants {
@@ -1100,14 +1128,24 @@ async fn extract_and_record_mentions(
         .await;
 
         // Send targeted WebSocket notification
-        connections.send_to_participant(&session.code, &pid.to_string(), &serde_json::json!({
-            "type": "mentioned",
-            "taskId": task_id.to_string(),
-            "commentId": comment_id.to_string(),
-            "authorId": author_id.to_string(),
-        })).await;
+        connections
+            .send_to_participant(
+                &session.code,
+                &pid.to_string(),
+                &serde_json::json!({
+                    "type": "mentioned",
+                    "taskId": task_id.to_string(),
+                    "commentId": comment_id.to_string(),
+                    "authorId": author_id.to_string(),
+                }),
+            )
+            .await;
 
-        if let Some(name) = participants.iter().find(|(id, _)| id == pid).map(|(_, n)| n) {
+        if let Some(name) = participants
+            .iter()
+            .find(|(id, _)| id == pid)
+            .map(|(_, n)| n)
+        {
             mentioned_names.push(name.clone());
         }
     }
@@ -1143,13 +1181,12 @@ pub async fn get_project_dependency_graph(
 ) -> Result<Json<DependencyGraphView>, StatusCode> {
     let project = resolve_project(&state.db, project_id).await?;
 
-    let tasks: Vec<Task> = sqlx::query_as(
-        "SELECT * FROM tasks WHERE project_id = $1 ORDER BY created_at"
-    )
-    .bind(project.id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let tasks: Vec<Task> =
+        sqlx::query_as("SELECT * FROM tasks WHERE project_id = $1 ORDER BY created_at")
+            .bind(project.id)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let task_ids: Vec<Uuid> = tasks.iter().map(|t| t.id).collect();
 
@@ -1162,17 +1199,30 @@ pub async fn get_project_dependency_graph(
     .unwrap_or_default();
 
     // Build provenance edges from source_task_id
-    let provenance: Vec<ProvenanceEdge> = tasks.iter()
-        .filter_map(|t| t.source_task_id.map(|src| ProvenanceEdge { source_id: src, derived_id: t.id }))
+    let provenance: Vec<ProvenanceEdge> = tasks
+        .iter()
+        .filter_map(|t| {
+            t.source_task_id.map(|src| ProvenanceEdge {
+                source_id: src,
+                derived_id: t.id,
+            })
+        })
         .collect();
 
-    let views: Vec<TaskView> = tasks.into_iter().map(|t| {
-        TaskView::from_task(t, &project.ticket_prefix)
-    }).collect();
+    let views: Vec<TaskView> = tasks
+        .into_iter()
+        .map(|t| TaskView::from_task(t, &project.ticket_prefix))
+        .collect();
 
     Ok(Json(DependencyGraphView {
         tasks: views,
-        edges: edges.into_iter().map(|(blocker_id, blocked_id)| GraphEdge { blocker_id, blocked_id }).collect(),
+        edges: edges
+            .into_iter()
+            .map(|(blocker_id, blocked_id)| GraphEdge {
+                blocker_id,
+                blocked_id,
+            })
+            .collect(),
         provenance,
     }))
 }
@@ -1240,13 +1290,15 @@ pub async fn list_project_tasks(
         q = q.bind(val);
     }
 
-    let tasks = q.fetch_all(&state.db).await
+    let tasks = q
+        .fetch_all(&state.db)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let task_ids: Vec<Uuid> = tasks.iter().map(|t| t.id).collect();
 
     let child_counts: Vec<(Uuid, i64)> = sqlx::query_as(
-        "SELECT parent_id, COUNT(*) FROM tasks WHERE parent_id = ANY($1) GROUP BY parent_id"
+        "SELECT parent_id, COUNT(*) FROM tasks WHERE parent_id = ANY($1) GROUP BY parent_id",
     )
     .bind(&task_ids)
     .fetch_all(&state.db)
@@ -1256,7 +1308,7 @@ pub async fn list_project_tasks(
     let child_map: std::collections::HashMap<Uuid, i64> = child_counts.into_iter().collect();
 
     let comment_counts: Vec<(Uuid, i64)> = sqlx::query_as(
-        "SELECT task_id, COUNT(*) FROM task_comments WHERE task_id = ANY($1) GROUP BY task_id"
+        "SELECT task_id, COUNT(*) FROM task_comments WHERE task_id = ANY($1) GROUP BY task_id",
     )
     .bind(&task_ids)
     .fetch_all(&state.db)
@@ -1266,27 +1318,30 @@ pub async fn list_project_tasks(
     let comment_map: std::collections::HashMap<Uuid, i64> = comment_counts.into_iter().collect();
 
     // Batch-fetch session memberships
-    let session_memberships: Vec<(Uuid, Uuid)> = sqlx::query_as(
-        "SELECT task_id, session_id FROM session_tasks WHERE task_id = ANY($1)"
-    )
-    .bind(&task_ids)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    let session_memberships: Vec<(Uuid, Uuid)> =
+        sqlx::query_as("SELECT task_id, session_id FROM session_tasks WHERE task_id = ANY($1)")
+            .bind(&task_ids)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default();
 
-    let mut session_map: std::collections::HashMap<Uuid, Vec<Uuid>> = std::collections::HashMap::new();
+    let mut session_map: std::collections::HashMap<Uuid, Vec<Uuid>> =
+        std::collections::HashMap::new();
     for (task_id, session_id) in session_memberships {
         session_map.entry(task_id).or_default().push(session_id);
     }
 
-    let views: Vec<TaskView> = tasks.into_iter().map(|t| {
-        let id = t.id;
-        let mut view = TaskView::from_task(t, &project.ticket_prefix);
-        view.child_count = *child_map.get(&id).unwrap_or(&0);
-        view.comment_count = *comment_map.get(&id).unwrap_or(&0);
-        view.session_ids = session_map.remove(&id).unwrap_or_default();
-        view
-    }).collect();
+    let views: Vec<TaskView> = tasks
+        .into_iter()
+        .map(|t| {
+            let id = t.id;
+            let mut view = TaskView::from_task(t, &project.ticket_prefix);
+            view.child_count = *child_map.get(&id).unwrap_or(&0);
+            view.comment_count = *comment_map.get(&id).unwrap_or(&0);
+            view.session_ids = session_map.remove(&id).unwrap_or_default();
+            view
+        })
+        .collect();
 
     Ok(Json(views))
 }
@@ -1316,21 +1371,19 @@ pub async fn get_project_task(
         None
     };
 
-    let comments: Vec<TaskComment> = sqlx::query_as(
-        "SELECT * FROM task_comments WHERE task_id = $1 ORDER BY created_at"
-    )
-    .bind(task_id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let comments: Vec<TaskComment> =
+        sqlx::query_as("SELECT * FROM task_comments WHERE task_id = $1 ORDER BY created_at")
+            .bind(task_id)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let children: Vec<Task> = sqlx::query_as(
-        "SELECT * FROM tasks WHERE parent_id = $1 ORDER BY created_at"
-    )
-    .bind(task_id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let children: Vec<Task> =
+        sqlx::query_as("SELECT * FROM tasks WHERE parent_id = $1 ORDER BY created_at")
+            .bind(task_id)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let blocks: Vec<Task> = sqlx::query_as(
         "SELECT t.* FROM tasks t JOIN task_dependencies d ON d.blocked_id = t.id WHERE d.blocker_id = $1 ORDER BY t.created_at"
@@ -1351,15 +1404,27 @@ pub async fn get_project_task(
     Ok(Json(TaskDetailView {
         task: TaskView::from_task(task, prefix),
         parent: parent.map(|p| task_summary_view(&p, prefix)),
-        comments: comments.into_iter().map(|c| CommentView {
-            id: c.id,
-            author_id: c.author_id,
-            content: c.content,
-            created_at: c.created_at,
-        }).collect(),
-        children: children.iter().map(|t| task_summary_view(t, prefix)).collect(),
-        blocks: blocks.iter().map(|t| task_summary_view(t, prefix)).collect(),
-        blocked_by: blocked_by.iter().map(|t| task_summary_view(t, prefix)).collect(),
+        comments: comments
+            .into_iter()
+            .map(|c| CommentView {
+                id: c.id,
+                author_id: c.author_id,
+                content: c.content,
+                created_at: c.created_at,
+            })
+            .collect(),
+        children: children
+            .iter()
+            .map(|t| task_summary_view(t, prefix))
+            .collect(),
+        blocks: blocks
+            .iter()
+            .map(|t| task_summary_view(t, prefix))
+            .collect(),
+        blocked_by: blocked_by
+            .iter()
+            .map(|t| task_summary_view(t, prefix))
+            .collect(),
     }))
 }
 
@@ -1371,21 +1436,21 @@ pub async fn add_tasks_to_session(
     AuthUser(claims): AuthUser,
     Json(req): Json<AddTasksToSessionRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let session = resolve_session_pub(&state.db, &session_code).await?;
     let _participant = resolve_participant(&state.db, session.id, user.id).await?;
 
     // Validate all tasks belong to the same project as the session
     if !req.task_ids.is_empty() {
-        let mismatched_count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM tasks WHERE id = ANY($1) AND project_id != $2"
-        )
-        .bind(&req.task_ids)
-        .bind(session.project_id)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let mismatched_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM tasks WHERE id = ANY($1) AND project_id != $2")
+                .bind(&req.task_ids)
+                .bind(session.project_id)
+                .fetch_one(&state.db)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         if mismatched_count.0 > 0 {
             return Err(StatusCode::BAD_REQUEST);
@@ -1414,7 +1479,8 @@ pub async fn remove_task_from_session(
     Path((session_code, task_id)): Path<(String, Uuid)>,
     AuthUser(claims): AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let session = resolve_session_pub(&state.db, &session_code).await?;
     let _participant = resolve_participant(&state.db, session.id, user.id).await?;

@@ -48,15 +48,27 @@ struct AgentRow {
     workspace_error: Option<String>,
 }
 
-fn agent_view_from_row(row: AgentRow, ticket_prefix: &str, online_ids: &std::collections::HashSet<Uuid>) -> ProjectAgentView {
-    let current_task = match (row.task_id, row.ticket_number, row.task_title, row.task_status, row.task_type) {
-        (Some(id), Some(num), Some(title), Some(status), Some(task_type)) => Some(AgentTaskSummary {
-            id,
-            ticket_id: format!("{}-{}", ticket_prefix, num),
-            title,
-            status,
-            task_type,
-        }),
+fn agent_view_from_row(
+    row: AgentRow,
+    ticket_prefix: &str,
+    online_ids: &std::collections::HashSet<Uuid>,
+) -> ProjectAgentView {
+    let current_task = match (
+        row.task_id,
+        row.ticket_number,
+        row.task_title,
+        row.task_status,
+        row.task_type,
+    ) {
+        (Some(id), Some(num), Some(title), Some(status), Some(task_type)) => {
+            Some(AgentTaskSummary {
+                id,
+                ticket_id: format!("{}-{}", ticket_prefix, num),
+                title,
+                status,
+                task_type,
+            })
+        }
         _ => None,
     };
     let workspace = match (row.workspace_id, row.workspace_status) {
@@ -102,17 +114,15 @@ pub async fn list_project_agents(
     })?;
 
     // Verify project membership
-    let project = sqlx::query_as::<_, Project>(
-        "SELECT * FROM projects WHERE id = $1",
-    )
-    .bind(project_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to fetch project: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let project = sqlx::query_as::<_, Project>("SELECT * FROM projects WHERE id = $1")
+        .bind(project_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to fetch project: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     let _membership: Option<(Uuid,)> = sqlx::query_as(
         "SELECT project_id FROM project_members WHERE project_id = $1 AND user_id = $2",
@@ -153,17 +163,21 @@ pub async fn list_project_agents(
            AND p.participant_type = 'agent'
            {}
          ORDER BY p.joined_at DESC",
-        if include_disconnected { "" } else { "AND p.disconnected_at IS NULL" },
+        if include_disconnected {
+            ""
+        } else {
+            "AND p.disconnected_at IS NULL"
+        },
     );
 
     let rows = sqlx::query_as::<_, AgentRow>(&sql)
-    .bind(project_id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to list project agents: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+        .bind(project_id)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list project agents: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     // Get online status from WebSocket connections
     let online_ids = state.connections.all_online_participant_ids();
@@ -188,17 +202,15 @@ pub async fn get_project_agent(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let project = sqlx::query_as::<_, Project>(
-        "SELECT * FROM projects WHERE id = $1",
-    )
-    .bind(project_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to fetch project: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let project = sqlx::query_as::<_, Project>("SELECT * FROM projects WHERE id = $1")
+        .bind(project_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to fetch project: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     let _membership: Option<(Uuid,)> = sqlx::query_as(
         "SELECT project_id FROM project_members WHERE project_id = $1 AND user_id = $2",
@@ -252,7 +264,15 @@ pub async fn get_project_agent(
     let agent = agent_view_from_row(row, &project.ticket_prefix, &online_ids);
 
     // Fetch recent activity events where this agent is the actor
-    let activity_rows = sqlx::query_as::<_, (String, String, serde_json::Value, chrono::DateTime<chrono::Utc>)>(
+    let activity_rows = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            serde_json::Value,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
         "SELECT event_type, summary, metadata, created_at
          FROM activity_events
          WHERE actor_id = $1 AND project_id = $2
@@ -270,12 +290,14 @@ pub async fn get_project_agent(
 
     let recent_activity: Vec<AgentActivityItem> = activity_rows
         .into_iter()
-        .map(|(event_type, summary, metadata, created_at)| AgentActivityItem {
-            event_type,
-            summary,
-            metadata,
-            created_at,
-        })
+        .map(
+            |(event_type, summary, metadata, created_at)| AgentActivityItem {
+                event_type,
+                summary,
+                metadata,
+                created_at,
+            },
+        )
         .collect();
 
     // Fetch recent comments by this agent
@@ -298,14 +320,16 @@ pub async fn get_project_agent(
 
     let recent_comments: Vec<AgentCommentView> = comment_rows
         .into_iter()
-        .map(|(id, task_id, task_title, _, ticket_number, content, created_at)| AgentCommentView {
-            id,
-            task_id,
-            task_title,
-            ticket_id: format!("{}-{}", project.ticket_prefix, ticket_number),
-            content,
-            created_at,
-        })
+        .map(
+            |(id, task_id, task_title, _, ticket_number, content, created_at)| AgentCommentView {
+                id,
+                task_id,
+                task_title,
+                ticket_id: format!("{}-{}", project.ticket_prefix, ticket_number),
+                content,
+                created_at,
+            },
+        )
         .collect();
 
     Ok(Json(ProjectAgentDetailView {

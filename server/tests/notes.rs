@@ -7,8 +7,13 @@ use uuid::Uuid;
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -20,14 +25,27 @@ async fn create_test_context(db: &PgPool) -> (Uuid, Uuid, Uuid, Uuid) {
         .execute(db).await.unwrap();
 
     let org_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
-        .bind(org_id).bind("Test Org").bind(format!("test-org-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
+    )
+    .bind(org_id)
+    .bind("Test Org")
+    .bind(format!("test-org-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let project_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(project_id).bind(org_id).bind("Test Project").bind(format!("test-proj-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .bind("Test Project")
+    .bind(format!("test-proj-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let session_id = Uuid::new_v4();
     let code = format!("NT{}", &Uuid::new_v4().to_string()[..4]).to_uppercase();
@@ -57,9 +75,12 @@ async fn test_create_note() {
     .bind(participant_id)
     .execute(&db).await.unwrap();
 
-    let (slug, title, content): (String, String, String) = sqlx::query_as(
-        "SELECT slug, title, content FROM notes WHERE id = $1"
-    ).bind(note_id).fetch_one(&db).await.unwrap();
+    let (slug, title, content): (String, String, String) =
+        sqlx::query_as("SELECT slug, title, content FROM notes WHERE id = $1")
+            .bind(note_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(slug, "scratchpad");
     assert_eq!(title, "Scratchpad");
@@ -92,9 +113,13 @@ async fn test_upsert_note() {
     .execute(&db).await.unwrap();
 
     // Should only have one note with the updated content
-    let notes: Vec<(String, String)> = sqlx::query_as(
-        "SELECT title, content FROM notes WHERE session_id = $1 AND slug = $2"
-    ).bind(session_id).bind("decisions").fetch_all(&db).await.unwrap();
+    let notes: Vec<(String, String)> =
+        sqlx::query_as("SELECT title, content FROM notes WHERE session_id = $1 AND slug = $2")
+            .bind(session_id)
+            .bind("decisions")
+            .fetch_all(&db)
+            .await
+            .unwrap();
 
     assert_eq!(notes.len(), 1);
     assert_eq!(notes[0].0, "Decisions v2");
@@ -115,9 +140,11 @@ async fn test_notes_scoped_to_session() {
         ).bind(sid).bind(participant_id).execute(&db).await.unwrap();
     }
 
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM notes WHERE session_id = $1"
-    ).bind(session_id_1).fetch_one(&db).await.unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notes WHERE session_id = $1")
+        .bind(session_id_1)
+        .fetch_one(&db)
+        .await
+        .unwrap();
 
     assert_eq!(count, 1, "Each session should have its own note");
 }
@@ -136,9 +163,12 @@ async fn test_list_notes_for_session() {
         .execute(&db).await.unwrap();
     }
 
-    let notes: Vec<(String,)> = sqlx::query_as(
-        "SELECT slug FROM notes WHERE session_id = $1 ORDER BY created_at"
-    ).bind(session_id).fetch_all(&db).await.unwrap();
+    let notes: Vec<(String,)> =
+        sqlx::query_as("SELECT slug FROM notes WHERE session_id = $1 ORDER BY created_at")
+            .bind(session_id)
+            .fetch_all(&db)
+            .await
+            .unwrap();
 
     assert_eq!(notes.len(), 3);
     assert_eq!(notes[0].0, "scratchpad");

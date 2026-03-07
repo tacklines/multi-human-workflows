@@ -8,7 +8,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
-use crate::code_search::{CodeDocument, detect_language};
+use crate::code_search::{detect_language, CodeDocument};
 use crate::db;
 use crate::AppState;
 

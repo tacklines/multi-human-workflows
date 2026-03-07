@@ -35,21 +35,41 @@ pub async fn list_notes(
 ) -> Result<Json<Vec<NoteView>>, StatusCode> {
     let session = resolve_session_pub(&state.db, &session_code).await?;
 
-    let rows: Vec<(Uuid, String, String, String, Option<String>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+    let rows: Vec<(
+        Uuid,
+        String,
+        String,
+        String,
+        Option<String>,
+        chrono::DateTime<chrono::Utc>,
+        chrono::DateTime<chrono::Utc>,
+    )> = sqlx::query_as(
         "SELECT n.id, n.slug, n.title, n.content, p.display_name, n.created_at, n.updated_at
          FROM notes n
          LEFT JOIN participants p ON p.id = n.updated_by
          WHERE n.session_id = $1
-         ORDER BY n.created_at"
+         ORDER BY n.created_at",
     )
     .bind(session.id)
     .fetch_all(&state.db)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(rows.into_iter().map(|(id, slug, title, content, updated_by_name, created_at, updated_at)| {
-        NoteView { id, slug, title, content, updated_by_name, created_at, updated_at }
-    }).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(
+                |(id, slug, title, content, updated_by_name, created_at, updated_at)| NoteView {
+                    id,
+                    slug,
+                    title,
+                    content,
+                    updated_by_name,
+                    created_at,
+                    updated_at,
+                },
+            )
+            .collect(),
+    ))
 }
 
 pub async fn get_note(
@@ -58,11 +78,19 @@ pub async fn get_note(
 ) -> Result<Json<NoteView>, StatusCode> {
     let session = resolve_session_pub(&state.db, &session_code).await?;
 
-    let row: Option<(Uuid, String, String, String, Option<String>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+    let row: Option<(
+        Uuid,
+        String,
+        String,
+        String,
+        Option<String>,
+        chrono::DateTime<chrono::Utc>,
+        chrono::DateTime<chrono::Utc>,
+    )> = sqlx::query_as(
         "SELECT n.id, n.slug, n.title, n.content, p.display_name, n.created_at, n.updated_at
          FROM notes n
          LEFT JOIN participants p ON p.id = n.updated_by
-         WHERE n.session_id = $1 AND n.slug = $2"
+         WHERE n.session_id = $1 AND n.slug = $2",
     )
     .bind(session.id)
     .bind(&slug)
@@ -70,8 +98,17 @@ pub async fn get_note(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let (id, slug, title, content, updated_by_name, created_at, updated_at) = row.ok_or(StatusCode::NOT_FOUND)?;
-    Ok(Json(NoteView { id, slug, title, content, updated_by_name, created_at, updated_at }))
+    let (id, slug, title, content, updated_by_name, created_at, updated_at) =
+        row.ok_or(StatusCode::NOT_FOUND)?;
+    Ok(Json(NoteView {
+        id,
+        slug,
+        title,
+        content,
+        updated_by_name,
+        created_at,
+        updated_at,
+    }))
 }
 
 pub async fn upsert_note(
@@ -80,19 +117,19 @@ pub async fn upsert_note(
     AuthUser(claims): AuthUser,
     Json(req): Json<UpsertNoteRequest>,
 ) -> Result<Json<NoteView>, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let session = resolve_session_pub(&state.db, &session_code).await?;
 
-    let participant: Participant = sqlx::query_as(
-        "SELECT * FROM participants WHERE session_id = $1 AND user_id = $2"
-    )
-    .bind(session.id)
-    .bind(user.id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::FORBIDDEN)?;
+    let participant: Participant =
+        sqlx::query_as("SELECT * FROM participants WHERE session_id = $1 AND user_id = $2")
+            .bind(session.id)
+            .bind(user.id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::FORBIDDEN)?;
 
     let title = req.title.unwrap_or_else(|| slug.clone());
 

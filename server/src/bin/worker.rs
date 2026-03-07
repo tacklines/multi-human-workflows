@@ -8,14 +8,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
     // Connect to Postgres
-    let database_url =
-        std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
@@ -23,8 +21,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Connected to Postgres");
 
     // Connect to RabbitMQ
-    let amqp_url = std::env::var("AMQP_URL")
-        .unwrap_or_else(|_| "amqp://seam:seam@localhost:5672".to_string());
+    let amqp_url =
+        std::env::var("AMQP_URL").unwrap_or_else(|_| "amqp://seam:seam@localhost:5672".to_string());
     let conn = Connection::connect(&amqp_url, ConnectionProperties::default()).await?;
     let channel = conn.create_channel().await?;
     info!("Connected to RabbitMQ");

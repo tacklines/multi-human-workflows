@@ -15,16 +15,20 @@ mod models;
 mod routes;
 mod ws;
 
-use axum::{Router, routing::{delete, get, patch, post}, extract::State, response::IntoResponse, Json};
-use tower_http::cors::{CorsLayer, Any};
-use tower_http::trace::TraceLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use axum::{
+    extract::State,
+    response::IntoResponse,
+    routing::{delete, get, patch, post},
+    Json, Router,
+};
+use rmcp::transport::streamable_http_server::{
+    session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
+};
 use std::sync::Arc;
 use tower::Layer;
-use rmcp::transport::streamable_http_server::{
-    StreamableHttpService, StreamableHttpServerConfig,
-    session::local::LocalSessionManager,
-};
+use tower_http::cors::{Any, CorsLayer};
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod log_buffer;
 mod model_discovery;
@@ -48,8 +52,10 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| "seam_server=debug,tower_http=debug".into()))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "seam_server=debug,tower_http=debug".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
@@ -69,13 +75,13 @@ async fn main() {
     embeddings::start_embedding_worker(db.clone());
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3002".to_string());
-    let resource_url = std::env::var("SEAM_URL")
-        .unwrap_or_else(|_| format!("http://localhost:{port}"));
+    let resource_url =
+        std::env::var("SEAM_URL").unwrap_or_else(|_| format!("http://localhost:{port}"));
 
     // OIDC configuration — defaults point at Ory Hydra for local dev.
     // Production sets ISSUER_URL and JWKS_URL explicitly.
-    let issuer_url = std::env::var("ISSUER_URL")
-        .unwrap_or_else(|_| "http://localhost:4444".to_string());
+    let issuer_url =
+        std::env::var("ISSUER_URL").unwrap_or_else(|_| "http://localhost:4444".to_string());
     let jwks_url = std::env::var("JWKS_URL")
         .unwrap_or_else(|_| format!("{}/.well-known/jwks.json", issuer_url));
 
@@ -88,15 +94,17 @@ async fn main() {
 
     // Initialize code search index
     let code_index: Option<std::sync::Arc<code_search::CodeIndex>> = {
-        let index_path = std::env::var("DATA_DIR")
-            .unwrap_or_else(|_| "/tmp/seam-code-index".to_string());
+        let index_path =
+            std::env::var("DATA_DIR").unwrap_or_else(|_| "/tmp/seam-code-index".to_string());
         match code_search::CodeIndex::new(std::path::Path::new(&index_path)) {
             Ok(idx) => {
                 tracing::info!(path = %index_path, "Code search index initialized");
                 Some(std::sync::Arc::new(idx))
             }
             Err(e) => {
-                tracing::warn!("Code search index initialization failed, code search disabled: {e}");
+                tracing::warn!(
+                    "Code search index initialization failed, code search disabled: {e}"
+                );
                 None
             }
         }
@@ -138,119 +146,354 @@ async fn main() {
         .route("/health", get(|| async { "ok" }))
         .route("/api/health", get(|| async { "ok" }))
         // Organizations
-        .route("/api/orgs", get(routes::orgs::list_orgs).post(routes::orgs::create_org))
-        .route("/api/orgs/{slug}", get(routes::orgs::get_org).patch(routes::orgs::update_org))
-        .route("/api/orgs/{slug}/members", get(routes::orgs::list_members).post(routes::orgs::invite_member))
-        .route("/api/orgs/{slug}/members/{user_id}", patch(routes::orgs::update_member).delete(routes::orgs::remove_member))
-        .route("/api/orgs/{slug}/projects", get(routes::orgs::list_org_projects).post(routes::orgs::create_org_project))
+        .route(
+            "/api/orgs",
+            get(routes::orgs::list_orgs).post(routes::orgs::create_org),
+        )
+        .route(
+            "/api/orgs/{slug}",
+            get(routes::orgs::get_org).patch(routes::orgs::update_org),
+        )
+        .route(
+            "/api/orgs/{slug}/members",
+            get(routes::orgs::list_members).post(routes::orgs::invite_member),
+        )
+        .route(
+            "/api/orgs/{slug}/members/{user_id}",
+            patch(routes::orgs::update_member).delete(routes::orgs::remove_member),
+        )
+        .route(
+            "/api/orgs/{slug}/projects",
+            get(routes::orgs::list_org_projects).post(routes::orgs::create_org_project),
+        )
         // Org Credentials
-        .route("/api/orgs/{slug}/credentials", get(routes::credentials::list_credentials).post(routes::credentials::create_credential))
-        .route("/api/orgs/{slug}/credentials/{credential_id}", patch(routes::credentials::rotate_credential).delete(routes::credentials::delete_credential))
+        .route(
+            "/api/orgs/{slug}/credentials",
+            get(routes::credentials::list_credentials).post(routes::credentials::create_credential),
+        )
+        .route(
+            "/api/orgs/{slug}/credentials/{credential_id}",
+            patch(routes::credentials::rotate_credential)
+                .delete(routes::credentials::delete_credential),
+        )
         // Current User
         .route("/api/me", get(routes::me::get_me))
         // User Credentials
-        .route("/api/me/credentials", get(routes::user_credentials::list_user_credentials).post(routes::user_credentials::create_user_credential))
-        .route("/api/me/credentials/{credential_id}", patch(routes::user_credentials::rotate_user_credential).delete(routes::user_credentials::delete_user_credential))
+        .route(
+            "/api/me/credentials",
+            get(routes::user_credentials::list_user_credentials)
+                .post(routes::user_credentials::create_user_credential),
+        )
+        .route(
+            "/api/me/credentials/{credential_id}",
+            patch(routes::user_credentials::rotate_user_credential)
+                .delete(routes::user_credentials::delete_user_credential),
+        )
         // Model Discovery
         .route("/api/models", get(routes::model_discovery::list_models))
         // Model Preferences
-        .route("/api/me/model-preferences", get(routes::model_preferences::list_user_model_preferences).put(routes::model_preferences::upsert_user_model_preferences))
-        .route("/api/orgs/{slug}/model-preferences", get(routes::model_preferences::list_org_model_preferences).put(routes::model_preferences::upsert_org_model_preferences))
+        .route(
+            "/api/me/model-preferences",
+            get(routes::model_preferences::list_user_model_preferences)
+                .put(routes::model_preferences::upsert_user_model_preferences),
+        )
+        .route(
+            "/api/orgs/{slug}/model-preferences",
+            get(routes::model_preferences::list_org_model_preferences)
+                .put(routes::model_preferences::upsert_org_model_preferences),
+        )
         // Projects
         .route("/api/projects", get(routes::projects::list_projects))
         .route("/api/projects", post(routes::projects::create_project))
-        .route("/api/projects/{project_id}", get(routes::projects::get_project))
-        .route("/api/projects/{project_id}", patch(routes::projects::update_project))
-        .route("/api/projects/{project_id}/sessions", get(routes::projects::list_project_sessions))
-        .route("/api/projects/{project_id}/tasks", get(routes::tasks::list_project_tasks))
-        .route("/api/projects/{project_id}/tasks/{task_id}", get(routes::tasks::get_project_task))
-        .route("/api/projects/{project_id}/graph", get(routes::tasks::get_project_dependency_graph))
+        .route(
+            "/api/projects/{project_id}",
+            get(routes::projects::get_project),
+        )
+        .route(
+            "/api/projects/{project_id}",
+            patch(routes::projects::update_project),
+        )
+        .route(
+            "/api/projects/{project_id}/sessions",
+            get(routes::projects::list_project_sessions),
+        )
+        .route(
+            "/api/projects/{project_id}/tasks",
+            get(routes::tasks::list_project_tasks),
+        )
+        .route(
+            "/api/projects/{project_id}/tasks/{task_id}",
+            get(routes::tasks::get_project_task),
+        )
+        .route(
+            "/api/projects/{project_id}/graph",
+            get(routes::tasks::get_project_dependency_graph),
+        )
         // Plans
-        .route("/api/projects/{project_id}/plans", get(routes::plans::list_plans).post(routes::plans::create_plan))
-        .route("/api/projects/{project_id}/plans/{plan_id}", get(routes::plans::get_plan).patch(routes::plans::update_plan))
+        .route(
+            "/api/projects/{project_id}/plans",
+            get(routes::plans::list_plans).post(routes::plans::create_plan),
+        )
+        .route(
+            "/api/projects/{project_id}/plans/{plan_id}",
+            get(routes::plans::get_plan).patch(routes::plans::update_plan),
+        )
         // Requests
-        .route("/api/projects/{project_id}/requests", get(routes::requests::list_requests).post(routes::requests::create_request))
-        .route("/api/projects/{project_id}/requests/{request_id}", get(routes::requests::get_request).patch(routes::requests::update_request).delete(routes::requests::delete_request))
-        .route("/api/projects/{project_id}/requests/{request_id}/requirements", post(routes::requests::link_requirement))
-        .route("/api/projects/{project_id}/requests/{request_id}/requirements/{requirement_id}", delete(routes::requests::unlink_requirement))
+        .route(
+            "/api/projects/{project_id}/requests",
+            get(routes::requests::list_requests).post(routes::requests::create_request),
+        )
+        .route(
+            "/api/projects/{project_id}/requests/{request_id}",
+            get(routes::requests::get_request)
+                .patch(routes::requests::update_request)
+                .delete(routes::requests::delete_request),
+        )
+        .route(
+            "/api/projects/{project_id}/requests/{request_id}/requirements",
+            post(routes::requests::link_requirement),
+        )
+        .route(
+            "/api/projects/{project_id}/requests/{request_id}/requirements/{requirement_id}",
+            delete(routes::requests::unlink_requirement),
+        )
         // Requirements
-        .route("/api/projects/{project_id}/requirements", get(routes::requirements::list_requirements).post(routes::requirements::create_requirement))
-        .route("/api/projects/{project_id}/requirements/{req_id}", get(routes::requirements::get_requirement).patch(routes::requirements::update_requirement).delete(routes::requirements::delete_requirement))
-        .route("/api/projects/{project_id}/requirements/{req_id}/tasks", post(routes::requirements::link_task))
-        .route("/api/projects/{project_id}/requirements/{req_id}/tasks/{task_id}", delete(routes::requirements::unlink_task))
+        .route(
+            "/api/projects/{project_id}/requirements",
+            get(routes::requirements::list_requirements)
+                .post(routes::requirements::create_requirement),
+        )
+        .route(
+            "/api/projects/{project_id}/requirements/{req_id}",
+            get(routes::requirements::get_requirement)
+                .patch(routes::requirements::update_requirement)
+                .delete(routes::requirements::delete_requirement),
+        )
+        .route(
+            "/api/projects/{project_id}/requirements/{req_id}/tasks",
+            post(routes::requirements::link_task),
+        )
+        .route(
+            "/api/projects/{project_id}/requirements/{req_id}/tasks/{task_id}",
+            delete(routes::requirements::unlink_task),
+        )
         // Sessions
         .route("/api/sessions", post(routes::sessions::create_session))
         .route("/api/sessions/{code}", get(routes::sessions::get_session))
-        .route("/api/sessions/{code}/join", post(routes::sessions::join_session))
+        .route(
+            "/api/sessions/{code}/join",
+            post(routes::sessions::join_session),
+        )
         // Tasks
-        .route("/api/sessions/{code}/tasks", post(routes::tasks::create_task))
+        .route(
+            "/api/sessions/{code}/tasks",
+            post(routes::tasks::create_task),
+        )
         .route("/api/sessions/{code}/tasks", get(routes::tasks::list_tasks))
-        .route("/api/sessions/{code}/tasks/{task_id}", get(routes::tasks::get_task))
-        .route("/api/sessions/{code}/tasks/{task_id}", patch(routes::tasks::update_task))
-        .route("/api/sessions/{code}/tasks/{task_id}", delete(routes::tasks::delete_task))
-        .route("/api/sessions/{code}/tasks/{task_id}/comments", post(routes::tasks::add_comment))
-        .route("/api/sessions/{code}/tasks/{task_id}/dependencies", post(routes::tasks::add_dependency))
-        .route("/api/sessions/{code}/tasks/{task_id}/dependencies/{blocked_id}", delete(routes::tasks::remove_dependency))
-        .route("/api/sessions/{code}/tasks/add", post(routes::tasks::add_tasks_to_session))
-        .route("/api/sessions/{code}/tasks/{task_id}/membership", delete(routes::tasks::remove_task_from_session))
-        .route("/api/sessions/{code}/mentions/unread", get(routes::tasks::list_unread_mentions))
-        .route("/api/sessions/{code}/mentions/unread", delete(routes::tasks::clear_unread_mentions))
+        .route(
+            "/api/sessions/{code}/tasks/{task_id}",
+            get(routes::tasks::get_task),
+        )
+        .route(
+            "/api/sessions/{code}/tasks/{task_id}",
+            patch(routes::tasks::update_task),
+        )
+        .route(
+            "/api/sessions/{code}/tasks/{task_id}",
+            delete(routes::tasks::delete_task),
+        )
+        .route(
+            "/api/sessions/{code}/tasks/{task_id}/comments",
+            post(routes::tasks::add_comment),
+        )
+        .route(
+            "/api/sessions/{code}/tasks/{task_id}/dependencies",
+            post(routes::tasks::add_dependency),
+        )
+        .route(
+            "/api/sessions/{code}/tasks/{task_id}/dependencies/{blocked_id}",
+            delete(routes::tasks::remove_dependency),
+        )
+        .route(
+            "/api/sessions/{code}/tasks/add",
+            post(routes::tasks::add_tasks_to_session),
+        )
+        .route(
+            "/api/sessions/{code}/tasks/{task_id}/membership",
+            delete(routes::tasks::remove_task_from_session),
+        )
+        .route(
+            "/api/sessions/{code}/mentions/unread",
+            get(routes::tasks::list_unread_mentions),
+        )
+        .route(
+            "/api/sessions/{code}/mentions/unread",
+            delete(routes::tasks::clear_unread_mentions),
+        )
         // Notes
         .route("/api/sessions/{code}/notes", get(routes::notes::list_notes))
-        .route("/api/sessions/{code}/notes/{slug}", get(routes::notes::get_note))
-        .route("/api/sessions/{code}/notes/{slug}", axum::routing::put(routes::notes::upsert_note))
+        .route(
+            "/api/sessions/{code}/notes/{slug}",
+            get(routes::notes::get_note),
+        )
+        .route(
+            "/api/sessions/{code}/notes/{slug}",
+            axum::routing::put(routes::notes::upsert_note),
+        )
         // Questions
-        .route("/api/sessions/{code}/questions", get(routes::questions::list_questions))
-        .route("/api/sessions/{code}/questions/{question_id}", get(routes::questions::get_question))
-        .route("/api/sessions/{code}/questions/{question_id}/answer", post(routes::questions::answer_question))
-        .route("/api/sessions/{code}/questions/{question_id}/cancel", post(routes::questions::cancel_question))
+        .route(
+            "/api/sessions/{code}/questions",
+            get(routes::questions::list_questions),
+        )
+        .route(
+            "/api/sessions/{code}/questions/{question_id}",
+            get(routes::questions::get_question),
+        )
+        .route(
+            "/api/sessions/{code}/questions/{question_id}/answer",
+            post(routes::questions::answer_question),
+        )
+        .route(
+            "/api/sessions/{code}/questions/{question_id}/cancel",
+            post(routes::questions::cancel_question),
+        )
         // Activity
-        .route("/api/sessions/{code}/activity", get(routes::activity::list_activity))
+        .route(
+            "/api/sessions/{code}/activity",
+            get(routes::activity::list_activity),
+        )
         // Tool Invocations
-        .route("/api/sessions/{code}/tool-invocations", get(routes::tool_invocations::list_tool_invocations))
+        .route(
+            "/api/sessions/{code}/tool-invocations",
+            get(routes::tool_invocations::list_tool_invocations),
+        )
         // Messages
-        .route("/api/sessions/{code}/participants/{participant_id}/messages", get(routes::messages::list_messages).post(routes::messages::send_message))
+        .route(
+            "/api/sessions/{code}/participants/{participant_id}/messages",
+            get(routes::messages::list_messages).post(routes::messages::send_message),
+        )
         // Workspaces (Coder integration)
-        .route("/api/projects/{project_id}/workspaces", get(routes::workspaces::list_workspaces).post(routes::workspaces::create_workspace))
-        .route("/api/projects/{project_id}/workspaces/{workspace_id}", get(routes::workspaces::get_workspace).delete(routes::workspaces::destroy_workspace))
-        .route("/api/projects/{project_id}/workspaces/{workspace_id}/stop", post(routes::workspaces::stop_workspace))
-        .route("/api/projects/{project_id}/workspaces/{workspace_id}/events", get(routes::workspaces::workspace_events))
+        .route(
+            "/api/projects/{project_id}/workspaces",
+            get(routes::workspaces::list_workspaces).post(routes::workspaces::create_workspace),
+        )
+        .route(
+            "/api/projects/{project_id}/workspaces/{workspace_id}",
+            get(routes::workspaces::get_workspace).delete(routes::workspaces::destroy_workspace),
+        )
+        .route(
+            "/api/projects/{project_id}/workspaces/{workspace_id}/stop",
+            post(routes::workspaces::stop_workspace),
+        )
+        .route(
+            "/api/projects/{project_id}/workspaces/{workspace_id}/events",
+            get(routes::workspaces::workspace_events),
+        )
         // Workspace Logs (agent process output)
-        .route("/api/workspaces/{workspace_id}/logs", post(routes::workspace_logs::ingest_logs).get(routes::workspace_logs::get_logs))
+        .route(
+            "/api/workspaces/{workspace_id}/logs",
+            post(routes::workspace_logs::ingest_logs).get(routes::workspace_logs::get_logs),
+        )
         // Invocations (ephemeral claude -p calls)
-        .route("/api/projects/{project_id}/invocations", get(routes::invocations::list_invocations).post(routes::invocations::create_invocation))
-        .route("/api/invocations/{invocation_id}", get(routes::invocations::get_invocation))
-        .route("/api/projects/{project_id}/cost-summary", get(routes::invocations::get_project_cost_summary))
+        .route(
+            "/api/projects/{project_id}/invocations",
+            get(routes::invocations::list_invocations).post(routes::invocations::create_invocation),
+        )
+        .route(
+            "/api/invocations/{invocation_id}",
+            get(routes::invocations::get_invocation),
+        )
+        .route(
+            "/api/projects/{project_id}/cost-summary",
+            get(routes::invocations::get_project_cost_summary),
+        )
         // Integrations
-        .route("/api/integrations/coder/status", get(routes::integrations::coder_status))
+        .route(
+            "/api/integrations/coder/status",
+            get(routes::integrations::coder_status),
+        )
         // Domain Events
-        .route("/api/projects/{project_id}/events", get(routes::events::list_events))
+        .route(
+            "/api/projects/{project_id}/events",
+            get(routes::events::list_events),
+        )
         // Agent API
         .route("/api/agent/join", post(routes::agent::agent_join))
         // Project agents
-        .route("/api/projects/{project_id}/agents", get(routes::agents::list_project_agents))
-        .route("/api/projects/{project_id}/agents/{agent_id}", get(routes::agents::get_project_agent))
+        .route(
+            "/api/projects/{project_id}/agents",
+            get(routes::agents::list_project_agents),
+        )
+        .route(
+            "/api/projects/{project_id}/agents/{agent_id}",
+            get(routes::agents::get_project_agent),
+        )
         // Code Search
-        .route("/api/projects/{project_id}/code-index", post(routes::code_index::index_file).delete(routes::code_index::clear_project_index))
+        .route(
+            "/api/projects/{project_id}/code-index",
+            post(routes::code_index::index_file).delete(routes::code_index::clear_project_index),
+        )
         // Automations
-        .route("/api/projects/{project_id}/reactions", get(routes::automations::list_reactions).post(routes::automations::create_reaction))
-        .route("/api/projects/{project_id}/reactions/{reaction_id}", patch(routes::automations::update_reaction).delete(routes::automations::delete_reaction))
-        .route("/api/projects/{project_id}/scheduled-jobs", get(routes::automations::list_scheduled_jobs).post(routes::automations::create_scheduled_job))
-        .route("/api/projects/{project_id}/scheduled-jobs/{job_id}", patch(routes::automations::update_scheduled_job).delete(routes::automations::delete_scheduled_job))
+        .route(
+            "/api/projects/{project_id}/reactions",
+            get(routes::automations::list_reactions).post(routes::automations::create_reaction),
+        )
+        .route(
+            "/api/projects/{project_id}/reactions/{reaction_id}",
+            patch(routes::automations::update_reaction)
+                .delete(routes::automations::delete_reaction),
+        )
+        .route(
+            "/api/projects/{project_id}/scheduled-jobs",
+            get(routes::automations::list_scheduled_jobs)
+                .post(routes::automations::create_scheduled_job),
+        )
+        .route(
+            "/api/projects/{project_id}/scheduled-jobs/{job_id}",
+            patch(routes::automations::update_scheduled_job)
+                .delete(routes::automations::delete_scheduled_job),
+        )
         // Hook Bundles
-        .route("/api/projects/{project_id}/hook-bundles", get(routes::hook_bundles::list_bundles))
-        .route("/api/projects/{project_id}/hook-bundles/{bundle_name}", post(routes::hook_bundles::install_bundle))
+        .route(
+            "/api/projects/{project_id}/hook-bundles",
+            get(routes::hook_bundles::list_bundles),
+        )
+        .route(
+            "/api/projects/{project_id}/hook-bundles/{bundle_name}",
+            post(routes::hook_bundles::install_bundle),
+        )
         // Auth bridge (Hydra/Kratos — unauthenticated, part of login flow)
-        .route("/api/auth/login", get(routes::auth_bridge::get_login_request))
-        .route("/api/auth/login/accept", axum::routing::put(routes::auth_bridge::accept_login))
-        .route("/api/auth/consent", get(routes::auth_bridge::get_consent_request))
-        .route("/api/auth/consent/accept", axum::routing::put(routes::auth_bridge::accept_consent))
-        .route("/api/auth/consent/reject", axum::routing::put(routes::auth_bridge::reject_consent))
+        .route(
+            "/api/auth/login",
+            get(routes::auth_bridge::get_login_request),
+        )
+        .route(
+            "/api/auth/login/accept",
+            axum::routing::put(routes::auth_bridge::accept_login),
+        )
+        .route(
+            "/api/auth/consent",
+            get(routes::auth_bridge::get_consent_request),
+        )
+        .route(
+            "/api/auth/consent/accept",
+            axum::routing::put(routes::auth_bridge::accept_consent),
+        )
+        .route(
+            "/api/auth/consent/reject",
+            axum::routing::put(routes::auth_bridge::reject_consent),
+        )
         // WebSocket
         .route("/ws", get(ws::handler::ws_upgrade))
         // OAuth discovery for MCP clients
-        .route("/.well-known/oauth-protected-resource", get(well_known_protected_resource))
-        .route("/.well-known/oauth-authorization-server", get(well_known_authorization_server))
+        .route(
+            "/.well-known/oauth-protected-resource",
+            get(well_known_protected_resource),
+        )
+        .route(
+            "/.well-known/oauth-authorization-server",
+            get(well_known_authorization_server),
+        )
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state.clone());
@@ -266,14 +509,23 @@ async fn main() {
     let mcp_db = state.db.clone();
     let mcp_code_index = code_index.clone();
     let mcp_service = StreamableHttpService::new(
-        move || Ok(mcp_handler::SeamMcp::with_code_index(mcp_db.clone(), mcp_code_index.clone())),
+        move || {
+            Ok(mcp_handler::SeamMcp::with_code_index(
+                mcp_db.clone(),
+                mcp_code_index.clone(),
+            ))
+        },
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );
-    let auth_layer = mcp_auth::McpAuthLayer::new(state.jwks.clone(), mcp_auth_enabled, resource_url.clone());
+    let auth_layer =
+        mcp_auth::McpAuthLayer::new(state.jwks.clone(), mcp_auth_enabled, resource_url.clone());
     let authed_mcp = auth_layer.layer(mcp_service);
     let app = app.nest_service("/mcp", authed_mcp);
-    tracing::info!(auth_enabled = mcp_auth_enabled, "MCP Streamable HTTP endpoint available at /mcp");
+    tracing::info!(
+        auth_enabled = mcp_auth_enabled,
+        "MCP Streamable HTTP endpoint available at /mcp"
+    );
 
     let addr = format!("0.0.0.0:{port}");
     tracing::info!("Seam server listening on {addr}");
@@ -284,9 +536,7 @@ async fn main() {
 
 /// RFC 9728: OAuth Protected Resource Metadata
 /// Tells MCP clients where to authenticate and what scopes are needed.
-async fn well_known_protected_resource(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+async fn well_known_protected_resource(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let resource = format!("{}/mcp", state.resource_url.trim_end_matches('/'));
     Json(serde_json::json!({
         "resource": resource,
@@ -301,33 +551,32 @@ async fn well_known_protected_resource(
 ///
 /// Hydra omits `registration_endpoint` from its discovery doc even when DCR is
 /// enabled. We inject it so that MCP clients can perform dynamic client registration.
-async fn well_known_authorization_server(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
-    let url = format!(
-        "{}/.well-known/openid-configuration",
-        state.issuer_url
-    );
+async fn well_known_authorization_server(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let url = format!("{}/.well-known/openid-configuration", state.issuer_url);
     match reqwest::get(&url).await {
         Ok(resp) => match resp.json::<serde_json::Value>().await {
             Ok(mut body) => {
                 // Inject registration_endpoint if Hydra left it null/absent
-                if body.get("registration_endpoint").map_or(true, |v| v.is_null()) {
-                    body["registration_endpoint"] = serde_json::json!(
-                        format!("{}/oauth2/register", state.issuer_url)
-                    );
+                if body
+                    .get("registration_endpoint")
+                    .is_none_or(|v| v.is_null())
+                {
+                    body["registration_endpoint"] =
+                        serde_json::json!(format!("{}/oauth2/register", state.issuer_url));
                 }
                 (axum::http::StatusCode::OK, Json(body)).into_response()
             }
             Err(_) => (
                 axum::http::StatusCode::BAD_GATEWAY,
                 Json(serde_json::json!({"error": "Failed to parse OIDC discovery response"})),
-            ).into_response(),
+            )
+                .into_response(),
         },
         Err(_) => (
             axum::http::StatusCode::BAD_GATEWAY,
             Json(serde_json::json!({"error": "OIDC provider unavailable"})),
-        ).into_response(),
+        )
+            .into_response(),
     }
 }
 
@@ -345,14 +594,15 @@ async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<()
         let payload = notification.payload();
 
         match channel {
-            "tool_invocations" => {
-                match serde_json::from_str::<serde_json::Value>(payload) {
-                    Ok(msg) => {
-                        let session_code = msg["session_code"].as_str().unwrap_or("");
-                        let participant_id = msg["participant_id"].as_str().unwrap_or("");
+            "tool_invocations" => match serde_json::from_str::<serde_json::Value>(payload) {
+                Ok(msg) => {
+                    let session_code = msg["session_code"].as_str().unwrap_or("");
+                    let participant_id = msg["participant_id"].as_str().unwrap_or("");
 
-                        if !session_code.is_empty() && !participant_id.is_empty() {
-                            state.connections.broadcast_agent_stream(
+                    if !session_code.is_empty() && !participant_id.is_empty() {
+                        state
+                            .connections
+                            .broadcast_agent_stream(
                                 session_code,
                                 participant_id,
                                 &serde_json::json!({
@@ -367,14 +617,14 @@ async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<()
                                         "created_at": msg["created_at"],
                                     }
                                 }),
-                            ).await;
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("Bad tool_invocations NOTIFY payload: {e}");
+                            )
+                            .await;
                     }
                 }
-            }
+                Err(e) => {
+                    tracing::warn!("Bad tool_invocations NOTIFY payload: {e}");
+                }
+            },
             "agent_state" => {
                 match serde_json::from_str::<serde_json::Value>(payload) {
                     Ok(msg) => {
@@ -386,34 +636,53 @@ async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<()
 
                             // Track MCP agent presence
                             if agent_state == "joined" {
-                                state.connections.set_mcp_agent_online(session_code, participant_id);
-                                state.connections.broadcast_to_session(session_code, &serde_json::json!({
-                                    "type": "participant_connected",
-                                    "participantId": participant_id,
-                                })).await;
+                                state
+                                    .connections
+                                    .set_mcp_agent_online(session_code, participant_id);
+                                state
+                                    .connections
+                                    .broadcast_to_session(
+                                        session_code,
+                                        &serde_json::json!({
+                                            "type": "participant_connected",
+                                            "participantId": participant_id,
+                                        }),
+                                    )
+                                    .await;
                             } else if agent_state == "disconnected" {
-                                state.connections.set_mcp_agent_offline(session_code, participant_id);
-                                state.connections.broadcast_to_session(session_code, &serde_json::json!({
-                                    "type": "participant_disconnected",
-                                    "participantId": participant_id,
-                                })).await;
+                                state
+                                    .connections
+                                    .set_mcp_agent_offline(session_code, participant_id);
+                                state
+                                    .connections
+                                    .broadcast_to_session(
+                                        session_code,
+                                        &serde_json::json!({
+                                            "type": "participant_disconnected",
+                                            "participantId": participant_id,
+                                        }),
+                                    )
+                                    .await;
                             }
 
-                            state.connections.broadcast_agent_stream(
-                                session_code,
-                                participant_id,
-                                &serde_json::json!({
-                                    "type": "agent_stream",
-                                    "stream": "state",
-                                    "participant_id": participant_id,
-                                    "data": {
-                                        "from": "",
-                                        "to": msg["state"],
-                                        "detail": msg["detail"],
-                                        "ts": chrono::Utc::now().to_rfc3339(),
-                                    }
-                                }),
-                            ).await;
+                            state
+                                .connections
+                                .broadcast_agent_stream(
+                                    session_code,
+                                    participant_id,
+                                    &serde_json::json!({
+                                        "type": "agent_stream",
+                                        "stream": "state",
+                                        "participant_id": participant_id,
+                                        "data": {
+                                            "from": "",
+                                            "to": msg["state"],
+                                            "detail": msg["detail"],
+                                            "ts": chrono::Utc::now().to_rfc3339(),
+                                        }
+                                    }),
+                                )
+                                .await;
                         }
                     }
                     Err(e) => {
@@ -421,21 +690,19 @@ async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<()
                     }
                 }
             }
-            "domain_events" => {
-                match serde_json::from_str::<serde_json::Value>(payload) {
-                    Ok(msg) => {
-                        tracing::debug!(
-                            event_type = msg["event_type"].as_str().unwrap_or("unknown"),
-                            aggregate_type = msg["aggregate_type"].as_str().unwrap_or("unknown"),
-                            aggregate_id = msg["aggregate_id"].as_str().unwrap_or("unknown"),
-                            "Domain event received"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::warn!("Bad domain_events NOTIFY payload: {e}");
-                    }
+            "domain_events" => match serde_json::from_str::<serde_json::Value>(payload) {
+                Ok(msg) => {
+                    tracing::debug!(
+                        event_type = msg["event_type"].as_str().unwrap_or("unknown"),
+                        aggregate_type = msg["aggregate_type"].as_str().unwrap_or("unknown"),
+                        aggregate_id = msg["aggregate_id"].as_str().unwrap_or("unknown"),
+                        "Domain event received"
+                    );
                 }
-            }
+                Err(e) => {
+                    tracing::warn!("Bad domain_events NOTIFY payload: {e}");
+                }
+            },
             _ => {
                 // task_changes and any other channels
                 match serde_json::from_str::<serde_json::Value>(payload) {
@@ -444,9 +711,15 @@ async fn run_pg_listener(database_url: &str, state: &Arc<AppState>) -> Result<()
                         let session_code = msg["session_code"].as_str().unwrap_or("");
 
                         if !session_code.is_empty() {
-                            state.connections.broadcast_to_session(session_code, &serde_json::json!({
-                                "type": event_type,
-                            })).await;
+                            state
+                                .connections
+                                .broadcast_to_session(
+                                    session_code,
+                                    &serde_json::json!({
+                                        "type": event_type,
+                                    }),
+                                )
+                                .await;
                         }
                     }
                     Err(e) => {

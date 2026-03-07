@@ -194,18 +194,21 @@ pub async fn list_requests(
     let ids: Vec<Uuid> = reqs.iter().map(|r| r.id).collect();
     let counts = batch_requirement_counts(&state.db, &ids).await?;
 
-    let views: Vec<RequestListView> = reqs.iter().map(|r| {
-        let requirement_count = counts.get(&r.id).copied().unwrap_or(0);
-        RequestListView {
-            id: r.id,
-            title: r.title.clone(),
-            status: r.status,
-            author_id: r.author_id,
-            requirement_count,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-        }
-    }).collect();
+    let views: Vec<RequestListView> = reqs
+        .iter()
+        .map(|r| {
+            let requirement_count = counts.get(&r.id).copied().unwrap_or(0);
+            RequestListView {
+                id: r.id,
+                title: r.title.clone(),
+                status: r.status,
+                author_id: r.author_id,
+                requirement_count,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            }
+        })
+        .collect();
     Ok(Json(views))
 }
 
@@ -220,29 +223,27 @@ pub async fn get_request(
     })?;
     verify_project_member(&state.db, project_id, user.id).await?;
 
-    let req = sqlx::query_as::<_, Request>(
-        "SELECT * FROM requests WHERE id = $1 AND project_id = $2",
-    )
-    .bind(request_id)
-    .bind(project_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to get request: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let req =
+        sqlx::query_as::<_, Request>("SELECT * FROM requests WHERE id = $1 AND project_id = $2")
+            .bind(request_id)
+            .bind(project_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to get request: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .ok_or(StatusCode::NOT_FOUND)?;
 
-    let linked_requirement_ids: Vec<(Uuid,)> = sqlx::query_as(
-        "SELECT requirement_id FROM request_requirements WHERE request_id = $1",
-    )
-    .bind(req.id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to get linked requirements: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let linked_requirement_ids: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT requirement_id FROM request_requirements WHERE request_id = $1")
+            .bind(req.id)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to get linked requirements: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
     let (requirement_satisfied_count, requirement_total_count): (i64, i64) = sqlx::query_as(
         "SELECT \
@@ -250,7 +251,7 @@ pub async fn get_request(
             COUNT(*) as total_count \
          FROM request_requirements rr \
          JOIN requirements r ON r.id = rr.requirement_id \
-         WHERE rr.request_id = $1"
+         WHERE rr.request_id = $1",
     )
     .bind(req.id)
     .fetch_one(&state.db)
@@ -355,26 +356,27 @@ pub async fn update_request(
     })?;
     verify_project_member(&state.db, project_id, user.id).await?;
 
-    let current = sqlx::query_as::<_, Request>(
-        "SELECT * FROM requests WHERE id = $1 AND project_id = $2",
-    )
-    .bind(request_id)
-    .bind(project_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to get request: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let current =
+        sqlx::query_as::<_, Request>("SELECT * FROM requests WHERE id = $1 AND project_id = $2")
+            .bind(request_id)
+            .bind(project_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to get request: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .ok_or(StatusCode::NOT_FOUND)?;
 
     if let Some(ref s) = body.status {
         let new_status = parse_request_status(s)?;
         validate_request_status_transition(current.status, new_status)?;
     }
 
-    let has_updates =
-        body.title.is_some() || body.body.is_some() || body.status.is_some() || body.analysis.is_some();
+    let has_updates = body.title.is_some()
+        || body.body.is_some()
+        || body.status.is_some()
+        || body.analysis.is_some();
 
     let req = if has_updates {
         let mut set_clauses = vec!["updated_at = NOW()".to_string()];
@@ -426,16 +428,15 @@ pub async fn update_request(
         current
     };
 
-    let linked_requirement_ids: Vec<(Uuid,)> = sqlx::query_as(
-        "SELECT requirement_id FROM request_requirements WHERE request_id = $1",
-    )
-    .bind(req.id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to get linked requirements: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let linked_requirement_ids: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT requirement_id FROM request_requirements WHERE request_id = $1")
+            .bind(req.id)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to get linked requirements: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
     let (requirement_satisfied_count, requirement_total_count): (i64, i64) = sqlx::query_as(
         "SELECT \
@@ -443,7 +444,7 @@ pub async fn update_request(
             COUNT(*) as total_count \
          FROM request_requirements rr \
          JOIN requirements r ON r.id = rr.requirement_id \
-         WHERE rr.request_id = $1"
+         WHERE rr.request_id = $1",
     )
     .bind(req.id)
     .fetch_one(&state.db)
@@ -481,16 +482,15 @@ pub async fn delete_request(
     })?;
     verify_project_member(&state.db, project_id, user.id).await?;
 
-    let result =
-        sqlx::query("DELETE FROM requests WHERE id = $1 AND project_id = $2")
-            .bind(request_id)
-            .bind(project_id)
-            .execute(&state.db)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to delete request: {e}");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+    let result = sqlx::query("DELETE FROM requests WHERE id = $1 AND project_id = $2")
+        .bind(request_id)
+        .bind(project_id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete request: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
@@ -511,27 +511,25 @@ pub async fn link_requirement(
     verify_project_member(&state.db, project_id, user.id).await?;
 
     // Verify request exists in this project
-    let req_exists: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM requests WHERE id = $1 AND project_id = $2",
-    )
-    .bind(request_id)
-    .bind(project_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let req_exists: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM requests WHERE id = $1 AND project_id = $2")
+            .bind(request_id)
+            .bind(project_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if req_exists.is_none() {
         return Err(StatusCode::NOT_FOUND);
     }
 
     // Verify requirement exists in this project
-    let req_req_exists: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM requirements WHERE id = $1 AND project_id = $2",
-    )
-    .bind(body.requirement_id)
-    .bind(project_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let req_req_exists: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM requirements WHERE id = $1 AND project_id = $2")
+            .bind(body.requirement_id)
+            .bind(project_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if req_req_exists.is_none() {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -562,17 +560,15 @@ pub async fn unlink_requirement(
     })?;
     verify_project_member(&state.db, project_id, user.id).await?;
 
-    sqlx::query(
-        "DELETE FROM request_requirements WHERE request_id = $1 AND requirement_id = $2",
-    )
-    .bind(request_id)
-    .bind(requirement_id)
-    .execute(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to unlink requirement from request: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    sqlx::query("DELETE FROM request_requirements WHERE request_id = $1 AND requirement_id = $2")
+        .bind(request_id)
+        .bind(requirement_id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to unlink requirement from request: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(StatusCode::NO_CONTENT)
 }

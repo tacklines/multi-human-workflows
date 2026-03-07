@@ -7,8 +7,13 @@ use uuid::Uuid;
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -20,14 +25,27 @@ async fn create_test_context(db: &PgPool) -> (Uuid, Uuid, Uuid, Uuid, Uuid) {
         .execute(db).await.unwrap();
 
     let org_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
-        .bind(org_id).bind("Test Org").bind(format!("test-org-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
+    )
+    .bind(org_id)
+    .bind("Test Org")
+    .bind(format!("test-org-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let project_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(project_id).bind(org_id).bind("Test Project").bind(format!("test-proj-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .bind("Test Project")
+    .bind(format!("test-proj-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let session_id = Uuid::new_v4();
     let code = format!("MS{}", &Uuid::new_v4().to_string()[..4]).to_uppercase();
@@ -59,9 +77,12 @@ async fn test_send_message() {
     .bind(session_id).bind(human_id).bind(agent_id).bind("Please investigate the auth bug")
     .fetch_one(&db).await.unwrap();
 
-    let (content, read_at): (String, Option<chrono::DateTime<chrono::Utc>>) = sqlx::query_as(
-        "SELECT content, read_at FROM messages WHERE id = $1"
-    ).bind(msg_id).fetch_one(&db).await.unwrap();
+    let (content, read_at): (String, Option<chrono::DateTime<chrono::Utc>>) =
+        sqlx::query_as("SELECT content, read_at FROM messages WHERE id = $1")
+            .bind(msg_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(content, "Please investigate the auth bug");
     assert!(read_at.is_none(), "Message should be unread initially");
@@ -86,7 +107,9 @@ async fn test_mark_messages_read() {
     // Mark first two as read
     sqlx::query("UPDATE messages SET read_at = NOW() WHERE id = ANY($1)")
         .bind(&msg_ids[..2])
-        .execute(&db).await.unwrap();
+        .execute(&db)
+        .await
+        .unwrap();
 
     let unread_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM messages WHERE session_id = $1 AND recipient_id = $2 AND read_at IS NULL"
@@ -108,9 +131,12 @@ async fn test_create_question() {
     .bind("What is the expected behavior for expired tokens?")
     .execute(&db).await.unwrap();
 
-    let (status, answer): (String, Option<String>) = sqlx::query_as(
-        "SELECT status, answer_text FROM questions WHERE id = $1"
-    ).bind(question_id).fetch_one(&db).await.unwrap();
+    let (status, answer): (String, Option<String>) =
+        sqlx::query_as("SELECT status, answer_text FROM questions WHERE id = $1")
+            .bind(question_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(status, "pending");
     assert!(answer.is_none());
@@ -137,12 +163,18 @@ async fn test_answer_question() {
     .bind(human_id).bind(question_id)
     .execute(&db).await.unwrap();
 
-    let (status, answer, answered_by): (String, Option<String>, Option<Uuid>) = sqlx::query_as(
-        "SELECT status, answer_text, answered_by FROM questions WHERE id = $1"
-    ).bind(question_id).fetch_one(&db).await.unwrap();
+    let (status, answer, answered_by): (String, Option<String>, Option<Uuid>) =
+        sqlx::query_as("SELECT status, answer_text, answered_by FROM questions WHERE id = $1")
+            .bind(question_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(status, "answered");
-    assert_eq!(answer.unwrap(), "Yes, retry with exponential backoff up to 3 times");
+    assert_eq!(
+        answer.unwrap(),
+        "Yes, retry with exponential backoff up to 3 times"
+    );
     assert_eq!(answered_by.unwrap(), human_id);
 }
 
@@ -162,9 +194,12 @@ async fn test_directed_question() {
     .bind(serde_json::json!({"task_id": "some-task", "topic": "authentication"}))
     .execute(&db).await.unwrap();
 
-    let (directed_to, context): (Option<Uuid>, Option<serde_json::Value>) = sqlx::query_as(
-        "SELECT directed_to, context FROM questions WHERE id = $1"
-    ).bind(question_id).fetch_one(&db).await.unwrap();
+    let (directed_to, context): (Option<Uuid>, Option<serde_json::Value>) =
+        sqlx::query_as("SELECT directed_to, context FROM questions WHERE id = $1")
+            .bind(question_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(directed_to.unwrap(), human_id);
     assert_eq!(context.unwrap()["topic"], "authentication");
@@ -190,9 +225,11 @@ async fn test_cancel_own_question() {
 
     assert_eq!(result.rows_affected(), 1);
 
-    let (status,): (String,) = sqlx::query_as(
-        "SELECT status FROM questions WHERE id = $1"
-    ).bind(question_id).fetch_one(&db).await.unwrap();
+    let (status,): (String,) = sqlx::query_as("SELECT status FROM questions WHERE id = $1")
+        .bind(question_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
 
     assert_eq!(status, "cancelled");
 }
@@ -215,5 +252,9 @@ async fn test_cannot_cancel_others_question() {
         "UPDATE questions SET status = 'cancelled' WHERE id = $1 AND asked_by = $2 AND status = 'pending'"
     ).bind(question_id).bind(human_id).execute(&db).await.unwrap();
 
-    assert_eq!(result.rows_affected(), 0, "Should not be able to cancel someone else's question");
+    assert_eq!(
+        result.rows_affected(),
+        0,
+        "Should not be able to cancel someone else's question"
+    );
 }

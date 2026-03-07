@@ -12,10 +12,7 @@ use crate::AppState;
 
 /// Extract and validate a Bearer JWT from headers.
 /// Returns Ok(()) if valid JWT or auth is disabled, Err(401) otherwise.
-async fn validate_agent_auth(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<(), StatusCode> {
+async fn validate_agent_auth(state: &AppState, headers: &HeaderMap) -> Result<(), StatusCode> {
     // Skip auth in dev mode
     if std::env::var("MCP_AUTH_DISABLED").unwrap_or_default() == "true" {
         return Ok(());
@@ -30,7 +27,9 @@ async fn validate_agent_auth(
         .strip_prefix("Bearer ")
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    state.jwks.validate_token(token)
+    state
+        .jwks
+        .validate_token(token)
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
@@ -49,16 +48,15 @@ pub async fn ingest_logs(
 ) -> Result<StatusCode, StatusCode> {
     validate_agent_auth(&state, &headers).await?;
     // Look up workspace — participant_id may be NULL before agent joins
-    let row: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
-        "SELECT w.id, w.participant_id FROM workspaces w WHERE w.id = $1"
-    )
-    .bind(workspace_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to look up workspace: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let row: Option<(Uuid, Option<Uuid>)> =
+        sqlx::query_as("SELECT w.id, w.participant_id FROM workspaces w WHERE w.id = $1")
+            .bind(workspace_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to look up workspace: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
     let (_ws_id, participant_id) = row.ok_or(StatusCode::NOT_FOUND)?;
 
@@ -88,20 +86,23 @@ pub async fn ingest_logs(
 
         // Broadcast to subscribed WebSocket clients if we have a participant
         if let (Some(pid), Some(code)) = (participant_id, &session_code) {
-            state.connections.broadcast_agent_stream(
-                code,
-                &pid.to_string(),
-                &serde_json::json!({
-                    "type": "agent_stream",
-                    "stream": "output",
-                    "participant_id": pid,
-                    "data": {
-                        "line": line.line,
-                        "fd": line.fd,
-                        "ts": line.ts,
-                    }
-                }),
-            ).await;
+            state
+                .connections
+                .broadcast_agent_stream(
+                    code,
+                    &pid.to_string(),
+                    &serde_json::json!({
+                        "type": "agent_stream",
+                        "stream": "output",
+                        "participant_id": pid,
+                        "data": {
+                            "line": line.line,
+                            "fd": line.fd,
+                            "ts": line.ts,
+                        }
+                    }),
+                )
+                .await;
         }
     }
 
@@ -126,16 +127,14 @@ pub async fn get_logs(
     validate_agent_auth(&state, &headers).await?;
 
     // Verify workspace exists
-    let exists: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM workspaces WHERE id = $1"
-    )
-    .bind(workspace_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to look up workspace: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let exists: Option<(Uuid,)> = sqlx::query_as("SELECT id FROM workspaces WHERE id = $1")
+        .bind(workspace_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to look up workspace: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     exists.ok_or(StatusCode::NOT_FOUND)?;
 

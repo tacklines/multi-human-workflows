@@ -1,9 +1,9 @@
-use lapin::{options::*, types::FieldTable, Channel, Consumer};
 use futures::StreamExt;
-use sqlx::PgPool;
-use tracing::{info, warn, error};
-use uuid::Uuid;
+use lapin::{options::*, types::FieldTable, Channel, Consumer};
 use serde::Deserialize;
+use sqlx::PgPool;
+use tracing::{error, info, warn};
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -105,7 +105,7 @@ async fn handle_event(
          FROM event_reactions
          WHERE aggregate_type = $1
            AND event_type = $2
-           AND enabled = true"
+           AND enabled = true",
     )
     .bind(&event.aggregate_type)
     .bind(&event.event_type)
@@ -172,15 +172,15 @@ fn matches_filter(payload: &serde_json::Value, filter: &serde_json::Value) -> bo
                 ops.iter().all(|(op, expected)| {
                     let actual = payload_obj.get(key);
                     match op.as_str() {
-                        "$eq" => actual.map_or(false, |a| a == expected),
-                        "$ne" => actual.map_or(true, |a| a != expected),
+                        "$eq" => actual == Some(expected),
+                        "$ne" => actual != Some(expected),
                         "$exists" => {
                             let should_exist = expected.as_bool().unwrap_or(true);
                             actual.is_some() == should_exist
                         }
                         "$in" => {
                             if let Some(arr) = expected.as_array() {
-                                actual.map_or(false, |a| arr.contains(a))
+                                actual.is_some_and(|a| arr.contains(a))
                             } else {
                                 false
                             }
@@ -203,7 +203,7 @@ fn matches_filter(payload: &serde_json::Value, filter: &serde_json::Value) -> bo
             }
             _ => {
                 // Simple equality (backward-compatible)
-                payload_obj.get(key).map_or(false, |actual| actual == condition)
+                payload_obj.get(key) == Some(condition)
             }
         }
     })

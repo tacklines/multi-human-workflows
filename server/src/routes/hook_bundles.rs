@@ -176,10 +176,12 @@ pub async fn install_bundle(
     State(state): State<Arc<AppState>>,
     Path((project_id, bundle_name)): Path<(Uuid, String)>,
 ) -> Result<(StatusCode, Json<InstallBundleResponse>), StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await.map_err(|e| {
-        tracing::error!("Failed to upsert user: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to upsert user: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     verify_project_membership(&state.db, project_id, user.id).await?;
 
     let bundle = find_bundle(&bundle_name).ok_or(StatusCode::NOT_FOUND)?;
@@ -190,25 +192,24 @@ pub async fn install_bundle(
 
     // Install event reactions
     for reaction in bundle.reactions {
-        let existing: Option<(Uuid,)> = sqlx::query_as(
-            "SELECT id FROM event_reactions WHERE project_id = $1 AND name = $2",
-        )
-        .bind(project_id)
-        .bind(reaction.name)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to check existing reaction: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        let existing: Option<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM event_reactions WHERE project_id = $1 AND name = $2")
+                .bind(project_id)
+                .bind(reaction.name)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to check existing reaction: {e}");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
 
         if existing.is_some() {
             skipped.push(reaction.name.to_string());
             continue;
         }
 
-        let action_config: serde_json::Value =
-            serde_json::from_str(reaction.action_config).map_err(|e| {
+        let action_config: serde_json::Value = serde_json::from_str(reaction.action_config)
+            .map_err(|e| {
                 tracing::error!("Invalid action_config JSON in bundle def: {e}");
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
@@ -239,17 +240,16 @@ pub async fn install_bundle(
 
     // Install scheduled jobs
     for job in bundle.scheduled_jobs {
-        let existing: Option<(Uuid,)> = sqlx::query_as(
-            "SELECT id FROM scheduled_jobs WHERE project_id = $1 AND name = $2",
-        )
-        .bind(project_id)
-        .bind(job.name)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to check existing scheduled job: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        let existing: Option<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM scheduled_jobs WHERE project_id = $1 AND name = $2")
+                .bind(project_id)
+                .bind(job.name)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to check existing scheduled job: {e}");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
 
         if existing.is_some() {
             skipped.push(job.name.to_string());
@@ -316,10 +316,12 @@ pub async fn list_bundles(
     State(state): State<Arc<AppState>>,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<Vec<BundleStatus>>, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await.map_err(|e| {
-        tracing::error!("Failed to upsert user: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to upsert user: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     verify_project_membership(&state.db, project_id, user.id).await?;
 
     // Fetch all existing reaction and job names for this project

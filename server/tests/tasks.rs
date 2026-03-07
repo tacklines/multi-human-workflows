@@ -1,10 +1,10 @@
 //! Integration tests for the task management system.
 //! Requires Docker Compose running (Postgres on :5433).
 
-use sqlx::PgPool;
-use uuid::Uuid;
 use chrono::Utc;
+use sqlx::PgPool;
 use std::sync::atomic::{AtomicI32, Ordering};
+use uuid::Uuid;
 
 /// Per-test ticket counter to avoid unique constraint violations across concurrent tests.
 static TICKET_COUNTER: AtomicI32 = AtomicI32::new(10000);
@@ -16,8 +16,13 @@ fn next_ticket() -> i32 {
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -34,22 +39,30 @@ async fn create_test_session(db: &PgPool) -> (Uuid, Uuid, Uuid) {
         .execute(db).await.unwrap();
 
     let org_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
-        .bind(org_id)
-        .bind("Test Org")
-        .bind(format!("test-org-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
+    )
+    .bind(org_id)
+    .bind("Test Org")
+    .bind(format!("test-org-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let project_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(project_id)
-        .bind(org_id)
-        .bind("Test Project")
-        .bind(format!("test-proj-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .bind("Test Project")
+    .bind(format!("test-proj-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let session_id = Uuid::new_v4();
-    let session_code = format!("{}", &session_id.to_string()[..6]).to_uppercase();
+    let session_code = session_id.to_string()[..6].to_string().to_uppercase();
     sqlx::query("INSERT INTO sessions (id, project_id, code, created_by, created_at) VALUES ($1, $2, $3, $4, NOW())")
         .bind(session_id)
         .bind(project_id)
@@ -88,11 +101,12 @@ async fn test_create_task() {
     .execute(&db).await.unwrap();
 
     // Verify it was created
-    let row: (String, String, String) = sqlx::query_as(
-        "SELECT title, task_type, status FROM tasks WHERE id = $1"
-    )
-    .bind(task_id)
-    .fetch_one(&db).await.unwrap();
+    let row: (String, String, String) =
+        sqlx::query_as("SELECT title, task_type, status FROM tasks WHERE id = $1")
+            .bind(task_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(row.0, "Implement login form");
     assert_eq!(row.1, "task");
@@ -142,30 +156,34 @@ async fn test_task_hierarchy() {
 
     // Query children of epic
     let children: Vec<(Uuid, String, String)> = sqlx::query_as(
-        "SELECT id, task_type, title FROM tasks WHERE parent_id = $1 ORDER BY created_at"
+        "SELECT id, task_type, title FROM tasks WHERE parent_id = $1 ORDER BY created_at",
     )
     .bind(epic_id)
-    .fetch_all(&db).await.unwrap();
+    .fetch_all(&db)
+    .await
+    .unwrap();
 
     assert_eq!(children.len(), 1);
     assert_eq!(children[0].1, "story");
     assert_eq!(children[0].2, "Login flow");
 
     // Query children of story
-    let story_children: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, title FROM tasks WHERE parent_id = $1"
-    )
-    .bind(story_id)
-    .fetch_all(&db).await.unwrap();
+    let story_children: Vec<(Uuid, String)> =
+        sqlx::query_as("SELECT id, title FROM tasks WHERE parent_id = $1")
+            .bind(story_id)
+            .fetch_all(&db)
+            .await
+            .unwrap();
     assert_eq!(story_children.len(), 1);
     assert_eq!(story_children[0].1, "Build login form");
 
     // Query children of task
-    let task_children: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, title FROM tasks WHERE parent_id = $1"
-    )
-    .bind(task_id)
-    .fetch_all(&db).await.unwrap();
+    let task_children: Vec<(Uuid, String)> =
+        sqlx::query_as("SELECT id, title FROM tasks WHERE parent_id = $1")
+            .bind(task_id)
+            .fetch_all(&db)
+            .await
+            .unwrap();
     assert_eq!(task_children.len(), 1);
     assert_eq!(task_children[0].1, "Add password validation");
 }
@@ -193,7 +211,10 @@ async fn test_task_types() {
     .bind(Uuid::new_v4()).bind(session_id).bind(project_id).bind(next_ticket()).bind(participant_id)
     .execute(&db).await;
 
-    assert!(result.is_err(), "Invalid task_type should be rejected by CHECK constraint");
+    assert!(
+        result.is_err(),
+        "Invalid task_type should be rejected by CHECK constraint"
+    );
 }
 
 #[tokio::test]
@@ -212,18 +233,29 @@ async fn test_task_statuses() {
     // Transition through statuses
     for status in &["in_progress", "done", "closed"] {
         sqlx::query("UPDATE tasks SET status = $1, updated_at = NOW() WHERE id = $2")
-            .bind(status).bind(task_id)
-            .execute(&db).await.unwrap();
+            .bind(status)
+            .bind(task_id)
+            .execute(&db)
+            .await
+            .unwrap();
 
         let current: (String,) = sqlx::query_as("SELECT status FROM tasks WHERE id = $1")
-            .bind(task_id).fetch_one(&db).await.unwrap();
+            .bind(task_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
         assert_eq!(current.0, *status);
     }
 
     // Invalid status should fail
     let result = sqlx::query("UPDATE tasks SET status = 'invalid' WHERE id = $1")
-        .bind(task_id).execute(&db).await;
-    assert!(result.is_err(), "Invalid status should be rejected by CHECK constraint");
+        .bind(task_id)
+        .execute(&db)
+        .await;
+    assert!(
+        result.is_err(),
+        "Invalid status should be rejected by CHECK constraint"
+    );
 }
 
 #[tokio::test]
@@ -254,10 +286,12 @@ async fn test_task_comments() {
 
     // Fetch comments
     let comments: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, content FROM task_comments WHERE task_id = $1 ORDER BY created_at"
+        "SELECT id, content FROM task_comments WHERE task_id = $1 ORDER BY created_at",
     )
     .bind(task_id)
-    .fetch_all(&db).await.unwrap();
+    .fetch_all(&db)
+    .await
+    .unwrap();
 
     assert_eq!(comments.len(), 2);
     assert!(comments[0].1.contains("auth.rs:42"));
@@ -285,11 +319,12 @@ async fn test_task_commit_link() {
     .bind(&[sha] as &[&str]).bind(task_id)
     .execute(&db).await.unwrap();
 
-    let row: (String, Vec<String>, Option<chrono::DateTime<Utc>>) = sqlx::query_as(
-        "SELECT status, commit_hashes, closed_at FROM tasks WHERE id = $1"
-    )
-    .bind(task_id)
-    .fetch_one(&db).await.unwrap();
+    let row: (String, Vec<String>, Option<chrono::DateTime<Utc>>) =
+        sqlx::query_as("SELECT status, commit_hashes, closed_at FROM tasks WHERE id = $1")
+            .bind(task_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(row.0, "closed");
     assert_eq!(row.1, vec![sha.to_string()]);
@@ -310,15 +345,24 @@ async fn test_task_assignment() {
     .execute(&db).await.unwrap();
 
     let row: (Option<Uuid>,) = sqlx::query_as("SELECT assigned_to FROM tasks WHERE id = $1")
-        .bind(task_id).fetch_one(&db).await.unwrap();
+        .bind(task_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert_eq!(row.0, Some(participant_id));
 
     // Unassign
     sqlx::query("UPDATE tasks SET assigned_to = NULL WHERE id = $1")
-        .bind(task_id).execute(&db).await.unwrap();
+        .bind(task_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     let row: (Option<Uuid>,) = sqlx::query_as("SELECT assigned_to FROM tasks WHERE id = $1")
-        .bind(task_id).fetch_one(&db).await.unwrap();
+        .bind(task_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert_eq!(row.0, None);
 }
 
@@ -350,15 +394,28 @@ async fn test_cascade_delete_on_parent() {
 
     // Delete parent — should cascade to child and child's comments
     sqlx::query("DELETE FROM tasks WHERE id = $1")
-        .bind(parent_id).execute(&db).await.unwrap();
+        .bind(parent_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     let child_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1)")
-        .bind(child_id).fetch_one(&db).await.unwrap();
+        .bind(child_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert!(!child_exists, "Child task should be cascade deleted");
 
-    let comment_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM task_comments WHERE task_id = $1)")
-        .bind(child_id).fetch_one(&db).await.unwrap();
-    assert!(!comment_exists, "Child's comments should be cascade deleted");
+    let comment_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM task_comments WHERE task_id = $1)")
+            .bind(child_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert!(
+        !comment_exists,
+        "Child's comments should be cascade deleted"
+    );
 }
 
 #[tokio::test]
@@ -383,23 +440,33 @@ async fn test_list_tasks_by_filter() {
     }
 
     // Filter by type
-    let bugs: Vec<(String,)> = sqlx::query_as(
-        "SELECT title FROM tasks WHERE session_id = $1 AND task_type = 'bug'"
-    ).bind(session_id).fetch_all(&db).await.unwrap();
+    let bugs: Vec<(String,)> =
+        sqlx::query_as("SELECT title FROM tasks WHERE session_id = $1 AND task_type = 'bug'")
+            .bind(session_id)
+            .fetch_all(&db)
+            .await
+            .unwrap();
     assert_eq!(bugs.len(), 1);
     assert_eq!(bugs[0].0, "Bug 1");
 
     // Filter by status
-    let in_progress: Vec<(String,)> = sqlx::query_as(
-        "SELECT title FROM tasks WHERE session_id = $1 AND status = 'in_progress'"
-    ).bind(session_id).fetch_all(&db).await.unwrap();
+    let in_progress: Vec<(String,)> =
+        sqlx::query_as("SELECT title FROM tasks WHERE session_id = $1 AND status = 'in_progress'")
+            .bind(session_id)
+            .fetch_all(&db)
+            .await
+            .unwrap();
     assert_eq!(in_progress.len(), 1);
     assert_eq!(in_progress[0].0, "Task 1");
 
     // Top-level only (no parent)
     let top_level: Vec<(String,)> = sqlx::query_as(
-        "SELECT title FROM tasks WHERE session_id = $1 AND parent_id IS NULL ORDER BY created_at"
-    ).bind(session_id).fetch_all(&db).await.unwrap();
+        "SELECT title FROM tasks WHERE session_id = $1 AND parent_id IS NULL ORDER BY created_at",
+    )
+    .bind(session_id)
+    .fetch_all(&db)
+    .await
+    .unwrap();
     assert_eq!(top_level.len(), 5);
 }
 
@@ -418,17 +485,26 @@ async fn test_delete_task_standalone() {
 
     // Verify it exists
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1)")
-        .bind(task_id).fetch_one(&db).await.unwrap();
+        .bind(task_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert!(exists);
 
     // Delete it
     let result = sqlx::query("DELETE FROM tasks WHERE id = $1")
-        .bind(task_id).execute(&db).await.unwrap();
+        .bind(task_id)
+        .execute(&db)
+        .await
+        .unwrap();
     assert_eq!(result.rows_affected(), 1);
 
     // Verify it's gone
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1)")
-        .bind(task_id).fetch_one(&db).await.unwrap();
+        .bind(task_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert!(!exists, "Task should be deleted");
 }
 
@@ -447,16 +523,25 @@ async fn test_task_multiple_commit_hashes() {
 
     // Append first commit
     sqlx::query("UPDATE tasks SET commit_hashes = array_append(commit_hashes, $1) WHERE id = $2")
-        .bind("abc123").bind(task_id)
-        .execute(&db).await.unwrap();
+        .bind("abc123")
+        .bind(task_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Append second commit
     sqlx::query("UPDATE tasks SET commit_hashes = array_append(commit_hashes, $1) WHERE id = $2")
-        .bind("def456").bind(task_id)
-        .execute(&db).await.unwrap();
+        .bind("def456")
+        .bind(task_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     let hashes: Vec<String> = sqlx::query_scalar("SELECT commit_hashes FROM tasks WHERE id = $1")
-        .bind(task_id).fetch_one(&db).await.unwrap();
+        .bind(task_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
 
     assert_eq!(hashes, vec!["abc123".to_string(), "def456".to_string()]);
 }
@@ -481,11 +566,12 @@ async fn test_task_no_code_change_flag() {
     .bind(task_id)
     .execute(&db).await.unwrap();
 
-    let (status, no_code, hashes): (String, bool, Vec<String>) = sqlx::query_as(
-        "SELECT status, no_code_change, commit_hashes FROM tasks WHERE id = $1"
-    )
-    .bind(task_id)
-    .fetch_one(&db).await.unwrap();
+    let (status, no_code, hashes): (String, bool, Vec<String>) =
+        sqlx::query_as("SELECT status, no_code_change, commit_hashes FROM tasks WHERE id = $1")
+            .bind(task_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(status, "done");
     assert!(no_code, "no_code_change should be true");
@@ -516,20 +602,21 @@ async fn test_task_source_provenance() {
     .bind(source_id).bind(participant_id)
     .execute(&db).await.unwrap();
 
-    let source: Option<Uuid> = sqlx::query_scalar(
-        "SELECT source_task_id FROM tasks WHERE id = $1"
-    )
-    .bind(derived_id)
-    .fetch_one(&db).await.unwrap();
+    let source: Option<Uuid> = sqlx::query_scalar("SELECT source_task_id FROM tasks WHERE id = $1")
+        .bind(derived_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
 
     assert_eq!(source, Some(source_id));
 
     // Query all tasks derived from source
-    let derived: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, title FROM tasks WHERE source_task_id = $1"
-    )
-    .bind(source_id)
-    .fetch_all(&db).await.unwrap();
+    let derived: Vec<(Uuid, String)> =
+        sqlx::query_as("SELECT id, title FROM tasks WHERE source_task_id = $1")
+            .bind(source_id)
+            .fetch_all(&db)
+            .await
+            .unwrap();
 
     assert_eq!(derived.len(), 1);
     assert_eq!(derived[0].0, derived_id);
@@ -549,20 +636,27 @@ async fn test_task_priority() {
     .execute(&db).await.unwrap();
 
     let priority: String = sqlx::query_scalar("SELECT priority FROM tasks WHERE id = $1")
-        .bind(task_id).fetch_one(&db).await.unwrap();
+        .bind(task_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert_eq!(priority, "critical");
 
     // Test all valid priority values
     for val in &["critical", "high", "medium", "low"] {
         sqlx::query("UPDATE tasks SET priority = $1 WHERE id = $2")
-            .bind(*val).bind(task_id)
-            .execute(&db).await
+            .bind(*val)
+            .bind(task_id)
+            .execute(&db)
+            .await
             .unwrap_or_else(|e| panic!("Priority '{val}' should be valid: {e}"));
     }
 
     // Invalid priority should fail
     let result = sqlx::query("UPDATE tasks SET priority = 'invalid' WHERE id = $1")
-        .bind(task_id).execute(&db).await;
+        .bind(task_id)
+        .execute(&db)
+        .await;
     assert!(result.is_err(), "Invalid priority should be rejected");
 }
 
@@ -572,6 +666,13 @@ async fn test_delete_nonexistent_task() {
 
     let fake_id = Uuid::new_v4();
     let result = sqlx::query("DELETE FROM tasks WHERE id = $1")
-        .bind(fake_id).execute(&db).await.unwrap();
-    assert_eq!(result.rows_affected(), 0, "Deleting nonexistent task should affect 0 rows");
+        .bind(fake_id)
+        .execute(&db)
+        .await
+        .unwrap();
+    assert_eq!(
+        result.rows_affected(),
+        0,
+        "Deleting nonexistent task should affect 0 rows"
+    );
 }

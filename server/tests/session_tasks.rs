@@ -8,8 +8,13 @@ use uuid::Uuid;
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -28,14 +33,27 @@ async fn create_test_context(db: &PgPool) -> TestContext {
         .execute(db).await.unwrap();
 
     let org_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
-        .bind(org_id).bind("Org").bind(format!("org-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
+    )
+    .bind(org_id)
+    .bind("Org")
+    .bind(format!("org-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let project_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(project_id).bind(org_id).bind("Proj").bind(format!("proj-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .bind("Proj")
+    .bind(format!("proj-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let session_id = Uuid::new_v4();
     sqlx::query("INSERT INTO sessions (id, project_id, code, created_by, created_at) VALUES ($1, $2, $3, $4, NOW())")
@@ -52,7 +70,12 @@ async fn create_test_context(db: &PgPool) -> TestContext {
     .bind(participant_id).bind(session_id).bind(user_id).bind("Human")
     .execute(db).await.unwrap();
 
-    TestContext { user_id, project_id, session_id, participant_id }
+    TestContext {
+        user_id,
+        project_id,
+        session_id,
+        participant_id,
+    }
 }
 
 async fn create_task(db: &PgPool, ctx: &TestContext, title: &str) -> Uuid {
@@ -89,17 +112,24 @@ async fn test_add_task_to_session() {
     let session2 = create_session(&db, ctx.project_id, ctx.user_id).await;
 
     sqlx::query("INSERT INTO session_tasks (session_id, task_id, added_by) VALUES ($1, $2, $3)")
-        .bind(session2).bind(task_id).bind(ctx.user_id)
-        .execute(&db).await.unwrap();
+        .bind(session2)
+        .bind(task_id)
+        .bind(ctx.user_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM session_tasks WHERE task_id = $1"
-    )
-    .bind(task_id)
-    .fetch_one(&db).await.unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_tasks WHERE task_id = $1")
+        .bind(task_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
 
     // Should be in at least the second session (original may or may not be there depending on backfill)
-    assert!(count >= 1, "Task should appear in at least one session via junction table");
+    assert!(
+        count >= 1,
+        "Task should appear in at least one session via junction table"
+    );
 }
 
 #[tokio::test]
@@ -112,17 +142,24 @@ async fn test_task_in_multiple_sessions() {
     for _ in 0..3 {
         let sid = create_session(&db, ctx.project_id, ctx.user_id).await;
         sqlx::query("INSERT INTO session_tasks (session_id, task_id) VALUES ($1, $2)")
-            .bind(sid).bind(task_id)
-            .execute(&db).await.unwrap();
+            .bind(sid)
+            .bind(task_id)
+            .execute(&db)
+            .await
+            .unwrap();
     }
 
-    let sessions: Vec<(Uuid,)> = sqlx::query_as(
-        "SELECT session_id FROM session_tasks WHERE task_id = $1"
-    )
-    .bind(task_id)
-    .fetch_all(&db).await.unwrap();
+    let sessions: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT session_id FROM session_tasks WHERE task_id = $1")
+            .bind(task_id)
+            .fetch_all(&db)
+            .await
+            .unwrap();
 
-    assert!(sessions.len() >= 3, "Task should appear in at least 3 sessions");
+    assert!(
+        sessions.len() >= 3,
+        "Task should appear in at least 3 sessions"
+    );
 }
 
 #[tokio::test]
@@ -133,15 +170,23 @@ async fn test_composite_primary_key_prevents_duplicate() {
     let session2 = create_session(&db, ctx.project_id, ctx.user_id).await;
 
     sqlx::query("INSERT INTO session_tasks (session_id, task_id) VALUES ($1, $2)")
-        .bind(session2).bind(task_id)
-        .execute(&db).await.unwrap();
+        .bind(session2)
+        .bind(task_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Duplicate should fail
     let result = sqlx::query("INSERT INTO session_tasks (session_id, task_id) VALUES ($1, $2)")
-        .bind(session2).bind(task_id)
-        .execute(&db).await;
+        .bind(session2)
+        .bind(task_id)
+        .execute(&db)
+        .await;
 
-    assert!(result.is_err(), "Duplicate session-task link should be rejected by composite PK");
+    assert!(
+        result.is_err(),
+        "Duplicate session-task link should be rejected by composite PK"
+    );
 }
 
 #[tokio::test]
@@ -152,21 +197,29 @@ async fn test_cascade_on_session_delete() {
     let session2 = create_session(&db, ctx.project_id, ctx.user_id).await;
 
     sqlx::query("INSERT INTO session_tasks (session_id, task_id) VALUES ($1, $2)")
-        .bind(session2).bind(task_id)
-        .execute(&db).await.unwrap();
+        .bind(session2)
+        .bind(task_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Delete the second session
     sqlx::query("DELETE FROM sessions WHERE id = $1")
         .bind(session2)
-        .execute(&db).await.unwrap();
+        .execute(&db)
+        .await
+        .unwrap();
 
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM session_tasks WHERE session_id = $1"
-    )
-    .bind(session2)
-    .fetch_one(&db).await.unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_tasks WHERE session_id = $1")
+        .bind(session2)
+        .fetch_one(&db)
+        .await
+        .unwrap();
 
-    assert_eq!(count, 0, "Session_tasks entries should cascade-delete with session");
+    assert_eq!(
+        count, 0,
+        "Session_tasks entries should cascade-delete with session"
+    );
 }
 
 #[tokio::test]
@@ -178,21 +231,29 @@ async fn test_cascade_on_task_delete() {
     // Add to a second session
     let session2 = create_session(&db, ctx.project_id, ctx.user_id).await;
     sqlx::query("INSERT INTO session_tasks (session_id, task_id) VALUES ($1, $2)")
-        .bind(session2).bind(task_id)
-        .execute(&db).await.unwrap();
+        .bind(session2)
+        .bind(task_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Delete the task
     sqlx::query("DELETE FROM tasks WHERE id = $1")
         .bind(task_id)
-        .execute(&db).await.unwrap();
+        .execute(&db)
+        .await
+        .unwrap();
 
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM session_tasks WHERE task_id = $1"
-    )
-    .bind(task_id)
-    .fetch_one(&db).await.unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_tasks WHERE task_id = $1")
+        .bind(task_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
 
-    assert_eq!(count, 0, "Session_tasks entries should cascade-delete with task");
+    assert_eq!(
+        count, 0,
+        "Session_tasks entries should cascade-delete with task"
+    );
 }
 
 #[tokio::test]
@@ -206,16 +267,21 @@ async fn test_query_sessions_for_task() {
 
     for sid in &[session2, session3] {
         sqlx::query("INSERT INTO session_tasks (session_id, task_id) VALUES ($1, $2)")
-            .bind(sid).bind(task_id)
-            .execute(&db).await.unwrap();
+            .bind(sid)
+            .bind(task_id)
+            .execute(&db)
+            .await
+            .unwrap();
     }
 
     // Query: "which sessions contain this task?"
     let session_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT session_id FROM session_tasks WHERE task_id = $1 ORDER BY added_at"
+        "SELECT session_id FROM session_tasks WHERE task_id = $1 ORDER BY added_at",
     )
     .bind(task_id)
-    .fetch_all(&db).await.unwrap();
+    .fetch_all(&db)
+    .await
+    .unwrap();
 
     assert!(session_ids.contains(&session2));
     assert!(session_ids.contains(&session3));
@@ -232,17 +298,21 @@ async fn test_query_tasks_for_session() {
     for i in 0..3 {
         let tid = create_task(&db, &ctx, &format!("Session task {i}")).await;
         sqlx::query("INSERT INTO session_tasks (session_id, task_id) VALUES ($1, $2)")
-            .bind(session2).bind(tid)
-            .execute(&db).await.unwrap();
+            .bind(session2)
+            .bind(tid)
+            .execute(&db)
+            .await
+            .unwrap();
         task_ids.push(tid);
     }
 
     // Query: "which tasks are in this session?"
-    let found_tasks: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT task_id FROM session_tasks WHERE session_id = $1"
-    )
-    .bind(session2)
-    .fetch_all(&db).await.unwrap();
+    let found_tasks: Vec<Uuid> =
+        sqlx::query_scalar("SELECT task_id FROM session_tasks WHERE session_id = $1")
+            .bind(session2)
+            .fetch_all(&db)
+            .await
+            .unwrap();
 
     assert_eq!(found_tasks.len(), 3);
     for tid in &task_ids {

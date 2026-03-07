@@ -1,9 +1,9 @@
-use cron::Schedule;
 use chrono::Utc;
+use cron::Schedule;
 use sqlx::PgPool;
 use std::str::FromStr;
 use std::time::Duration;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
@@ -38,7 +38,9 @@ pub async fn run(pool: PgPool) {
     }
 }
 
-async fn poll_and_dispatch(pool: &PgPool) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+async fn poll_and_dispatch(
+    pool: &PgPool,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     let now = Utc::now();
 
     // Fetch due jobs
@@ -47,7 +49,7 @@ async fn poll_and_dispatch(pool: &PgPool) -> Result<usize, Box<dyn std::error::E
          FROM scheduled_jobs
          WHERE enabled = true AND next_run_at <= $1
          ORDER BY next_run_at
-         LIMIT 50"
+         LIMIT 50",
     )
     .bind(now)
     .fetch_all(pool)
@@ -79,7 +81,7 @@ async fn poll_and_dispatch(pool: &PgPool) -> Result<usize, Box<dyn std::error::E
                 sqlx::query(
                     "UPDATE scheduled_jobs
                      SET last_run_at = $2, next_run_at = $3, updated_at = now()
-                     WHERE id = $1"
+                     WHERE id = $1",
                 )
                 .bind(job.id)
                 .bind(now)
@@ -96,7 +98,7 @@ async fn poll_and_dispatch(pool: &PgPool) -> Result<usize, Box<dyn std::error::E
                     "Invalid cron expression, disabling job"
                 );
                 sqlx::query(
-                    "UPDATE scheduled_jobs SET enabled = false, updated_at = now() WHERE id = $1"
+                    "UPDATE scheduled_jobs SET enabled = false, updated_at = now() WHERE id = $1",
                 )
                 .bind(job.id)
                 .execute(pool)
@@ -110,7 +112,9 @@ async fn poll_and_dispatch(pool: &PgPool) -> Result<usize, Box<dyn std::error::E
     Ok(dispatched)
 }
 
-fn compute_next_run(cron_expr: &str) -> Result<chrono::DateTime<Utc>, Box<dyn std::error::Error + Send + Sync>> {
+fn compute_next_run(
+    cron_expr: &str,
+) -> Result<chrono::DateTime<Utc>, Box<dyn std::error::Error + Send + Sync>> {
     // The cron crate expects 7-field expressions (sec min hour day month weekday year)
     // but users write 5-field (min hour day month weekday).
     // Prepend "0 " for seconds and append " *" for year if needed.

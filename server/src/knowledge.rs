@@ -148,10 +148,7 @@ pub async fn search_fts_only(
 ///
 /// When chunk_text changes for the same source+field, the caller should delete the
 /// old chunk (different hash → different row) and upsert the new one.
-pub async fn upsert_chunk(
-    pool: &PgPool,
-    chunk: &ChunkInput,
-) -> Result<Uuid, sqlx::Error> {
+pub async fn upsert_chunk(pool: &PgPool, chunk: &ChunkInput) -> Result<Uuid, sqlx::Error> {
     let embedding = chunk
         .embedding
         .as_ref()
@@ -188,10 +185,7 @@ pub async fn upsert_chunk(
 
 /// Remove all knowledge chunks associated with a source entity.
 /// Call this when the source entity (task, plan, etc.) is deleted.
-pub async fn delete_chunks_for_source(
-    pool: &PgPool,
-    source_id: Uuid,
-) -> Result<u64, sqlx::Error> {
+pub async fn delete_chunks_for_source(pool: &PgPool, source_id: Uuid) -> Result<u64, sqlx::Error> {
     let result = sqlx::query("DELETE FROM knowledge_chunks WHERE source_id = $1")
         .bind(source_id)
         .execute(pool)

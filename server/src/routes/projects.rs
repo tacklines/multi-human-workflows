@@ -16,17 +16,16 @@ pub async fn list_projects(
     State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<Vec<ProjectView>>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let projects = sqlx::query_as::<_, Project>(
         "SELECT p.* FROM projects p
          JOIN project_members pm ON pm.project_id = p.id
          WHERE pm.user_id = $1
-         ORDER BY p.created_at"
+         ORDER BY p.created_at",
     )
     .bind(user.id)
     .fetch_all(&state.db)
@@ -36,15 +35,20 @@ pub async fn list_projects(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(projects.into_iter().map(|p| ProjectView {
-        id: p.id,
-        name: p.name,
-        slug: p.slug,
-        ticket_prefix: p.ticket_prefix,
-        created_at: p.created_at,
-        repo_url: p.repo_url,
-        default_branch: Some(p.default_branch),
-    }).collect()))
+    Ok(Json(
+        projects
+            .into_iter()
+            .map(|p| ProjectView {
+                id: p.id,
+                name: p.name,
+                slug: p.slug,
+                ticket_prefix: p.ticket_prefix,
+                created_at: p.created_at,
+                repo_url: p.repo_url,
+                default_branch: Some(p.default_branch),
+            })
+            .collect(),
+    ))
 }
 
 /// Get a single project by ID
@@ -53,17 +57,16 @@ pub async fn get_project(
     Path(project_id): Path<Uuid>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<ProjectView>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Verify membership and fetch project in one query
     let project = sqlx::query_as::<_, Project>(
         "SELECT p.* FROM projects p
          JOIN project_members pm ON pm.project_id = p.id
-         WHERE p.id = $1 AND pm.user_id = $2"
+         WHERE p.id = $1 AND pm.user_id = $2",
     )
     .bind(project_id)
     .bind(user.id)
@@ -92,15 +95,14 @@ pub async fn create_project(
     AuthUser(claims): AuthUser,
     Json(req): Json<CreateProjectRequest>,
 ) -> Result<(StatusCode, Json<ProjectView>), StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Find the user's org, bootstrapping one if needed
     let org_id: Uuid = match sqlx::query_scalar(
-        "SELECT org_id FROM org_members WHERE user_id = $1 ORDER BY joined_at LIMIT 1"
+        "SELECT org_id FROM org_members WHERE user_id = $1 ORDER BY joined_at LIMIT 1",
     )
     .bind(user.id)
     .fetch_optional(&state.db)
@@ -112,13 +114,14 @@ pub async fn create_project(
         Some(id) => id,
         None => {
             // Auto-bootstrap org via ensure_default_project, then read org_id
-            let _ = db::ensure_default_project(&state.db, user.id).await
+            let _ = db::ensure_default_project(&state.db, user.id)
+                .await
                 .map_err(|e| {
                     tracing::error!("Failed to bootstrap default org: {e}");
                     StatusCode::INTERNAL_SERVER_ERROR
                 })?;
             sqlx::query_scalar(
-                "SELECT org_id FROM org_members WHERE user_id = $1 ORDER BY joined_at LIMIT 1"
+                "SELECT org_id FROM org_members WHERE user_id = $1 ORDER BY joined_at LIMIT 1",
             )
             .bind(user.id)
             .fetch_one(&state.db)
@@ -156,7 +159,7 @@ pub async fn create_project(
     // Add creator as project admin
     sqlx::query(
         "INSERT INTO project_members (project_id, user_id, role, joined_at)
-         VALUES ($1, $2, 'admin', NOW())"
+         VALUES ($1, $2, 'admin', NOW())",
     )
     .bind(project_id)
     .bind(user.id)
@@ -167,15 +170,18 @@ pub async fn create_project(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok((StatusCode::CREATED, Json(ProjectView {
-        id: project_id,
-        name: req.name,
-        slug,
-        ticket_prefix,
-        created_at: chrono::Utc::now(),
-        repo_url: req.repo_url,
-        default_branch: Some(default_branch),
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(ProjectView {
+            id: project_id,
+            name: req.name,
+            slug,
+            ticket_prefix,
+            created_at: chrono::Utc::now(),
+            repo_url: req.repo_url,
+            default_branch: Some(default_branch),
+        }),
+    ))
 }
 
 /// Update project settings
@@ -185,34 +191,34 @@ pub async fn update_project(
     AuthUser(claims): AuthUser,
     Json(req): Json<UpdateProjectRequest>,
 ) -> Result<Json<ProjectView>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    // Verify user is admin of this project
-    let role: Option<(ProjectRole,)> = sqlx::query_as(
-        "SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2"
-    )
-    .bind(project_id)
-    .bind(user.id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to check project membership: {e}");
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+    // Verify user is admin of this project
+    let role: Option<(ProjectRole,)> =
+        sqlx::query_as("SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2")
+            .bind(project_id)
+            .bind(user.id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to check project membership: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
     match role {
-        Some((ProjectRole::Admin,)) => {},
+        Some((ProjectRole::Admin,)) => {}
         Some(_) => return Err(StatusCode::FORBIDDEN),
         None => return Err(StatusCode::NOT_FOUND),
     }
 
     // Build dynamic update
-    let has_updates = req.name.is_some() || req.ticket_prefix.is_some()
-        || req.repo_url.is_some() || req.default_branch.is_some();
+    let has_updates = req.name.is_some()
+        || req.ticket_prefix.is_some()
+        || req.repo_url.is_some()
+        || req.default_branch.is_some();
     let project = if has_updates {
         let mut set_clauses = Vec::new();
         let mut i = 2; // $1 is project_id
@@ -286,15 +292,14 @@ pub async fn list_project_sessions(
     Path(project_id): Path<Uuid>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<Vec<SessionView>>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Verify membership
     let _: (Uuid,) = sqlx::query_as(
-        "SELECT project_id FROM project_members WHERE project_id = $1 AND user_id = $2"
+        "SELECT project_id FROM project_members WHERE project_id = $1 AND user_id = $2",
     )
     .bind(project_id)
     .bind(user.id)
@@ -316,7 +321,7 @@ pub async fn list_project_sessions(
         })?;
 
     let sessions = sqlx::query_as::<_, Session>(
-        "SELECT * FROM sessions WHERE project_id = $1 ORDER BY created_at DESC"
+        "SELECT * FROM sessions WHERE project_id = $1 ORDER BY created_at DESC",
     )
     .bind(project_id)
     .fetch_all(&state.db)
@@ -337,35 +342,47 @@ pub async fn list_project_sessions(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Group participants by session_id
-    let mut participants_by_session: std::collections::HashMap<Uuid, Vec<Participant>> = std::collections::HashMap::new();
+    let mut participants_by_session: std::collections::HashMap<Uuid, Vec<Participant>> =
+        std::collections::HashMap::new();
     for p in all_participants {
-        participants_by_session.entry(p.session_id).or_default().push(p);
+        participants_by_session
+            .entry(p.session_id)
+            .or_default()
+            .push(p);
     }
 
-    let views: Vec<SessionView> = sessions.into_iter().map(|session| {
-        let online_ids = state.connections.online_participant_ids(&session.code);
-        let participants = participants_by_session.remove(&session.id).unwrap_or_default();
+    let views: Vec<SessionView> = sessions
+        .into_iter()
+        .map(|session| {
+            let online_ids = state.connections.online_participant_ids(&session.code);
+            let participants = participants_by_session
+                .remove(&session.id)
+                .unwrap_or_default();
 
-        SessionView {
-            id: session.id,
-            code: session.code.clone(),
-            name: session.name,
-            project_id: session.project_id,
-            project_name: project.name.clone(),
-            created_at: session.created_at,
-            participants: participants.into_iter().map(|p| {
-                let is_online = online_ids.contains(&p.id.to_string());
-                ParticipantView {
-                    id: p.id,
-                    display_name: p.display_name,
-                    participant_type: p.participant_type,
-                    sponsor_id: p.sponsor_id,
-                    joined_at: p.joined_at,
-                    is_online,
-                }
-            }).collect(),
-        }
-    }).collect();
+            SessionView {
+                id: session.id,
+                code: session.code.clone(),
+                name: session.name,
+                project_id: session.project_id,
+                project_name: project.name.clone(),
+                created_at: session.created_at,
+                participants: participants
+                    .into_iter()
+                    .map(|p| {
+                        let is_online = online_ids.contains(&p.id.to_string());
+                        ParticipantView {
+                            id: p.id,
+                            display_name: p.display_name,
+                            participant_type: p.participant_type,
+                            sponsor_id: p.sponsor_id,
+                            joined_at: p.joined_at,
+                            is_online,
+                        }
+                    })
+                    .collect(),
+            }
+        })
+        .collect();
 
     Ok(Json(views))
 }

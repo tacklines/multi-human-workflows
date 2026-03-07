@@ -79,7 +79,7 @@ async fn verify_project_member(
     user_id: Uuid,
 ) -> Result<(), StatusCode> {
     let exists: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT project_id FROM project_members WHERE project_id = $1 AND user_id = $2"
+        "SELECT project_id FROM project_members WHERE project_id = $1 AND user_id = $2",
     )
     .bind(project_id)
     .bind(user_id)
@@ -109,8 +109,13 @@ fn validate_transition(current: PlanStatus, requested: &str) -> Result<PlanStatu
 
     let allowed = match current {
         PlanStatus::Draft => matches!(new_status, PlanStatus::Review | PlanStatus::Abandoned),
-        PlanStatus::Review => matches!(new_status, PlanStatus::Accepted | PlanStatus::Draft | PlanStatus::Abandoned),
-        PlanStatus::Accepted => matches!(new_status, PlanStatus::Superseded | PlanStatus::Abandoned),
+        PlanStatus::Review => matches!(
+            new_status,
+            PlanStatus::Accepted | PlanStatus::Draft | PlanStatus::Abandoned
+        ),
+        PlanStatus::Accepted => {
+            matches!(new_status, PlanStatus::Superseded | PlanStatus::Abandoned)
+        }
         PlanStatus::Superseded | PlanStatus::Abandoned => false,
     };
 
@@ -129,17 +134,16 @@ pub async fn list_plans(
     Query(query): Query<ListPlansQuery>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<Vec<PlanListView>>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     verify_project_member(&state.db, project_id, user.id).await?;
 
     let plans = if let Some(ref status) = query.status {
         sqlx::query_as::<_, Plan>(
-            "SELECT * FROM plans WHERE project_id = $1 AND status = $2 ORDER BY updated_at DESC"
+            "SELECT * FROM plans WHERE project_id = $1 AND status = $2 ORDER BY updated_at DESC",
         )
         .bind(project_id)
         .bind(status)
@@ -147,7 +151,7 @@ pub async fn list_plans(
         .await
     } else {
         sqlx::query_as::<_, Plan>(
-            "SELECT * FROM plans WHERE project_id = $1 ORDER BY updated_at DESC"
+            "SELECT * FROM plans WHERE project_id = $1 ORDER BY updated_at DESC",
         )
         .bind(project_id)
         .fetch_all(&state.db)
@@ -158,15 +162,20 @@ pub async fn list_plans(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(plans.into_iter().map(|p| PlanListView {
-        id: p.id,
-        title: p.title,
-        slug: p.slug,
-        status: p.status,
-        author_id: p.author_id,
-        created_at: p.created_at,
-        updated_at: p.updated_at,
-    }).collect()))
+    Ok(Json(
+        plans
+            .into_iter()
+            .map(|p| PlanListView {
+                id: p.id,
+                title: p.title,
+                slug: p.slug,
+                status: p.status,
+                author_id: p.author_id,
+                created_at: p.created_at,
+                updated_at: p.updated_at,
+            })
+            .collect(),
+    ))
 }
 
 pub async fn get_plan(
@@ -174,26 +183,23 @@ pub async fn get_plan(
     Path((project_id, plan_id)): Path<(Uuid, Uuid)>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<PlanDetailView>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     verify_project_member(&state.db, project_id, user.id).await?;
 
-    let plan = sqlx::query_as::<_, Plan>(
-        "SELECT * FROM plans WHERE id = $1 AND project_id = $2"
-    )
-    .bind(plan_id)
-    .bind(project_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to get plan: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let plan = sqlx::query_as::<_, Plan>("SELECT * FROM plans WHERE id = $1 AND project_id = $2")
+        .bind(plan_id)
+        .bind(project_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get plan: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(Json(PlanDetailView {
         id: plan.id,
@@ -215,11 +221,10 @@ pub async fn create_plan(
     AuthUser(claims): AuthUser,
     Json(req): Json<CreatePlanRequest>,
 ) -> Result<(StatusCode, Json<PlanDetailView>), StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     verify_project_member(&state.db, project_id, user.id).await?;
 
@@ -229,7 +234,7 @@ pub async fn create_plan(
     let plan = sqlx::query_as::<_, Plan>(
         "INSERT INTO plans (project_id, author_id, title, slug, body)
          VALUES ($1, $2, $3, $4, $5)
-         RETURNING *"
+         RETURNING *",
     )
     .bind(project_id)
     .bind(user.id)
@@ -243,18 +248,21 @@ pub async fn create_plan(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok((StatusCode::CREATED, Json(PlanDetailView {
-        id: plan.id,
-        project_id: plan.project_id,
-        author_id: plan.author_id,
-        title: plan.title,
-        slug: plan.slug,
-        body: plan.body,
-        status: plan.status,
-        parent_id: plan.parent_id,
-        created_at: plan.created_at,
-        updated_at: plan.updated_at,
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(PlanDetailView {
+            id: plan.id,
+            project_id: plan.project_id,
+            author_id: plan.author_id,
+            title: plan.title,
+            slug: plan.slug,
+            body: plan.body,
+            status: plan.status,
+            parent_id: plan.parent_id,
+            created_at: plan.created_at,
+            updated_at: plan.updated_at,
+        }),
+    ))
 }
 
 pub async fn update_plan(
@@ -263,27 +271,25 @@ pub async fn update_plan(
     AuthUser(claims): AuthUser,
     Json(req): Json<UpdatePlanRequest>,
 ) -> Result<Json<PlanDetailView>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     verify_project_member(&state.db, project_id, user.id).await?;
 
     // Fetch current plan
-    let current = sqlx::query_as::<_, Plan>(
-        "SELECT * FROM plans WHERE id = $1 AND project_id = $2"
-    )
-    .bind(plan_id)
-    .bind(project_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to get plan: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let current =
+        sqlx::query_as::<_, Plan>("SELECT * FROM plans WHERE id = $1 AND project_id = $2")
+            .bind(plan_id)
+            .bind(project_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to get plan: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .ok_or(StatusCode::NOT_FOUND)?;
 
     // Validate status transition if requested
     let new_status = if let Some(ref status_str) = req.status {

@@ -11,7 +11,16 @@ fn next_ticket() -> i32 {
     TICKET_SEQ.fetch_add(1, Ordering::Relaxed)
 }
 
-async fn insert_task(db: &PgPool, id: Uuid, project_id: Uuid, session_id: Uuid, title: &str, task_type: &str, status: &str, created_by: Uuid) {
+async fn insert_task(
+    db: &PgPool,
+    id: Uuid,
+    project_id: Uuid,
+    session_id: Uuid,
+    title: &str,
+    task_type: &str,
+    status: &str,
+    created_by: Uuid,
+) {
     sqlx::query(
         "INSERT INTO tasks (id, project_id, session_id, ticket_number, title, task_type, status, created_by, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())"
@@ -24,8 +33,13 @@ async fn insert_task(db: &PgPool, id: Uuid, project_id: Uuid, session_id: Uuid, 
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -37,14 +51,27 @@ async fn create_test_context(db: &PgPool) -> (Uuid, Uuid, Uuid, Uuid) {
         .execute(db).await.unwrap();
 
     let org_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
-        .bind(org_id).bind("Test Org").bind(format!("test-org-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
+    )
+    .bind(org_id)
+    .bind("Test Org")
+    .bind(format!("test-org-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let project_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(project_id).bind(org_id).bind("Test Project").bind(format!("test-proj-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .bind("Test Project")
+    .bind(format!("test-proj-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let session_id = Uuid::new_v4();
     let code = format!("AE{}", &Uuid::new_v4().to_string()[..4]).to_uppercase();
@@ -68,7 +95,17 @@ async fn test_create_activity_event() {
     let (session_id, project_id, participant_id, _) = create_test_context(&db).await;
 
     let task_id = Uuid::new_v4();
-    insert_task(&db, task_id, project_id, session_id, "Test Task", "task", "open", participant_id).await;
+    insert_task(
+        &db,
+        task_id,
+        project_id,
+        session_id,
+        "Test Task",
+        "task",
+        "open",
+        participant_id,
+    )
+    .await;
 
     let event_id: (Uuid,) = sqlx::query_as(
         "INSERT INTO activity_events (project_id, session_id, actor_id, event_type, target_type, target_id, summary)
@@ -79,8 +116,12 @@ async fn test_create_activity_event() {
     .fetch_one(&db).await.unwrap();
 
     let (event_type, target_type, summary): (String, String, String) = sqlx::query_as(
-        "SELECT event_type, target_type, summary FROM activity_events WHERE id = $1"
-    ).bind(event_id.0).fetch_one(&db).await.unwrap();
+        "SELECT event_type, target_type, summary FROM activity_events WHERE id = $1",
+    )
+    .bind(event_id.0)
+    .fetch_one(&db)
+    .await
+    .unwrap();
 
     assert_eq!(event_type, "task_created");
     assert_eq!(target_type, "task");
@@ -99,7 +140,10 @@ async fn test_activity_event_type_constraint() {
     .bind(project_id).bind(session_id).bind(participant_id).bind(Uuid::new_v4())
     .execute(&db).await;
 
-    assert!(result.is_err(), "Invalid event_type should be rejected by CHECK constraint");
+    assert!(
+        result.is_err(),
+        "Invalid event_type should be rejected by CHECK constraint"
+    );
 }
 
 #[tokio::test]
@@ -114,7 +158,10 @@ async fn test_activity_target_type_constraint() {
     .bind(project_id).bind(session_id).bind(participant_id).bind(Uuid::new_v4())
     .execute(&db).await;
 
-    assert!(result.is_err(), "Invalid target_type should be rejected by CHECK constraint");
+    assert!(
+        result.is_err(),
+        "Invalid target_type should be rejected by CHECK constraint"
+    );
 }
 
 #[tokio::test]
@@ -142,7 +189,10 @@ async fn test_activity_event_extended_types() {
         .bind(format!("Test: {event_type}"))
         .execute(&db).await;
 
-        assert!(result.is_ok(), "event_type={event_type} + target_type={target_type} should be accepted");
+        assert!(
+            result.is_ok(),
+            "event_type={event_type} + target_type={target_type} should be accepted"
+        );
     }
 }
 
@@ -154,7 +204,17 @@ async fn test_activity_events_ordered_by_time() {
     let target_id = Uuid::new_v4();
 
     // Insert task for FK
-    insert_task(&db, target_id, project_id, session_id, "Target Task", "task", "open", participant_id).await;
+    insert_task(
+        &db,
+        target_id,
+        project_id,
+        session_id,
+        "Target Task",
+        "task",
+        "open",
+        participant_id,
+    )
+    .await;
 
     for event in ["task_created", "task_updated", "task_closed"] {
         sqlx::query(
@@ -188,7 +248,17 @@ async fn test_activity_event_with_metadata() {
     });
 
     let target_id = Uuid::new_v4();
-    insert_task(&db, target_id, project_id, session_id, "Meta Task", "task", "open", participant_id).await;
+    insert_task(
+        &db,
+        target_id,
+        project_id,
+        session_id,
+        "Meta Task",
+        "task",
+        "open",
+        participant_id,
+    )
+    .await;
 
     sqlx::query(
         "INSERT INTO activity_events (project_id, session_id, actor_id, event_type, target_type, target_id, summary, metadata)
@@ -198,8 +268,13 @@ async fn test_activity_event_with_metadata() {
     .execute(&db).await.unwrap();
 
     let (stored_metadata,): (serde_json::Value,) = sqlx::query_as(
-        "SELECT metadata FROM activity_events WHERE project_id = $1 AND target_id = $2"
-    ).bind(project_id).bind(target_id).fetch_one(&db).await.unwrap();
+        "SELECT metadata FROM activity_events WHERE project_id = $1 AND target_id = $2",
+    )
+    .bind(project_id)
+    .bind(target_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
 
     assert_eq!(stored_metadata["old_status"], "open");
     assert_eq!(stored_metadata["new_status"], "in_progress");
@@ -224,8 +299,12 @@ async fn test_record_tool_invocation() {
     .fetch_one(&db).await.unwrap();
 
     let (tool_name, is_error, duration_ms): (String, bool, i32) = sqlx::query_as(
-        "SELECT tool_name, is_error, duration_ms FROM tool_invocations WHERE id = $1"
-    ).bind(inv_id).fetch_one(&db).await.unwrap();
+        "SELECT tool_name, is_error, duration_ms FROM tool_invocations WHERE id = $1",
+    )
+    .bind(inv_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
 
     assert_eq!(tool_name, "create_task");
     assert!(!is_error);
@@ -247,8 +326,12 @@ async fn test_tool_invocation_error() {
     .execute(&db).await.unwrap();
 
     let error_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM tool_invocations WHERE session_id = $1 AND is_error = true"
-    ).bind(session_id).fetch_one(&db).await.unwrap();
+        "SELECT COUNT(*) FROM tool_invocations WHERE session_id = $1 AND is_error = true",
+    )
+    .bind(session_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
 
     assert_eq!(error_count, 1);
 }
@@ -278,13 +361,19 @@ async fn test_tool_invocations_by_participant() {
         ).bind(session_id).bind(agent_id).execute(&db).await.unwrap();
     }
 
-    let human_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM tool_invocations WHERE participant_id = $1"
-    ).bind(participant_id).fetch_one(&db).await.unwrap();
+    let human_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM tool_invocations WHERE participant_id = $1")
+            .bind(participant_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
-    let agent_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM tool_invocations WHERE participant_id = $1"
-    ).bind(agent_id).fetch_one(&db).await.unwrap();
+    let agent_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM tool_invocations WHERE participant_id = $1")
+            .bind(agent_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(human_count, 2);
     assert_eq!(agent_count, 3);
@@ -298,17 +387,33 @@ async fn test_task_commit_hashes_array() {
     let (session_id, project_id, participant_id, _) = create_test_context(&db).await;
 
     let task_id = Uuid::new_v4();
-    insert_task(&db, task_id, project_id, session_id, "Provenance Task", "task", "open", participant_id).await;
+    insert_task(
+        &db,
+        task_id,
+        project_id,
+        session_id,
+        "Provenance Task",
+        "task",
+        "open",
+        participant_id,
+    )
+    .await;
 
     // Add commit hashes
     let hashes = vec!["abc123", "def456", "789ghi"];
     sqlx::query("UPDATE tasks SET commit_hashes = $1 WHERE id = $2")
-        .bind(&hashes).bind(task_id)
-        .execute(&db).await.unwrap();
+        .bind(&hashes)
+        .bind(task_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
-    let (stored_hashes,): (Vec<String>,) = sqlx::query_as(
-        "SELECT commit_hashes FROM tasks WHERE id = $1"
-    ).bind(task_id).fetch_one(&db).await.unwrap();
+    let (stored_hashes,): (Vec<String>,) =
+        sqlx::query_as("SELECT commit_hashes FROM tasks WHERE id = $1")
+            .bind(task_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(stored_hashes.len(), 3);
     assert_eq!(stored_hashes[0], "abc123");
@@ -327,12 +432,18 @@ async fn test_task_no_code_change_flag() {
     .bind(task_id).bind(project_id).bind(session_id).bind(next_ticket()).bind(participant_id)
     .execute(&db).await.unwrap();
 
-    let (no_code, hashes): (bool, Vec<String>) = sqlx::query_as(
-        "SELECT no_code_change, commit_hashes FROM tasks WHERE id = $1"
-    ).bind(task_id).fetch_one(&db).await.unwrap();
+    let (no_code, hashes): (bool, Vec<String>) =
+        sqlx::query_as("SELECT no_code_change, commit_hashes FROM tasks WHERE id = $1")
+            .bind(task_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert!(no_code);
-    assert!(hashes.is_empty(), "No commits expected for no-code-change task");
+    assert!(
+        hashes.is_empty(),
+        "No commits expected for no-code-change task"
+    );
 }
 
 #[tokio::test]
@@ -342,7 +453,17 @@ async fn test_task_source_provenance() {
 
     // Create parent task
     let parent_id = Uuid::new_v4();
-    insert_task(&db, parent_id, project_id, session_id, "Parent Task", "task", "in_progress", participant_id).await;
+    insert_task(
+        &db,
+        parent_id,
+        project_id,
+        session_id,
+        "Parent Task",
+        "task",
+        "in_progress",
+        participant_id,
+    )
+    .await;
 
     // Create child task with source_task_id pointing to parent
     let child_id = Uuid::new_v4();
@@ -354,9 +475,12 @@ async fn test_task_source_provenance() {
     .bind(participant_id).bind(parent_id)
     .execute(&db).await.unwrap();
 
-    let (source_id,): (Option<Uuid>,) = sqlx::query_as(
-        "SELECT source_task_id FROM tasks WHERE id = $1"
-    ).bind(child_id).fetch_one(&db).await.unwrap();
+    let (source_id,): (Option<Uuid>,) =
+        sqlx::query_as("SELECT source_task_id FROM tasks WHERE id = $1")
+            .bind(child_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(source_id.unwrap(), parent_id);
 }
@@ -367,7 +491,17 @@ async fn test_source_task_set_null_on_delete() {
     let (session_id, project_id, participant_id, _) = create_test_context(&db).await;
 
     let source_id = Uuid::new_v4();
-    insert_task(&db, source_id, project_id, session_id, "Source", "task", "open", participant_id).await;
+    insert_task(
+        &db,
+        source_id,
+        project_id,
+        session_id,
+        "Source",
+        "task",
+        "open",
+        participant_id,
+    )
+    .await;
 
     let derived_id = Uuid::new_v4();
     sqlx::query(
@@ -379,12 +513,22 @@ async fn test_source_task_set_null_on_delete() {
     .execute(&db).await.unwrap();
 
     // Delete the source task
-    sqlx::query("DELETE FROM tasks WHERE id = $1").bind(source_id).execute(&db).await.unwrap();
+    sqlx::query("DELETE FROM tasks WHERE id = $1")
+        .bind(source_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Derived task should still exist with source_task_id set to NULL
-    let (source_ref,): (Option<Uuid>,) = sqlx::query_as(
-        "SELECT source_task_id FROM tasks WHERE id = $1"
-    ).bind(derived_id).fetch_one(&db).await.unwrap();
+    let (source_ref,): (Option<Uuid>,) =
+        sqlx::query_as("SELECT source_task_id FROM tasks WHERE id = $1")
+            .bind(derived_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
-    assert!(source_ref.is_none(), "source_task_id should be NULL after source deletion (ON DELETE SET NULL)");
+    assert!(
+        source_ref.is_none(),
+        "source_task_id should be NULL after source deletion (ON DELETE SET NULL)"
+    );
 }

@@ -82,23 +82,24 @@ pub async fn create_workspace(
     require_coder(&state)?;
 
     // Verify task exists and belongs to this project
-    let task: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM tasks WHERE id = $1 AND project_id = $2",
-    )
-    .bind(req.task_id)
-    .bind(project_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to check task: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let task: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM tasks WHERE id = $1 AND project_id = $2")
+            .bind(req.task_id)
+            .bind(project_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to check task: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
     if task.is_none() {
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let template_name = req.template_name.unwrap_or_else(|| "seam-agent".to_string());
+    let template_name = req
+        .template_name
+        .unwrap_or_else(|| "seam-agent".to_string());
 
     // Insert workspace record in pending state
     let workspace = sqlx::query_as::<_, Workspace>(
@@ -144,10 +145,21 @@ pub async fn create_workspace(
 
     tokio::spawn(async move {
         let client = coder::CoderClient::new(coder_url, coder_token);
-        provision_workspace(&db, &client, ws_id, &template_name, branch.as_deref(), user_id).await;
+        provision_workspace(
+            &db,
+            &client,
+            ws_id,
+            &template_name,
+            branch.as_deref(),
+            user_id,
+        )
+        .await;
     });
 
-    Ok((StatusCode::CREATED, Json(workspace_view(&workspace, None, None))))
+    Ok((
+        StatusCode::CREATED,
+        Json(workspace_view(&workspace, None, None)),
+    ))
 }
 
 /// Look up the org_id for a workspace's project.
@@ -174,12 +186,11 @@ async fn provision_workspace(
     user_id: Uuid,
 ) {
     // Mark as creating
-    let _ = sqlx::query(
-        "UPDATE workspaces SET status = 'creating', updated_at = NOW() WHERE id = $1",
-    )
-    .bind(workspace_id)
-    .execute(db)
-    .await;
+    let _ =
+        sqlx::query("UPDATE workspaces SET status = 'creating', updated_at = NOW() WHERE id = $1")
+            .bind(workspace_id)
+            .execute(db)
+            .await;
 
     // Resolve template
     let template = match client.get_template_by_name(template_name).await {
@@ -356,32 +367,40 @@ pub async fn list_workspaces(
 
     // Batch-fetch participant names and session codes for workspaces that have a participant_id
     let participant_ids: Vec<Uuid> = workspaces.iter().filter_map(|w| w.participant_id).collect();
-    let participant_info: std::collections::HashMap<Uuid, (String, String)> = if participant_ids.is_empty() {
-        std::collections::HashMap::new()
-    } else {
-        sqlx::query_as::<_, (Uuid, String, String)>(
-            "SELECT p.id, p.display_name, s.code
+    let participant_info: std::collections::HashMap<Uuid, (String, String)> =
+        if participant_ids.is_empty() {
+            std::collections::HashMap::new()
+        } else {
+            sqlx::query_as::<_, (Uuid, String, String)>(
+                "SELECT p.id, p.display_name, s.code
              FROM participants p
              JOIN sessions s ON s.id = p.session_id
              WHERE p.id = ANY($1)",
-        )
-        .bind(&participant_ids)
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(id, name, code)| (id, (name, code)))
-        .collect()
-    };
-
-    Ok(Json(workspaces.iter().map(|w| {
-        let info = w.participant_id.and_then(|pid| participant_info.get(&pid).cloned());
-        let (name, code) = match info {
-            Some((n, c)) => (Some(n), Some(c)),
-            None => (None, None),
+            )
+            .bind(&participant_ids)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(id, name, code)| (id, (name, code)))
+            .collect()
         };
-        workspace_view(w, name, code)
-    }).collect()))
+
+    Ok(Json(
+        workspaces
+            .iter()
+            .map(|w| {
+                let info = w
+                    .participant_id
+                    .and_then(|pid| participant_info.get(&pid).cloned());
+                let (name, code) = match info {
+                    Some((n, c)) => (Some(n), Some(c)),
+                    None => (None, None),
+                };
+                workspace_view(w, name, code)
+            })
+            .collect(),
+    ))
 }
 
 /// GET /api/projects/:project_id/workspaces/:workspace_id
@@ -471,12 +490,11 @@ pub async fn stop_workspace(
     })?;
 
     // Update to stopping
-    let _ = sqlx::query(
-        "UPDATE workspaces SET status = 'stopping', updated_at = NOW() WHERE id = $1",
-    )
-    .bind(workspace_id)
-    .execute(&state.db)
-    .await;
+    let _ =
+        sqlx::query("UPDATE workspaces SET status = 'stopping', updated_at = NOW() WHERE id = $1")
+            .bind(workspace_id)
+            .execute(&state.db)
+            .await;
 
     match coder_client.stop_workspace(coder_ws_id).await {
         Ok(_) => {
@@ -602,29 +620,27 @@ pub async fn workspace_events(
     verify_project_member(&state.db, project_id, user.id).await?;
 
     // Verify workspace belongs to project
-    let exists: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM workspaces WHERE id = $1 AND project_id = $2",
-    )
-    .bind(workspace_id)
-    .bind(project_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to check workspace: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let exists: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM workspaces WHERE id = $1 AND project_id = $2")
+            .bind(workspace_id)
+            .bind(project_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to check workspace: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
     if exists.is_none() {
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let events =
-        crate::events::events_for_aggregate(&state.db, "workspace", workspace_id, None)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch workspace events: {e}");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+    let events = crate::events::events_for_aggregate(&state.db, "workspace", workspace_id, None)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to fetch workspace events: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(events))
 }

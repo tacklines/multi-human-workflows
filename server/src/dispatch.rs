@@ -94,12 +94,10 @@ pub async fn resolve_workspace(
     .fetch_optional(db)
     .await?;
 
-    if let Some((ws_id, coder_ws_id)) = stopped {
-        if let Some(coder_id) = coder_ws_id {
-            tracing::info!(workspace_id = %ws_id, "Waking stopped workspace");
-            wake_workspace(db, ws_id, coder_id).await?;
-            return Ok(ws_id);
-        }
+    if let Some((ws_id, Some(coder_id))) = stopped {
+        tracing::info!(workspace_id = %ws_id, "Waking stopped workspace");
+        wake_workspace(db, ws_id, coder_id).await?;
+        return Ok(ws_id);
     }
 
     // 4. Create a new workspace
@@ -116,12 +114,19 @@ fn pool_key_for(project_id: Uuid, branch: Option<&str>) -> String {
 }
 
 /// Wake a stopped Coder workspace via the API.
-async fn wake_workspace(db: &PgPool, workspace_id: Uuid, coder_workspace_id: Uuid) -> Result<(), DispatchError> {
+async fn wake_workspace(
+    db: &PgPool,
+    workspace_id: Uuid,
+    coder_workspace_id: Uuid,
+) -> Result<(), DispatchError> {
     let coder_url = std::env::var("CODER_URL").map_err(|_| DispatchError::CoderNotConfigured)?;
-    let coder_token = std::env::var("CODER_TOKEN").map_err(|_| DispatchError::CoderNotConfigured)?;
+    let coder_token =
+        std::env::var("CODER_TOKEN").map_err(|_| DispatchError::CoderNotConfigured)?;
 
     let client = crate::coder::CoderClient::new(coder_url, coder_token);
-    client.start_workspace(coder_workspace_id).await
+    client
+        .start_workspace(coder_workspace_id)
+        .await
         .map_err(|e| DispatchError::CoderApi(e.to_string()))?;
 
     // Update status to running
@@ -160,7 +165,8 @@ async fn create_pool_workspace(
     user_id: Uuid,
 ) -> Result<Uuid, DispatchError> {
     let coder_url = std::env::var("CODER_URL").map_err(|_| DispatchError::CoderNotConfigured)?;
-    let coder_token = std::env::var("CODER_TOKEN").map_err(|_| DispatchError::CoderNotConfigured)?;
+    let coder_token =
+        std::env::var("CODER_TOKEN").map_err(|_| DispatchError::CoderNotConfigured)?;
     let client = crate::coder::CoderClient::new(coder_url, coder_token);
 
     let template_name = "seam-agent";
@@ -189,20 +195,17 @@ async fn create_pool_workspace(
     let mut params = vec![];
 
     // Fetch project repo_url for cloning
-    let project: Option<(Option<String>, String)> = sqlx::query_as(
-        "SELECT repo_url, default_branch FROM projects WHERE id = $1",
-    )
-    .bind(project_id)
-    .fetch_optional(db)
-    .await?;
+    let project: Option<(Option<String>, String)> =
+        sqlx::query_as("SELECT repo_url, default_branch FROM projects WHERE id = $1")
+            .bind(project_id)
+            .fetch_optional(db)
+            .await?;
 
-    if let Some((repo_url, _default_branch)) = &project {
-        if let Some(url) = repo_url {
-            params.push(crate::coder::RichParameterValue {
-                name: "repo_url".to_string(),
-                value: url.clone(),
-            });
-        }
+    if let Some((Some(url), _default_branch)) = &project {
+        params.push(crate::coder::RichParameterValue {
+            name: "repo_url".to_string(),
+            value: url.clone(),
+        });
     }
 
     if let Some(b) = branch {
@@ -228,7 +231,8 @@ async fn create_pool_workspace(
 
     // Inject credentials
     if let Some(org_id) = org_id_for_project(db, project_id).await {
-        if let Ok(creds) = crate::credentials::credentials_for_workspace(db, org_id, user_id).await {
+        if let Ok(creds) = crate::credentials::credentials_for_workspace(db, org_id, user_id).await
+        {
             if !creds.is_empty() {
                 let creds_map: serde_json::Map<String, serde_json::Value> = creds
                     .into_iter()
@@ -349,12 +353,13 @@ pub async fn resolve_model_config(
 
     // Task-level config (between request params and user prefs)
     if let Some(tid) = task_id {
-        if let Ok(Some((task_hint, task_budget, task_provider))) = sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>)>(
-            "SELECT model_hint, budget_tier, provider FROM tasks WHERE id = $1",
-        )
-        .bind(tid)
-        .fetch_optional(db)
-        .await
+        if let Ok(Some((task_hint, task_budget, task_provider))) =
+            sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>)>(
+                "SELECT model_hint, budget_tier, provider FROM tasks WHERE id = $1",
+            )
+            .bind(tid)
+            .fetch_optional(db)
+            .await
         {
             if model_hint.is_none() {
                 model_hint = task_hint;
@@ -525,7 +530,19 @@ pub async fn dispatch_invocation(
     .fetch_optional(db)
     .await?
     .map(
-        |(id, workspace_id, session_id, participant_id, agent_perspective, prompt, system_prompt_append, resume_session_id, model_hint, budget_tier, provider): (
+        |(
+            id,
+            workspace_id,
+            session_id,
+            participant_id,
+            agent_perspective,
+            prompt,
+            system_prompt_append,
+            resume_session_id,
+            model_hint,
+            budget_tier,
+            provider,
+        ): (
             Uuid,
             Uuid,
             Option<Uuid>,
@@ -770,10 +787,7 @@ pub async fn dispatch_invocation(
     // cost_usd may appear at the top level as cost_usd or total_cost
     let cost_usd: Option<f64> = result_json
         .as_ref()
-        .and_then(|v| {
-            v.get("cost_usd")
-                .or_else(|| v.get("total_cost"))
-        })
+        .and_then(|v| v.get("cost_usd").or_else(|| v.get("total_cost")))
         .and_then(|v| v.as_f64());
 
     // 10. Update invocation to completed or failed

@@ -17,11 +17,10 @@ pub async fn get_me(
     State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<MeResponse>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(MeResponse {
         id: user.id,

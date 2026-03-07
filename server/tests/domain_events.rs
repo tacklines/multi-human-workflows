@@ -7,8 +7,13 @@ use uuid::Uuid;
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -129,13 +134,12 @@ async fn test_event_payload_preserved() {
     .await
     .unwrap();
 
-    let stored: (serde_json::Value,) = sqlx::query_as(
-        "SELECT payload FROM domain_events WHERE aggregate_id = $1",
-    )
-    .bind(aggregate_id)
-    .fetch_one(&db)
-    .await
-    .unwrap();
+    let stored: (serde_json::Value,) =
+        sqlx::query_as("SELECT payload FROM domain_events WHERE aggregate_id = $1")
+            .bind(aggregate_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(stored.0, payload);
     assert_eq!(stored.0["nested"]["count"], 42);
@@ -163,13 +167,10 @@ async fn test_pg_notify_trigger() {
     // Drain and find our specific notification (other tests may emit events concurrently)
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {
-        let notification = tokio::time::timeout_at(
-            deadline,
-            listener.recv(),
-        )
-        .await
-        .expect("Timeout waiting for PG NOTIFY")
-        .expect("Error receiving notification");
+        let notification = tokio::time::timeout_at(deadline, listener.recv())
+            .await
+            .expect("Timeout waiting for PG NOTIFY")
+            .expect("Error receiving notification");
 
         let payload: serde_json::Value = serde_json::from_str(notification.payload()).unwrap();
         if payload["aggregate_id"] == aggregate_id.to_string() {

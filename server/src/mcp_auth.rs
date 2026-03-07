@@ -4,7 +4,7 @@ use bytes::Bytes;
 use futures::future::BoxFuture;
 use http::{Request, Response, StatusCode};
 use http_body::Body;
-use http_body_util::{Full, combinators::BoxBody, BodyExt};
+use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use uuid::Uuid;
 
 use crate::auth::JwksCache;
@@ -43,7 +43,11 @@ pub struct McpAuthLayer {
 
 impl McpAuthLayer {
     pub fn new(jwks: JwksCache, enabled: bool, resource_url: String) -> Self {
-        Self { jwks, enabled, resource_url }
+        Self {
+            jwks,
+            enabled,
+            resource_url,
+        }
     }
 }
 
@@ -140,13 +144,20 @@ where
             let identity = match jwks.validate_token(token).await {
                 Ok(claims) => McpIdentity {
                     subject: claims.sub.clone(),
-                    display_name: claims.preferred_username.clone()
+                    display_name: claims
+                        .preferred_username
+                        .clone()
                         .or(claims.name.clone())
                         .unwrap_or_else(|| claims.sub.clone()),
                     user_id: None,
                     auth_method: AuthMethod::Jwt,
                 },
-                Err(_) => return Ok(unauthorized_response("Invalid or expired token", &resource_url)),
+                Err(_) => {
+                    return Ok(unauthorized_response(
+                        "Invalid or expired token",
+                        &resource_url,
+                    ))
+                }
             };
 
             // Inject identity into request extensions for tool handlers.

@@ -85,10 +85,12 @@ async fn poll_and_publish(
     }
 
     // Advance cursor atomically
-    sqlx::query("UPDATE event_bridge_cursor SET last_event_id = $1, updated_at = now() WHERE id = 1")
-        .bind(last_id)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "UPDATE event_bridge_cursor SET last_event_id = $1, updated_at = now() WHERE id = 1",
+    )
+    .bind(last_id)
+    .execute(pool)
+    .await?;
 
     Ok(count)
 }

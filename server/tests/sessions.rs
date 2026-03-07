@@ -7,8 +7,13 @@ use uuid::Uuid;
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -21,14 +26,27 @@ async fn create_test_context(db: &PgPool) -> (Uuid, Uuid, Uuid) {
         .execute(db).await.unwrap();
 
     let org_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
-        .bind(org_id).bind("Test Org").bind(format!("test-org-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
+    )
+    .bind(org_id)
+    .bind("Test Org")
+    .bind(format!("test-org-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let project_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(project_id).bind(org_id).bind("Test Project").bind(format!("test-proj-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .bind("Test Project")
+    .bind(format!("test-proj-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     (user_id, org_id, project_id)
 }
@@ -46,11 +64,12 @@ async fn test_create_session() {
     .bind(session_id).bind(project_id).bind(&code).bind("Sprint Planning").bind(user_id)
     .execute(&db).await.unwrap();
 
-    let row: (Uuid, String, Option<String>, Uuid) = sqlx::query_as(
-        "SELECT project_id, code, name, created_by FROM sessions WHERE id = $1"
-    )
-    .bind(session_id)
-    .fetch_one(&db).await.unwrap();
+    let row: (Uuid, String, Option<String>, Uuid) =
+        sqlx::query_as("SELECT project_id, code, name, created_by FROM sessions WHERE id = $1")
+            .bind(session_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(row.0, project_id);
     assert_eq!(row.1, code);
@@ -74,7 +93,10 @@ async fn test_session_code_uniqueness() {
         .bind(Uuid::new_v4()).bind(project_id).bind(&code).bind(user_id)
         .execute(&db).await;
 
-    assert!(result.is_err(), "Duplicate session code should be rejected by unique constraint");
+    assert!(
+        result.is_err(),
+        "Duplicate session code should be rejected by unique constraint"
+    );
 }
 
 #[tokio::test]
@@ -134,11 +156,12 @@ async fn test_agent_participant() {
     .bind(agent_id).bind(session_id).bind(user_id).bind("Claude Agent").bind(sponsor_id)
     .execute(&db).await.unwrap();
 
-    let row: (String, Option<Uuid>) = sqlx::query_as(
-        "SELECT participant_type, sponsor_id FROM participants WHERE id = $1"
-    )
-    .bind(agent_id)
-    .fetch_one(&db).await.unwrap();
+    let row: (String, Option<Uuid>) =
+        sqlx::query_as("SELECT participant_type, sponsor_id FROM participants WHERE id = $1")
+            .bind(agent_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(row.0, "agent");
     assert_eq!(row.1, Some(sponsor_id));
@@ -165,11 +188,12 @@ async fn test_agent_join_code() {
     .execute(&db).await.unwrap();
 
     // Look up by code
-    let row: (Uuid, Uuid, Uuid) = sqlx::query_as(
-        "SELECT id, session_id, user_id FROM agent_join_codes WHERE code = $1"
-    )
-    .bind(&agent_code)
-    .fetch_one(&db).await.unwrap();
+    let row: (Uuid, Uuid, Uuid) =
+        sqlx::query_as("SELECT id, session_id, user_id FROM agent_join_codes WHERE code = $1")
+            .bind(&agent_code)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(row.0, ajc_id);
     assert_eq!(row.1, session_id);
@@ -182,7 +206,10 @@ async fn test_agent_join_code() {
     .bind(Uuid::new_v4()).bind(session_id).bind(user_id).bind(&agent_code)
     .execute(&db).await;
 
-    assert!(result.is_err(), "Duplicate agent join code should be rejected by unique constraint");
+    assert!(
+        result.is_err(),
+        "Duplicate agent join code should be rejected by unique constraint"
+    );
 }
 
 #[tokio::test]
@@ -197,28 +224,41 @@ async fn test_session_close() {
         .execute(&db).await.unwrap();
 
     // Session should appear in open sessions
-    let open: Vec<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM sessions WHERE project_id = $1 AND closed_at IS NULL"
-    )
-    .bind(project_id)
-    .fetch_all(&db).await.unwrap();
-    assert!(open.iter().any(|r| r.0 == session_id), "Session should be in open sessions");
+    let open: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM sessions WHERE project_id = $1 AND closed_at IS NULL")
+            .bind(project_id)
+            .fetch_all(&db)
+            .await
+            .unwrap();
+    assert!(
+        open.iter().any(|r| r.0 == session_id),
+        "Session should be in open sessions"
+    );
 
     // Close the session
     sqlx::query("UPDATE sessions SET closed_at = NOW() WHERE id = $1")
         .bind(session_id)
-        .execute(&db).await.unwrap();
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Session should no longer appear in open sessions
-    let open_after: Vec<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM sessions WHERE project_id = $1 AND closed_at IS NULL"
-    )
-    .bind(project_id)
-    .fetch_all(&db).await.unwrap();
-    assert!(!open_after.iter().any(|r| r.0 == session_id), "Closed session should not appear in open sessions query");
+    let open_after: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM sessions WHERE project_id = $1 AND closed_at IS NULL")
+            .bind(project_id)
+            .fetch_all(&db)
+            .await
+            .unwrap();
+    assert!(
+        !open_after.iter().any(|r| r.0 == session_id),
+        "Closed session should not appear in open sessions query"
+    );
 
     // But it should still exist
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1)")
-        .bind(session_id).fetch_one(&db).await.unwrap();
+        .bind(session_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert!(exists, "Closed session should still exist in the table");
 }

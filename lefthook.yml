@@ -1,0 +1,21 @@
+pre-commit:
+  parallel: true
+  commands:
+    clippy:
+      root: server/
+      glob: "*.rs"
+      run: cargo clippy --all-targets -- -D warnings
+    rustfmt:
+      root: server/
+      glob: "*.rs"
+      run: cargo fmt --check
+    typescript:
+      root: frontend/
+      glob: "*.{ts,js}"
+      run: npx tsc --noEmit
+    oxlint:
+      root: frontend/
+      glob: "*.{ts,js}"
+      run: npx oxlint src/
+    gitleaks:
+      run: gitleaks protect --staged --no-banner

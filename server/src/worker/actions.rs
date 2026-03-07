@@ -1,10 +1,10 @@
 use reqwest::Client;
-use sqlx::PgPool;
-use tracing::{info, warn, error};
-use uuid::Uuid;
 use serde::Deserialize;
+use sqlx::PgPool;
 use std::sync::LazyLock;
 use std::time::Duration;
+use tracing::{error, info, warn};
+use uuid::Uuid;
 
 static TEMPLATE_RE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\{\{(\w+(?:\.\w+)*)\}\}").unwrap());
@@ -123,7 +123,10 @@ fn interpolate_template(template: &str, payload: Option<&serde_json::Value>) -> 
         for part in key_path.split('.') {
             match current.get(part) {
                 Some(v) => current = v,
-                None => { found = false; break; }
+                None => {
+                    found = false;
+                    break;
+                }
             }
         }
         if found {
@@ -143,15 +146,17 @@ async fn dispatch_invoke_agent(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config: InvokeAgentConfig = serde_json::from_value(action_config.clone())?;
 
-    let perspective = config.agent_perspective.unwrap_or_else(|| "coder".to_string());
+    let perspective = config
+        .agent_perspective
+        .unwrap_or_else(|| "coder".to_string());
     let prompt = interpolate_template(&config.prompt, ctx.event_payload.as_ref());
     let system_prompt_append = config
         .system_prompt_append
         .as_deref()
         .map(|s| interpolate_template(s, ctx.event_payload.as_ref()));
 
-    let seam_url = std::env::var("SEAM_URL")
-        .unwrap_or_else(|_| "http://localhost:3002".to_string());
+    let seam_url =
+        std::env::var("SEAM_URL").unwrap_or_else(|_| "http://localhost:3002".to_string());
     let api_token = std::env::var("WORKER_API_TOKEN").ok();
 
     let mut body = serde_json::json!({
@@ -172,7 +177,10 @@ async fn dispatch_invoke_agent(
 
     let client = Client::new();
     let mut req = client
-        .post(format!("{}/api/projects/{}/invocations", seam_url, ctx.project_id))
+        .post(format!(
+            "{}/api/projects/{}/invocations",
+            seam_url, ctx.project_id
+        ))
         .json(&body);
 
     if let Some(token) = &api_token {
@@ -284,8 +292,8 @@ async fn dispatch_mcp_tool(
         (None, None) => serde_json::json!({}),
     };
 
-    let seam_url = std::env::var("SEAM_URL")
-        .unwrap_or_else(|_| "http://localhost:3002".to_string());
+    let seam_url =
+        std::env::var("SEAM_URL").unwrap_or_else(|_| "http://localhost:3002".to_string());
     let mcp_url = format!("{}/mcp", seam_url);
     let api_token = std::env::var("WORKER_API_TOKEN").ok();
 
@@ -306,7 +314,8 @@ async fn dispatch_mcp_tool(
         }
     });
 
-    let mut req = client.post(&mcp_url)
+    let mut req = client
+        .post(&mcp_url)
         .header("Content-Type", "application/json")
         .header("Accept", "application/json, text/event-stream")
         .json(&init_request);
@@ -333,7 +342,8 @@ async fn dispatch_mcp_tool(
         "method": "notifications/initialized"
     });
 
-    let mut req = client.post(&mcp_url)
+    let mut req = client
+        .post(&mcp_url)
         .header("Content-Type", "application/json")
         .json(&initialized_notification);
     if let Some(token) = &api_token {
@@ -356,7 +366,8 @@ async fn dispatch_mcp_tool(
         }
     });
 
-    let mut req = client.post(&mcp_url)
+    let mut req = client
+        .post(&mcp_url)
         .header("Content-Type", "application/json")
         .header("Accept", "application/json, text/event-stream")
         .json(&tool_request);
@@ -385,7 +396,8 @@ async fn dispatch_mcp_tool(
             }
             // Check isError flag in the tool result
             if rpc_resp.pointer("/result/isError") == Some(&serde_json::Value::Bool(true)) {
-                let content = rpc_resp.pointer("/result/content")
+                let content = rpc_resp
+                    .pointer("/result/content")
                     .map(|c| c.to_string())
                     .unwrap_or_default();
                 warn!(
@@ -435,12 +447,10 @@ async fn dispatch_inference(
 
     // Resolve model (config > env var > provider-specific default)
     let model = config.model.unwrap_or_else(|| {
-        std::env::var("INFERENCE_DEFAULT_MODEL").unwrap_or_else(|_| {
-            match provider.as_str() {
-                "openrouter" => "qwen/qwen3.5-coder-32b-instruct".to_string(),
-                "ollama" => "qwen3:8b".to_string(),
-                _ => "claude-haiku-4-5-20251001".to_string(),
-            }
+        std::env::var("INFERENCE_DEFAULT_MODEL").unwrap_or_else(|_| match provider.as_str() {
+            "openrouter" => "qwen/qwen3.5-coder-32b-instruct".to_string(),
+            "ollama" => "qwen3:8b".to_string(),
+            _ => "claude-haiku-4-5-20251001".to_string(),
         })
     });
 
@@ -453,9 +463,7 @@ async fn dispatch_inference(
         "Dispatching inference action"
     );
 
-    let client = Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()?;
+    let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
 
     let response_text = match provider.as_str() {
         "anthropic" => {
@@ -587,13 +595,18 @@ async fn dispatch_inference(
 
     // Apply result target
     match &config.result_target {
-        ResultTarget::UpdateField { table, column, parse_json } => {
+        ResultTarget::UpdateField {
+            table,
+            column,
+            parse_json,
+        } => {
             // Validate table and column names to prevent SQL injection
             // (these come from trusted operator config, but guard defensively)
             let table = sanitize_identifier(table, true)?;
             let column = sanitize_identifier(column, false)?;
 
-            let aggregate_id = ctx.event_payload
+            let aggregate_id = ctx
+                .event_payload
                 .as_ref()
                 .and_then(|p| p.get("id"))
                 .and_then(|v| v.as_str())
@@ -650,7 +663,10 @@ const ALLOWED_TABLES: &[&str] = &["tasks", "task_comments", "sessions", "request
 
 /// Validate a SQL identifier (table or column name) to prevent injection.
 /// Tables are additionally checked against ALLOWED_TABLES.
-fn sanitize_identifier(name: &str, is_table: bool) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+fn sanitize_identifier(
+    name: &str,
+    is_table: bool,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         return Err(format!("Invalid SQL identifier: {:?}", name).into());
     }

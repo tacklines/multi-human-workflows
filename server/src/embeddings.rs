@@ -142,8 +142,8 @@ pub fn start_embedding_worker(pool: PgPool) {
         }
     };
 
-    let model = std::env::var("EMBEDDING_MODEL")
-        .unwrap_or_else(|_| "qwen3-embedding:0.6b".to_string());
+    let model =
+        std::env::var("EMBEDDING_MODEL").unwrap_or_else(|_| "qwen3-embedding:0.6b".to_string());
 
     tokio::spawn(run_worker(pool, ollama_url, model));
 }

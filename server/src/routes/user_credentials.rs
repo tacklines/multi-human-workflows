@@ -44,14 +44,26 @@ pub async fn list_user_credentials(
     State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<Vec<UserCredentialView>>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
+    let user = db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let rows = sqlx::query_as::<_, (Uuid, String, String, Option<String>, DateTime<Utc>, Option<DateTime<Utc>>, Option<DateTime<Utc>>)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            String,
+            Option<String>,
+            DateTime<Utc>,
+            Option<DateTime<Utc>>,
+            Option<DateTime<Utc>>,
+        ),
+    >(
         "SELECT id, name, credential_type, env_var_name, created_at, rotated_at, expires_at
          FROM user_credentials
          WHERE user_id = $1
-         ORDER BY created_at"
+         ORDER BY created_at",
     )
     .bind(user.id)
     .fetch_all(&state.db)
@@ -61,9 +73,23 @@ pub async fn list_user_credentials(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(rows.into_iter().map(|(id, name, credential_type, env_var_name, created_at, rotated_at, expires_at)| {
-        UserCredentialView { id, name, credential_type, env_var_name, created_at, rotated_at, expires_at }
-    }).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(
+                |(id, name, credential_type, env_var_name, created_at, rotated_at, expires_at)| {
+                    UserCredentialView {
+                        id,
+                        name,
+                        credential_type,
+                        env_var_name,
+                        created_at,
+                        rotated_at,
+                        expires_at,
+                    }
+                },
+            )
+            .collect(),
+    ))
 }
 
 /// POST /api/me/credentials
@@ -77,10 +103,19 @@ pub async fn create_user_credential(
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
 
-    let user = db::upsert_user(&state.db, &claims).await
+    let user = db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let valid_types = ["claude_oauth", "anthropic_api_key", "openai_api_key", "google_api_key", "git_token", "ssh_key", "custom"];
+    let valid_types = [
+        "claude_oauth",
+        "anthropic_api_key",
+        "openai_api_key",
+        "google_api_key",
+        "git_token",
+        "ssh_key",
+        "custom",
+    ];
     if !valid_types.contains(&req.credential_type.as_str()) {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -119,15 +154,18 @@ pub async fn create_user_credential(
         }
     })?;
 
-    Ok((StatusCode::CREATED, Json(UserCredentialView {
-        id,
-        name: req.name,
-        credential_type: req.credential_type,
-        env_var_name: req.env_var_name,
-        created_at: Utc::now(),
-        rotated_at: None,
-        expires_at: req.expires_at,
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(UserCredentialView {
+            id,
+            name: req.name,
+            credential_type: req.credential_type,
+            env_var_name: req.env_var_name,
+            created_at: Utc::now(),
+            rotated_at: None,
+            expires_at: req.expires_at,
+        }),
+    ))
 }
 
 /// PATCH /api/me/credentials/:credential_id
@@ -141,7 +179,8 @@ pub async fn rotate_user_credential(
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
 
-    let user = db::upsert_user(&state.db, &claims).await
+    let user = db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let existing: Option<(String, String, Option<String>)> = sqlx::query_as(
@@ -192,7 +231,8 @@ pub async fn delete_user_credential(
     Path(credential_id): Path<Uuid>,
     AuthUser(claims): AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
+    let user = db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let result = sqlx::query("DELETE FROM user_credentials WHERE id = $1 AND user_id = $2")

@@ -1,11 +1,11 @@
 use std::path::Path;
 use std::sync::Mutex;
 use tantivy::{
-    Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Term,
     collector::TopDocs,
     query::{BooleanQuery, Occur, TermQuery},
     schema::{Field, SchemaBuilder, TextFieldIndexing, TextOptions, Value, STORED, STRING},
     snippet::SnippetGenerator,
+    Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Term,
 };
 use uuid::Uuid;
 
@@ -96,7 +96,10 @@ impl CodeIndex {
     /// the same physical path in different projects will simply be re-indexed on
     /// their next indexing pass.
     pub fn index_file(&self, doc: CodeDocument) -> anyhow::Result<()> {
-        let mut writer = self.writer.lock().map_err(|e| anyhow::anyhow!("writer lock poisoned: {e}"))?;
+        let mut writer = self
+            .writer
+            .lock()
+            .map_err(|e| anyhow::anyhow!("writer lock poisoned: {e}"))?;
 
         // Delete existing doc with same path before re-indexing
         writer.delete_term(Term::from_field_text(self.schema.path, &doc.path));
@@ -105,8 +108,8 @@ impl CodeIndex {
         new_doc.add_text(self.schema.path, &doc.path);
         new_doc.add_text(self.schema.content, &doc.content);
         new_doc.add_text(self.schema.language, &doc.language);
-        new_doc.add_text(self.schema.project_id, &doc.project_id.to_string());
-        new_doc.add_text(self.schema.org_id, &doc.org_id.to_string());
+        new_doc.add_text(self.schema.project_id, doc.project_id.to_string());
+        new_doc.add_text(self.schema.org_id, doc.org_id.to_string());
 
         writer.add_document(new_doc)?;
         writer.commit()?;
@@ -156,8 +159,7 @@ impl CodeIndex {
         let top_docs = searcher.search(&final_query, &TopDocs::with_limit(limit))?;
 
         // Set up snippet generator for content field
-        let snippet_gen =
-            SnippetGenerator::create(&searcher, &final_query, self.schema.content)?;
+        let snippet_gen = SnippetGenerator::create(&searcher, &final_query, self.schema.content)?;
 
         let mut results = Vec::new();
         for (score, doc_address) in top_docs {
@@ -190,7 +192,10 @@ impl CodeIndex {
 
     /// Remove all documents belonging to a project.
     pub fn delete_project(&self, project_id: Uuid) -> anyhow::Result<()> {
-        let mut writer = self.writer.lock().map_err(|e| anyhow::anyhow!("writer lock poisoned: {e}"))?;
+        let mut writer = self
+            .writer
+            .lock()
+            .map_err(|e| anyhow::anyhow!("writer lock poisoned: {e}"))?;
         writer.delete_term(Term::from_field_text(
             self.schema.project_id,
             &project_id.to_string(),

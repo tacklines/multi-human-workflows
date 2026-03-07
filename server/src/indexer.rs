@@ -127,10 +127,7 @@ async fn process_pending_events(pool: &PgPool) {
 }
 
 /// Process a batch of domain events into knowledge chunks.
-async fn process_events(
-    pool: &PgPool,
-    events: Vec<DomainEvent>,
-) -> Result<(), anyhow::Error> {
+async fn process_events(pool: &PgPool, events: Vec<DomainEvent>) -> Result<(), anyhow::Error> {
     for event in events {
         let id = event.id.unwrap_or(0);
         if let Err(e) = process_single_event(pool, &event).await {
@@ -146,10 +143,7 @@ async fn process_events(
     Ok(())
 }
 
-async fn process_single_event(
-    pool: &PgPool,
-    event: &DomainEvent,
-) -> Result<(), anyhow::Error> {
+async fn process_single_event(pool: &PgPool, event: &DomainEvent) -> Result<(), anyhow::Error> {
     match event.event_type.as_str() {
         "task.created" | "task.updated" | "task.closed" => {
             // Re-fetch the full task to get current title, description, org_id, project_id
@@ -579,7 +573,8 @@ mod tests {
 
     #[test]
     fn splits_on_h2_boundaries() {
-        let text = "# Overview\n\nIntro text.\n\n## Section A\n\nContent A.\n\n## Section B\n\nContent B.";
+        let text =
+            "# Overview\n\nIntro text.\n\n## Section A\n\nContent A.\n\n## Section B\n\nContent B.";
         let sections = split_markdown_sections(text, "My Plan");
         // Intro (before first ##) + Section A + Section B = 3 sections
         assert_eq!(sections.len(), 3);
@@ -588,7 +583,10 @@ mod tests {
         assert_eq!(sections[2].0, "section-2");
         // Each section should contain the context prefix
         for (_, chunk_text) in &sections {
-            assert!(chunk_text.contains("My Plan"), "missing prefix in: {chunk_text}");
+            assert!(
+                chunk_text.contains("My Plan"),
+                "missing prefix in: {chunk_text}"
+            );
         }
         // Section headers are included in respective chunks
         assert!(sections[1].1.contains("## Section A"));

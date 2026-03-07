@@ -26,8 +26,8 @@ pub enum CredentialError {
 
 /// Get the master Fernet key from the environment
 fn master_fernet() -> Result<fernet::Fernet, CredentialError> {
-    let key = std::env::var("CREDENTIAL_MASTER_KEY")
-        .map_err(|_| CredentialError::MasterKeyMissing)?;
+    let key =
+        std::env::var("CREDENTIAL_MASTER_KEY").map_err(|_| CredentialError::MasterKeyMissing)?;
     fernet::Fernet::new(&key)
         .ok_or_else(|| CredentialError::InvalidMasterKey("not a valid Fernet key".into()))
 }
@@ -37,17 +37,17 @@ async fn ensure_org_dek(pool: &PgPool, org_id: Uuid) -> Result<fernet::Fernet, C
     let master = master_fernet()?;
 
     // Try to fetch existing DEK
-    let existing: Option<(Vec<u8>,)> = sqlx::query_as(
-        "SELECT encrypted_dek FROM org_credential_keys WHERE org_id = $1"
-    )
-    .bind(org_id)
-    .fetch_optional(pool)
-    .await?;
+    let existing: Option<(Vec<u8>,)> =
+        sqlx::query_as("SELECT encrypted_dek FROM org_credential_keys WHERE org_id = $1")
+            .bind(org_id)
+            .fetch_optional(pool)
+            .await?;
 
     if let Some((encrypted_dek,)) = existing {
         let dek_str = String::from_utf8(encrypted_dek)
             .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
-        let dek_key = master.decrypt(&dek_str)
+        let dek_key = master
+            .decrypt(&dek_str)
             .map_err(|e| CredentialError::DecryptionFailed(format!("{e:?}")))?;
         let dek_key_str = String::from_utf8(dek_key)
             .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
@@ -62,7 +62,7 @@ async fn ensure_org_dek(pool: &PgPool, org_id: Uuid) -> Result<fernet::Fernet, C
     sqlx::query(
         "INSERT INTO org_credential_keys (org_id, encrypted_dek, created_at)
          VALUES ($1, $2, NOW())
-         ON CONFLICT (org_id) DO NOTHING"
+         ON CONFLICT (org_id) DO NOTHING",
     )
     .bind(org_id)
     .bind(encrypted_dek.as_bytes())
@@ -71,16 +71,16 @@ async fn ensure_org_dek(pool: &PgPool, org_id: Uuid) -> Result<fernet::Fernet, C
 
     // Re-fetch to handle race: if another request inserted first, ON CONFLICT DO NOTHING
     // means our DEK was discarded. We must use the one actually stored in the DB.
-    let stored: (Vec<u8>,) = sqlx::query_as(
-        "SELECT encrypted_dek FROM org_credential_keys WHERE org_id = $1"
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await?;
+    let stored: (Vec<u8>,) =
+        sqlx::query_as("SELECT encrypted_dek FROM org_credential_keys WHERE org_id = $1")
+            .bind(org_id)
+            .fetch_one(pool)
+            .await?;
 
     let stored_dek_str = String::from_utf8(stored.0)
         .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
-    let stored_dek_key = master.decrypt(&stored_dek_str)
+    let stored_dek_key = master
+        .decrypt(&stored_dek_str)
         .map_err(|e| CredentialError::DecryptionFailed(format!("{e:?}")))?;
     let stored_dek_key_str = String::from_utf8(stored_dek_key)
         .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
@@ -138,7 +138,7 @@ pub async fn decrypt_org_credentials(
         "SELECT credential_type, encrypted_value, env_var_name
          FROM org_credentials
          WHERE org_id = $1
-         AND (expires_at IS NULL OR expires_at > NOW())"
+         AND (expires_at IS NULL OR expires_at > NOW())",
     )
     .bind(org_id)
     .fetch_all(pool)
@@ -163,17 +163,17 @@ pub async fn decrypt_org_credentials(
 async fn ensure_user_dek(pool: &PgPool, user_id: Uuid) -> Result<fernet::Fernet, CredentialError> {
     let master = master_fernet()?;
 
-    let existing: Option<(Vec<u8>,)> = sqlx::query_as(
-        "SELECT encrypted_dek FROM user_credential_keys WHERE user_id = $1"
-    )
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await?;
+    let existing: Option<(Vec<u8>,)> =
+        sqlx::query_as("SELECT encrypted_dek FROM user_credential_keys WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
 
     if let Some((encrypted_dek,)) = existing {
         let dek_str = String::from_utf8(encrypted_dek)
             .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
-        let dek_key = master.decrypt(&dek_str)
+        let dek_key = master
+            .decrypt(&dek_str)
             .map_err(|e| CredentialError::DecryptionFailed(format!("{e:?}")))?;
         let dek_key_str = String::from_utf8(dek_key)
             .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
@@ -187,7 +187,7 @@ async fn ensure_user_dek(pool: &PgPool, user_id: Uuid) -> Result<fernet::Fernet,
     sqlx::query(
         "INSERT INTO user_credential_keys (user_id, encrypted_dek, created_at)
          VALUES ($1, $2, NOW())
-         ON CONFLICT (user_id) DO NOTHING"
+         ON CONFLICT (user_id) DO NOTHING",
     )
     .bind(user_id)
     .bind(encrypted_dek.as_bytes())
@@ -196,16 +196,16 @@ async fn ensure_user_dek(pool: &PgPool, user_id: Uuid) -> Result<fernet::Fernet,
 
     // Re-fetch to handle race: if another request inserted first, ON CONFLICT DO NOTHING
     // means our DEK was discarded. We must use the one actually stored in the DB.
-    let stored: (Vec<u8>,) = sqlx::query_as(
-        "SELECT encrypted_dek FROM user_credential_keys WHERE user_id = $1"
-    )
-    .bind(user_id)
-    .fetch_one(pool)
-    .await?;
+    let stored: (Vec<u8>,) =
+        sqlx::query_as("SELECT encrypted_dek FROM user_credential_keys WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_one(pool)
+            .await?;
 
     let stored_dek_str = String::from_utf8(stored.0)
         .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
-    let stored_dek_key = master.decrypt(&stored_dek_str)
+    let stored_dek_key = master
+        .decrypt(&stored_dek_str)
         .map_err(|e| CredentialError::DecryptionFailed(format!("{e:?}")))?;
     let stored_dek_key_str = String::from_utf8(stored_dek_key)
         .map_err(|e| CredentialError::DecryptionFailed(e.to_string()))?;
@@ -246,7 +246,7 @@ pub async fn decrypt_user_credentials(
         "SELECT credential_type, encrypted_value, env_var_name
          FROM user_credentials
          WHERE user_id = $1
-         AND (expires_at IS NULL OR expires_at > NOW())"
+         AND (expires_at IS NULL OR expires_at > NOW())",
     )
     .bind(user_id)
     .fetch_all(pool)

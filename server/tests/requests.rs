@@ -7,8 +7,13 @@ use uuid::Uuid;
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -25,19 +30,27 @@ async fn create_test_context(db: &PgPool) -> (Uuid, Uuid) {
         .execute(db).await.unwrap();
 
     let org_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
-        .bind(org_id)
-        .bind("Test Org")
-        .bind(format!("test-org-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
+    )
+    .bind(org_id)
+    .bind("Test Org")
+    .bind(format!("test-org-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let project_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(project_id)
-        .bind(org_id)
-        .bind("Test Project")
-        .bind(format!("test-proj-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .bind("Test Project")
+    .bind(format!("test-proj-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     (user_id, project_id)
 }
@@ -59,11 +72,12 @@ async fn test_create_request() {
     .bind("Multiple users should be able to edit the same document simultaneously with live cursor presence.")
     .execute(&db).await.unwrap();
 
-    let row: (String, String, String) = sqlx::query_as(
-        "SELECT title, status, body FROM requests WHERE id = $1"
-    )
-    .bind(req_id)
-    .fetch_one(&db).await.unwrap();
+    let row: (String, String, String) =
+        sqlx::query_as("SELECT title, status, body FROM requests WHERE id = $1")
+            .bind(req_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(row.0, "I want real-time collaboration");
     assert_eq!(row.1, "pending");
@@ -94,7 +108,10 @@ async fn test_request_status_constraint() {
     .bind(Uuid::new_v4()).bind(project_id).bind(user_id)
     .execute(&db).await;
 
-    assert!(result.is_err(), "Invalid status should be rejected by CHECK constraint");
+    assert!(
+        result.is_err(),
+        "Invalid status should be rejected by CHECK constraint"
+    );
 }
 
 #[tokio::test]
@@ -113,11 +130,17 @@ async fn test_request_status_transitions() {
     // pending -> analyzing -> decomposed -> archived
     for status in &["analyzing", "decomposed", "archived"] {
         sqlx::query("UPDATE requests SET status = $1, updated_at = NOW() WHERE id = $2")
-            .bind(status).bind(req_id)
-            .execute(&db).await.unwrap();
+            .bind(status)
+            .bind(req_id)
+            .execute(&db)
+            .await
+            .unwrap();
 
         let current: (String,) = sqlx::query_as("SELECT status FROM requests WHERE id = $1")
-            .bind(req_id).fetch_one(&db).await.unwrap();
+            .bind(req_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
         assert_eq!(current.0, *status);
     }
 }
@@ -137,17 +160,25 @@ async fn test_request_analysis_field() {
 
     // Analysis starts as NULL
     let row: (Option<String>,) = sqlx::query_as("SELECT analysis FROM requests WHERE id = $1")
-        .bind(req_id).fetch_one(&db).await.unwrap();
+        .bind(req_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert!(row.0.is_none());
 
     // Agent writes analysis
-    let analysis = "## Analysis\n\nThis request maps to 3 existing requirements and needs 2 new ones.";
+    let analysis =
+        "## Analysis\n\nThis request maps to 3 existing requirements and needs 2 new ones.";
     sqlx::query("UPDATE requests SET analysis = $1, status = 'decomposed', updated_at = NOW() WHERE id = $2")
         .bind(analysis).bind(req_id)
         .execute(&db).await.unwrap();
 
-    let row: (Option<String>, String) = sqlx::query_as("SELECT analysis, status FROM requests WHERE id = $1")
-        .bind(req_id).fetch_one(&db).await.unwrap();
+    let row: (Option<String>, String) =
+        sqlx::query_as("SELECT analysis, status FROM requests WHERE id = $1")
+            .bind(req_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
     assert_eq!(row.0.as_deref(), Some(analysis));
     assert_eq!(row.1, "decomposed");
 }
@@ -185,12 +216,18 @@ async fn test_request_requirement_linking() {
 
     // Link requirements to request (M:N relationship)
     sqlx::query("INSERT INTO request_requirements (request_id, requirement_id) VALUES ($1, $2)")
-        .bind(request_id).bind(req1_id)
-        .execute(&db).await.unwrap();
+        .bind(request_id)
+        .bind(req1_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     sqlx::query("INSERT INTO request_requirements (request_id, requirement_id) VALUES ($1, $2)")
-        .bind(request_id).bind(req2_id)
-        .execute(&db).await.unwrap();
+        .bind(request_id)
+        .bind(req2_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Verify forward links (request -> requirements)
     let linked: Vec<(Uuid,)> = sqlx::query_as(
@@ -201,11 +238,12 @@ async fn test_request_requirement_linking() {
     assert_eq!(linked.len(), 2);
 
     // Verify reverse lookup (requirement -> requests)
-    let reverse: Vec<(Uuid,)> = sqlx::query_as(
-        "SELECT request_id FROM request_requirements WHERE requirement_id = $1"
-    )
-    .bind(req1_id)
-    .fetch_all(&db).await.unwrap();
+    let reverse: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT request_id FROM request_requirements WHERE requirement_id = $1")
+            .bind(req1_id)
+            .fetch_all(&db)
+            .await
+            .unwrap();
     assert_eq!(reverse.len(), 1);
     assert_eq!(reverse[0].0, request_id);
 
@@ -249,19 +287,27 @@ async fn test_request_many_to_many_shared_requirements() {
 
     // Both requests link to the same requirement
     sqlx::query("INSERT INTO request_requirements (request_id, requirement_id) VALUES ($1, $2)")
-        .bind(req_a).bind(shared_req)
-        .execute(&db).await.unwrap();
+        .bind(req_a)
+        .bind(shared_req)
+        .execute(&db)
+        .await
+        .unwrap();
 
     sqlx::query("INSERT INTO request_requirements (request_id, requirement_id) VALUES ($1, $2)")
-        .bind(req_b).bind(shared_req)
-        .execute(&db).await.unwrap();
+        .bind(req_b)
+        .bind(shared_req)
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Requirement should be linked to both requests
     let requests_for_req: Vec<(Uuid,)> = sqlx::query_as(
-        "SELECT request_id FROM request_requirements WHERE requirement_id = $1 ORDER BY request_id"
+        "SELECT request_id FROM request_requirements WHERE requirement_id = $1 ORDER BY request_id",
     )
     .bind(shared_req)
-    .fetch_all(&db).await.unwrap();
+    .fetch_all(&db)
+    .await
+    .unwrap();
     assert_eq!(requests_for_req.len(), 2);
 }
 
@@ -288,23 +334,34 @@ async fn test_request_cascade_delete() {
     .execute(&db).await.unwrap();
 
     sqlx::query("INSERT INTO request_requirements (request_id, requirement_id) VALUES ($1, $2)")
-        .bind(request_id).bind(req_id)
-        .execute(&db).await.unwrap();
+        .bind(request_id)
+        .bind(req_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Delete request — link should cascade, but requirement should survive
     sqlx::query("DELETE FROM requests WHERE id = $1")
-        .bind(request_id).execute(&db).await.unwrap();
+        .bind(request_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     let link_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM request_requirements WHERE request_id = $1)"
+        "SELECT EXISTS(SELECT 1 FROM request_requirements WHERE request_id = $1)",
     )
-    .bind(request_id).fetch_one(&db).await.unwrap();
+    .bind(request_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
     assert!(!link_exists, "Link should be cascade deleted with request");
 
-    let req_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1)"
-    )
-    .bind(req_id).fetch_one(&db).await.unwrap();
+    let req_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1)")
+            .bind(req_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
     assert!(req_exists, "Requirement should NOT be cascade deleted");
 }
 
@@ -315,7 +372,7 @@ async fn test_full_request_to_task_chain() {
 
     // Create session + participant for tasks
     let session_id = Uuid::new_v4();
-    let session_code = format!("{}", &session_id.to_string()[..6]).to_uppercase();
+    let session_code = session_id.to_string()[..6].to_string().to_uppercase();
     sqlx::query("INSERT INTO sessions (id, project_id, code, created_by, created_at) VALUES ($1, $2, $3, $4, NOW())")
         .bind(session_id).bind(project_id).bind(&session_code).bind(user_id)
         .execute(&db).await.unwrap();
@@ -352,12 +409,18 @@ async fn test_full_request_to_task_chain() {
 
     // Wire up the chain
     sqlx::query("INSERT INTO request_requirements (request_id, requirement_id) VALUES ($1, $2)")
-        .bind(request_id).bind(requirement_id)
-        .execute(&db).await.unwrap();
+        .bind(request_id)
+        .bind(requirement_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     sqlx::query("INSERT INTO requirement_tasks (requirement_id, task_id) VALUES ($1, $2)")
-        .bind(requirement_id).bind(task_id)
-        .execute(&db).await.unwrap();
+        .bind(requirement_id)
+        .bind(task_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Verify full chain traversal: request -> requirements -> tasks
     let tasks_from_request: Vec<(Uuid, String)> = sqlx::query_as(
@@ -366,10 +429,12 @@ async fn test_full_request_to_task_chain() {
          JOIN request_requirements rr ON rr.request_id = req.id
          JOIN requirement_tasks rt ON rt.requirement_id = rr.requirement_id
          JOIN tasks t ON t.id = rt.task_id
-         WHERE req.id = $1"
+         WHERE req.id = $1",
     )
     .bind(request_id)
-    .fetch_all(&db).await.unwrap();
+    .fetch_all(&db)
+    .await
+    .unwrap();
 
     assert_eq!(tasks_from_request.len(), 1);
     assert_eq!(tasks_from_request[0].0, task_id);
@@ -382,10 +447,12 @@ async fn test_full_request_to_task_chain() {
          JOIN requirement_tasks rt ON rt.task_id = t.id
          JOIN request_requirements rr ON rr.requirement_id = rt.requirement_id
          JOIN requests req ON req.id = rr.request_id
-         WHERE t.id = $1"
+         WHERE t.id = $1",
     )
     .bind(task_id)
-    .fetch_all(&db).await.unwrap();
+    .fetch_all(&db)
+    .await
+    .unwrap();
 
     assert_eq!(requests_from_task.len(), 1);
     assert_eq!(requests_from_task[0].0, request_id);

@@ -47,7 +47,8 @@ pub async fn list_credentials(
     Path(slug): Path<String>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<Vec<CredentialView>>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
+    let user = db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (org, role) = get_org_with_role(&state.db, &slug, user.id).await?;
@@ -57,13 +58,25 @@ pub async fn list_credentials(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let rows = sqlx::query_as::<_, (Uuid, String, String, Option<String>, DateTime<Utc>, Option<DateTime<Utc>>, Option<DateTime<Utc>>, String)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            String,
+            Option<String>,
+            DateTime<Utc>,
+            Option<DateTime<Utc>>,
+            Option<DateTime<Utc>>,
+            String,
+        ),
+    >(
         "SELECT c.id, c.name, c.credential_type, c.env_var_name,
                 c.created_at, c.rotated_at, c.expires_at, u.username
          FROM org_credentials c
          JOIN users u ON u.id = c.created_by
          WHERE c.org_id = $1
-         ORDER BY c.created_at"
+         ORDER BY c.created_at",
     )
     .bind(org.id)
     .fetch_all(&state.db)
@@ -73,9 +86,33 @@ pub async fn list_credentials(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(rows.into_iter().map(|(id, name, credential_type, env_var_name, created_at, rotated_at, expires_at, created_by_username)| {
-        CredentialView { id, name, credential_type, env_var_name, created_at, rotated_at, expires_at, created_by_username }
-    }).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(
+                |(
+                    id,
+                    name,
+                    credential_type,
+                    env_var_name,
+                    created_at,
+                    rotated_at,
+                    expires_at,
+                    created_by_username,
+                )| {
+                    CredentialView {
+                        id,
+                        name,
+                        credential_type,
+                        env_var_name,
+                        created_at,
+                        rotated_at,
+                        expires_at,
+                        created_by_username,
+                    }
+                },
+            )
+            .collect(),
+    ))
 }
 
 /// Create a new credential
@@ -90,7 +127,8 @@ pub async fn create_credential(
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
 
-    let user = db::upsert_user(&state.db, &claims).await
+    let user = db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (org, role) = get_org_with_role(&state.db, &slug, user.id).await?;
@@ -99,7 +137,15 @@ pub async fn create_credential(
     }
 
     // Validate credential_type
-    let valid_types = ["claude_oauth", "anthropic_api_key", "openai_api_key", "google_api_key", "git_token", "ssh_key", "custom"];
+    let valid_types = [
+        "claude_oauth",
+        "anthropic_api_key",
+        "openai_api_key",
+        "google_api_key",
+        "git_token",
+        "ssh_key",
+        "custom",
+    ];
     if !valid_types.contains(&req.credential_type.as_str()) {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -140,16 +186,19 @@ pub async fn create_credential(
         }
     })?;
 
-    Ok((StatusCode::CREATED, Json(CredentialView {
-        id,
-        name: req.name,
-        credential_type: req.credential_type,
-        env_var_name: req.env_var_name,
-        created_at: Utc::now(),
-        rotated_at: None,
-        expires_at: req.expires_at,
-        created_by_username: user.username.clone(),
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(CredentialView {
+            id,
+            name: req.name,
+            credential_type: req.credential_type,
+            env_var_name: req.env_var_name,
+            created_at: Utc::now(),
+            rotated_at: None,
+            expires_at: req.expires_at,
+            created_by_username: user.username.clone(),
+        }),
+    ))
 }
 
 /// Rotate credential value
@@ -163,7 +212,8 @@ pub async fn rotate_credential(
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
 
-    let user = db::upsert_user(&state.db, &claims).await
+    let user = db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (org, role) = get_org_with_role(&state.db, &slug, user.id).await?;
@@ -221,7 +271,8 @@ pub async fn delete_credential(
     Path((slug, credential_id)): Path<(String, Uuid)>,
     AuthUser(claims): AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
+    let user = db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (org, role) = get_org_with_role(&state.db, &slug, user.id).await?;
@@ -255,11 +306,21 @@ async fn get_org_with_role(
     slug: &str,
     user_id: Uuid,
 ) -> Result<(Organization, OrgRole), StatusCode> {
-    let row = sqlx::query_as::<_, (Uuid, String, String, bool, chrono::DateTime<chrono::Utc>, OrgRole)>(
+    let row = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            String,
+            bool,
+            chrono::DateTime<chrono::Utc>,
+            OrgRole,
+        ),
+    >(
         "SELECT o.id, o.name, o.slug, o.personal, o.created_at, om.role
          FROM organizations o
          JOIN org_members om ON om.org_id = o.id
-         WHERE o.slug = $1 AND om.user_id = $2"
+         WHERE o.slug = $1 AND om.user_id = $2",
     )
     .bind(slug)
     .bind(user_id)
@@ -272,5 +333,14 @@ async fn get_org_with_role(
     .ok_or(StatusCode::NOT_FOUND)?;
 
     let (id, name, slug, personal, created_at, role) = row;
-    Ok((Organization { id, name, slug, personal, created_at }, role))
+    Ok((
+        Organization {
+            id,
+            name,
+            slug,
+            personal,
+            created_at,
+        },
+        role,
+    ))
 }

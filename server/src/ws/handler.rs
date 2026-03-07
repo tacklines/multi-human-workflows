@@ -1,5 +1,8 @@
 use axum::{
-    extract::{State, WebSocketUpgrade, ws::{Message, WebSocket}},
+    extract::{
+        ws::{Message, WebSocket},
+        State, WebSocketUpgrade,
+    },
     response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
@@ -50,19 +53,30 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                 state.connections.add_connection(code, &conn_id, tx.clone());
 
                                 // Track participant identity for presence notifications
-                                if let Some(pid) = parsed.get("participantId").and_then(|p| p.as_str()) {
+                                if let Some(pid) =
+                                    parsed.get("participantId").and_then(|p| p.as_str())
+                                {
                                     state.connections.set_participant_id(code, &conn_id, pid);
                                     // Notify others this participant is online
-                                    state.connections.broadcast_to_session(code, &serde_json::json!({
-                                        "type": "participant_connected",
-                                        "participantId": pid,
-                                    })).await;
+                                    state
+                                        .connections
+                                        .broadcast_to_session(
+                                            code,
+                                            &serde_json::json!({
+                                                "type": "participant_connected",
+                                                "participantId": pid,
+                                            }),
+                                        )
+                                        .await;
                                 }
 
-                                let _ = tx.send(serde_json::json!({
-                                    "type": "joined",
-                                    "sessionCode": code,
-                                }).to_string());
+                                let _ = tx.send(
+                                    serde_json::json!({
+                                        "type": "joined",
+                                        "sessionCode": code,
+                                    })
+                                    .to_string(),
+                                );
                             }
                         }
                         Some("subscribe_agent") => {
@@ -71,10 +85,13 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                 parsed.get("participantId").and_then(|p| p.as_str()),
                             ) {
                                 state.connections.subscribe_agent(code, &conn_id, pid);
-                                let _ = tx.send(serde_json::json!({
-                                    "type": "subscribed_agent",
-                                    "participantId": pid,
-                                }).to_string());
+                                let _ = tx.send(
+                                    serde_json::json!({
+                                        "type": "subscribed_agent",
+                                        "participantId": pid,
+                                    })
+                                    .to_string(),
+                                );
                             }
                         }
                         Some("unsubscribe_agent") => {
@@ -100,10 +117,16 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     // Clean up — notify others if participant was identified
     if let Some(ref code) = session_code {
         if let Some(participant_id) = state.connections.remove_connection(code, &conn_id) {
-            state.connections.broadcast_to_session(code, &serde_json::json!({
-                "type": "participant_disconnected",
-                "participantId": participant_id,
-            })).await;
+            state
+                .connections
+                .broadcast_to_session(
+                    code,
+                    &serde_json::json!({
+                        "type": "participant_disconnected",
+                        "participantId": participant_id,
+                    }),
+                )
+                .await;
         }
     }
     send_task.abort();

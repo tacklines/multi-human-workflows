@@ -5,12 +5,7 @@
 //! They proxy requests to Hydra so the frontend never needs direct access to the
 //! admin port.
 
-use axum::{
-    extract::Query,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::Query, http::StatusCode, response::IntoResponse, Json};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -45,9 +40,7 @@ pub struct LoginChallengeQuery {
 /// Fetches the Hydra login request for the given challenge.
 /// If `skip` is true in Hydra's response the challenge is auto-accepted and
 /// the `redirect_to` URL is returned instead.
-pub async fn get_login_request(
-    Query(params): Query<LoginChallengeQuery>,
-) -> impl IntoResponse {
+pub async fn get_login_request(Query(params): Query<LoginChallengeQuery>) -> impl IntoResponse {
     let base = hydra_admin_url();
     let url = format!(
         "{}/admin/oauth2/auth/requests/login?login_challenge={}",
@@ -116,7 +109,10 @@ pub async fn accept_login(
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
-    let remember = body.get("remember").and_then(Value::as_bool).unwrap_or(false);
+    let remember = body
+        .get("remember")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let remember_for = body
         .get("remember_for")
         .and_then(Value::as_i64)
@@ -195,9 +191,7 @@ pub struct ConsentChallengeQuery {
 /// GET /api/auth/consent
 ///
 /// Fetches the Hydra consent request for the given challenge.
-pub async fn get_consent_request(
-    Query(params): Query<ConsentChallengeQuery>,
-) -> impl IntoResponse {
+pub async fn get_consent_request(Query(params): Query<ConsentChallengeQuery>) -> impl IntoResponse {
     let url = format!(
         "{}/admin/oauth2/auth/requests/consent?consent_challenge={}",
         hydra_admin_url(),
@@ -277,7 +271,9 @@ pub async fn accept_consent(
     };
 
     if !status.is_success() {
-        return hydra_error(status, resp_body.to_string()).await.into_response();
+        return hydra_error(status, resp_body.to_string())
+            .await
+            .into_response();
     }
 
     (StatusCode::OK, Json(resp_body)).into_response()
@@ -325,7 +321,9 @@ pub async fn reject_consent(
     };
 
     if !status.is_success() {
-        return hydra_error(status, resp_body.to_string()).await.into_response();
+        return hydra_error(status, resp_body.to_string())
+            .await
+            .into_response();
     }
 
     (StatusCode::OK, Json(resp_body)).into_response()

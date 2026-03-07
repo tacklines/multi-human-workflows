@@ -29,16 +29,16 @@ pub async fn create_session(
     Json(req): Json<CreateSessionRequest>,
 ) -> Result<Json<CreateSessionResponse>, StatusCode> {
     // Upsert user from JWT claims
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Resolve project_id: use provided or auto-bootstrap default
     let project_id = match req.project_id {
         Some(pid) => pid,
-        None => db::ensure_default_project(&state.db, user.id).await
+        None => db::ensure_default_project(&state.db, user.id)
+            .await
             .map_err(|e| {
                 tracing::error!("Failed to ensure default project: {}", e);
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -51,7 +51,7 @@ pub async fn create_session(
     // Create session
     sqlx::query(
         "INSERT INTO sessions (id, project_id, code, name, created_by, created_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())"
+         VALUES ($1, $2, $3, $4, $5, NOW())",
     )
     .bind(session_id)
     .bind(project_id)
@@ -69,7 +69,7 @@ pub async fn create_session(
     let join_code_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO session_join_codes (id, session_id, code, created_at)
-         VALUES ($1, $2, $3, NOW())"
+         VALUES ($1, $2, $3, NOW())",
     )
     .bind(join_code_id)
     .bind(session_id)
@@ -97,7 +97,7 @@ pub async fn create_session(
     let agent_code_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO agent_join_codes (id, session_id, user_id, code, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(agent_code_id)
     .bind(session_id)
@@ -124,13 +124,11 @@ pub async fn create_session(
     }
 
     // Fetch project name for the response
-    let project: crate::models::Project = sqlx::query_as(
-        "SELECT * FROM projects WHERE id = $1"
-    )
-    .bind(project_id)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let project: crate::models::Project = sqlx::query_as("SELECT * FROM projects WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(CreateSessionResponse {
         session: SessionView {
@@ -158,14 +156,13 @@ pub async fn get_session(
     State(state): State<Arc<AppState>>,
     Path(code): Path<String>,
 ) -> Result<Json<SessionView>, StatusCode> {
-    let session: Session = sqlx::query_as(
-        "SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL"
-    )
-    .bind(&code)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let session: Session =
+        sqlx::query_as("SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL")
+            .bind(&code)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::NOT_FOUND)?;
 
     let participants: Vec<Participant> = sqlx::query_as(
         "SELECT * FROM participants WHERE session_id = $1 AND disconnected_at IS NULL ORDER BY joined_at"
@@ -177,13 +174,11 @@ pub async fn get_session(
 
     let online_ids = state.connections.online_participant_ids(&code);
 
-    let project: crate::models::Project = sqlx::query_as(
-        "SELECT * FROM projects WHERE id = $1"
-    )
-    .bind(session.project_id)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let project: crate::models::Project = sqlx::query_as("SELECT * FROM projects WHERE id = $1")
+        .bind(session.project_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(SessionView {
         id: session.id,
@@ -192,17 +187,20 @@ pub async fn get_session(
         project_id: session.project_id,
         project_name: project.name,
         created_at: session.created_at,
-        participants: participants.into_iter().map(|p| {
-            let is_online = online_ids.contains(&p.id.to_string());
-            ParticipantView {
-                id: p.id,
-                display_name: p.display_name,
-                participant_type: p.participant_type,
-                sponsor_id: p.sponsor_id,
-                joined_at: p.joined_at,
-                is_online,
-            }
-        }).collect(),
+        participants: participants
+            .into_iter()
+            .map(|p| {
+                let is_online = online_ids.contains(&p.id.to_string());
+                ParticipantView {
+                    id: p.id,
+                    display_name: p.display_name,
+                    participant_type: p.participant_type,
+                    sponsor_id: p.sponsor_id,
+                    joined_at: p.joined_at,
+                    is_online,
+                }
+            })
+            .collect(),
     }))
 }
 
@@ -213,35 +211,32 @@ pub async fn join_session(
     Json(req): Json<JoinSessionRequest>,
 ) -> Result<Json<JoinSessionResponse>, StatusCode> {
     // Upsert user from JWT claims
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-    let session: Session = sqlx::query_as(
-        "SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL"
-    )
-    .bind(&code)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    let session: Session =
+        sqlx::query_as("SELECT * FROM sessions WHERE code = $1 AND closed_at IS NULL")
+            .bind(&code)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::NOT_FOUND)?;
 
     // Check if user is already a participant
-    let existing: Option<Participant> = sqlx::query_as(
-        "SELECT * FROM participants WHERE session_id = $1 AND user_id = $2"
-    )
-    .bind(session.id)
-    .bind(user.id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let existing: Option<Participant> =
+        sqlx::query_as("SELECT * FROM participants WHERE session_id = $1 AND user_id = $2")
+            .bind(session.id)
+            .bind(user.id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (participant_id, agent_code) = if let Some(existing) = existing {
         // Already in the session — fetch their agent code
         let ac: (String,) = sqlx::query_as(
-            "SELECT code FROM agent_join_codes WHERE session_id = $1 AND user_id = $2"
+            "SELECT code FROM agent_join_codes WHERE session_id = $1 AND user_id = $2",
         )
         .bind(session.id)
         .bind(user.id)
@@ -251,7 +246,8 @@ pub async fn join_session(
 
         (existing.id, ac.0)
     } else {
-        let display_name = req.display_name
+        let display_name = req
+            .display_name
             .unwrap_or_else(|| user.display_name.clone());
         let participant_id = Uuid::new_v4();
 
@@ -272,7 +268,7 @@ pub async fn join_session(
         let agent_code_id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO agent_join_codes (id, session_id, user_id, code, created_at)
-             VALUES ($1, $2, $3, $4, NOW())"
+             VALUES ($1, $2, $3, $4, NOW())",
         )
         .bind(agent_code_id)
         .bind(session.id)
@@ -283,18 +279,21 @@ pub async fn join_session(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         // Broadcast participant joined
-        state.connections.broadcast_to_session(
-            &session.code,
-            &serde_json::json!({
-                "type": "participant_joined",
-                "participant": {
-                    "id": participant_id,
-                    "display_name": display_name,
-                    "participant_type": "human",
-                    "joined_at": chrono::Utc::now(),
-                }
-            }),
-        ).await;
+        state
+            .connections
+            .broadcast_to_session(
+                &session.code,
+                &serde_json::json!({
+                    "type": "participant_joined",
+                    "participant": {
+                        "id": participant_id,
+                        "display_name": display_name,
+                        "participant_type": "human",
+                        "joined_at": chrono::Utc::now(),
+                    }
+                }),
+            )
+            .await;
 
         // Emit domain event
         let event = crate::events::DomainEvent::new(
@@ -323,13 +322,11 @@ pub async fn join_session(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let project: crate::models::Project = sqlx::query_as(
-        "SELECT * FROM projects WHERE id = $1"
-    )
-    .bind(session.project_id)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let project: crate::models::Project = sqlx::query_as("SELECT * FROM projects WHERE id = $1")
+        .bind(session.project_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(JoinSessionResponse {
         session: SessionView {
@@ -341,17 +338,20 @@ pub async fn join_session(
             created_at: session.created_at,
             participants: {
                 let online_ids = state.connections.online_participant_ids(&session.code);
-                participants.into_iter().map(|p| {
-                    let is_online = online_ids.contains(&p.id.to_string());
-                    ParticipantView {
-                        id: p.id,
-                        display_name: p.display_name,
-                        participant_type: p.participant_type,
-                        sponsor_id: p.sponsor_id,
-                        joined_at: p.joined_at,
-                        is_online,
-                    }
-                }).collect()
+                participants
+                    .into_iter()
+                    .map(|p| {
+                        let is_online = online_ids.contains(&p.id.to_string());
+                        ParticipantView {
+                            id: p.id,
+                            display_name: p.display_name,
+                            participant_type: p.participant_type,
+                            sponsor_id: p.sponsor_id,
+                            joined_at: p.joined_at,
+                            is_online,
+                        }
+                    })
+                    .collect()
             },
         },
         participant_id,

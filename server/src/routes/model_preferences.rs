@@ -80,7 +80,11 @@ pub async fn list_user_model_preferences(
 
     Ok(Json(
         rows.into_iter()
-            .map(|(key, value, updated_at)| ModelPreferenceView { key, value, updated_at })
+            .map(|(key, value, updated_at)| ModelPreferenceView {
+                key,
+                value,
+                updated_at,
+            })
             .collect(),
     ))
 }
@@ -91,13 +95,15 @@ pub async fn upsert_user_model_preferences(
     AuthUser(claims): AuthUser,
     Json(req): Json<UpsertModelPreferencesRequest>,
 ) -> Result<Json<Vec<ModelPreferenceView>>, (StatusCode, Json<serde_json::Value>)> {
-    let user = db::upsert_user(&state.db, &claims)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"}))))?;
-
-    validate_keys(&req.preferences).map_err(|(status, msg)| {
-        (status, Json(serde_json::json!({"error": msg})))
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "internal error"})),
+        )
     })?;
+
+    validate_keys(&req.preferences)
+        .map_err(|(status, msg)| (status, Json(serde_json::json!({"error": msg}))))?;
 
     for entry in &req.preferences {
         sqlx::query(
@@ -128,12 +134,19 @@ pub async fn upsert_user_model_preferences(
     .await
     .map_err(|e| {
         tracing::error!("Failed to fetch user model preferences after upsert: {e}");
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "internal error"})),
+        )
     })?;
 
     Ok(Json(
         rows.into_iter()
-            .map(|(key, value, updated_at)| ModelPreferenceView { key, value, updated_at })
+            .map(|(key, value, updated_at)| ModelPreferenceView {
+                key,
+                value,
+                updated_at,
+            })
             .collect(),
     ))
 }
@@ -168,7 +181,11 @@ pub async fn list_org_model_preferences(
 
     Ok(Json(
         rows.into_iter()
-            .map(|(key, value, updated_at)| ModelPreferenceView { key, value, updated_at })
+            .map(|(key, value, updated_at)| ModelPreferenceView {
+                key,
+                value,
+                updated_at,
+            })
             .collect(),
     ))
 }
@@ -180,21 +197,31 @@ pub async fn upsert_org_model_preferences(
     AuthUser(claims): AuthUser,
     Json(req): Json<UpsertModelPreferencesRequest>,
 ) -> Result<Json<Vec<ModelPreferenceView>>, (StatusCode, Json<serde_json::Value>)> {
-    let user = db::upsert_user(&state.db, &claims)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"}))))?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "internal error"})),
+        )
+    })?;
 
     let (org, role) = get_org_with_role(&state.db, &slug, user.id)
         .await
-        .map_err(|status| (status, Json(serde_json::json!({"error": "not found or forbidden"}))))?;
+        .map_err(|status| {
+            (
+                status,
+                Json(serde_json::json!({"error": "not found or forbidden"})),
+            )
+        })?;
 
     if role == OrgRole::Member {
-        return Err((StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "owner or admin required"}))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "owner or admin required"})),
+        ));
     }
 
-    validate_keys(&req.preferences).map_err(|(status, msg)| {
-        (status, Json(serde_json::json!({"error": msg})))
-    })?;
+    validate_keys(&req.preferences)
+        .map_err(|(status, msg)| (status, Json(serde_json::json!({"error": msg}))))?;
 
     for entry in &req.preferences {
         sqlx::query(
@@ -225,12 +252,19 @@ pub async fn upsert_org_model_preferences(
     .await
     .map_err(|e| {
         tracing::error!("Failed to fetch org model preferences after upsert: {e}");
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"})))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "internal error"})),
+        )
     })?;
 
     Ok(Json(
         rows.into_iter()
-            .map(|(key, value, updated_at)| ModelPreferenceView { key, value, updated_at })
+            .map(|(key, value, updated_at)| ModelPreferenceView {
+                key,
+                value,
+                updated_at,
+            })
             .collect(),
     ))
 }
@@ -259,5 +293,14 @@ async fn get_org_with_role(
     .ok_or(StatusCode::NOT_FOUND)?;
 
     let (id, name, slug, personal, created_at, role) = row;
-    Ok((Organization { id, name, slug, personal, created_at }, role))
+    Ok((
+        Organization {
+            id,
+            name,
+            slug,
+            personal,
+            created_at,
+        },
+        role,
+    ))
 }

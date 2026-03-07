@@ -41,7 +41,8 @@ pub async fn list_messages(
     Query(query): Query<ListMessagesQuery>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<Vec<MessageView>>, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let session = resolve_session_pub(&state.db, &session_code).await?;
     let me = resolve_participant_for_user(&state.db, session.id, user.id).await?;
@@ -70,9 +71,29 @@ pub async fn list_messages(
 
     let views: Vec<MessageView> = rows
         .into_iter()
-        .map(|(id, sender_id, sender_name, recipient_id, recipient_name, content, read_at, created_at)| {
-            MessageView { id, sender_id, sender_name, recipient_id, recipient_name, content, read_at, created_at }
-        })
+        .map(
+            |(
+                id,
+                sender_id,
+                sender_name,
+                recipient_id,
+                recipient_name,
+                content,
+                read_at,
+                created_at,
+            )| {
+                MessageView {
+                    id,
+                    sender_id,
+                    sender_name,
+                    recipient_id,
+                    recipient_name,
+                    content,
+                    read_at,
+                    created_at,
+                }
+            },
+        )
         .collect();
 
     Ok(Json(views))
@@ -90,14 +111,15 @@ pub async fn send_message(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let user = crate::db::upsert_user(&state.db, &claims).await
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let session = resolve_session_pub(&state.db, &session_code).await?;
     let me = resolve_participant_for_user(&state.db, session.id, user.id).await?;
 
     // Verify recipient exists in this session
     let recipient = sqlx::query_as::<_, (String,)>(
-        "SELECT display_name FROM participants WHERE id = $1 AND session_id = $2"
+        "SELECT display_name FROM participants WHERE id = $1 AND session_id = $2",
     )
     .bind(participant_id)
     .bind(session.id)
@@ -109,7 +131,7 @@ pub async fn send_message(
     let row = sqlx::query_as::<_, (Uuid, chrono::DateTime<chrono::Utc>)>(
         "INSERT INTO messages (session_id, sender_id, recipient_id, content)
          VALUES ($1, $2, $3, $4)
-         RETURNING id, created_at"
+         RETURNING id, created_at",
     )
     .bind(session.id)
     .bind(me.id)
@@ -134,27 +156,33 @@ pub async fn send_message(
     };
 
     // Notify recipient via WebSocket
-    state.connections.send_to_participant(
-        &session.code,
-        &participant_id.to_string(),
-        &serde_json::json!({
-            "type": "message_received",
-            "messageId": view.id,
-            "senderId": view.sender_id,
-            "senderName": view.sender_name,
-            "content": view.content,
-        }),
-    ).await;
+    state
+        .connections
+        .send_to_participant(
+            &session.code,
+            &participant_id.to_string(),
+            &serde_json::json!({
+                "type": "message_received",
+                "messageId": view.id,
+                "senderId": view.sender_id,
+                "senderName": view.sender_name,
+                "content": view.content,
+            }),
+        )
+        .await;
 
     // Also broadcast to session so all participants see the activity
-    state.connections.broadcast_to_session(
-        &session.code,
-        &serde_json::json!({
-            "type": "message_sent",
-            "senderId": view.sender_id,
-            "recipientId": view.recipient_id,
-        }),
-    ).await;
+    state
+        .connections
+        .broadcast_to_session(
+            &session.code,
+            &serde_json::json!({
+                "type": "message_sent",
+                "senderId": view.sender_id,
+                "recipientId": view.recipient_id,
+            }),
+        )
+        .await;
 
     Ok((StatusCode::CREATED, Json(view)))
 }

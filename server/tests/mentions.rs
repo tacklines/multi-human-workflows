@@ -8,8 +8,13 @@ use uuid::Uuid;
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -27,14 +32,27 @@ async fn create_test_context(db: &PgPool) -> TestContext {
         .execute(db).await.unwrap();
 
     let org_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
-        .bind(org_id).bind("Org").bind(format!("org-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
+    )
+    .bind(org_id)
+    .bind("Org")
+    .bind(format!("org-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let project_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(project_id).bind(org_id).bind("Proj").bind(format!("proj-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .bind("Proj")
+    .bind(format!("proj-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let session_id = Uuid::new_v4();
     sqlx::query("INSERT INTO sessions (id, project_id, code, created_by, created_at) VALUES ($1, $2, $3, $4, NOW())")
@@ -61,7 +79,11 @@ async fn create_test_context(db: &PgPool) -> TestContext {
     .bind("Test Task").bind(participant_id)
     .execute(db).await.unwrap();
 
-    TestContext { session_id, participant_id, task_id }
+    TestContext {
+        session_id,
+        participant_id,
+        task_id,
+    }
 }
 
 async fn create_comment(db: &PgPool, task_id: Uuid, author_id: Uuid, content: &str) -> Uuid {
@@ -97,19 +119,28 @@ async fn test_create_mention() {
     let ctx = create_test_context(&db).await;
     let mentioned = create_participant(&db, ctx.session_id, "Alice").await;
 
-    let comment_id = create_comment(&db, ctx.task_id, ctx.participant_id, "Hey @Alice check this").await;
-
-    sqlx::query(
-        "INSERT INTO comment_mentions (comment_id, participant_id) VALUES ($1, $2)"
+    let comment_id = create_comment(
+        &db,
+        ctx.task_id,
+        ctx.participant_id,
+        "Hey @Alice check this",
     )
-    .bind(comment_id).bind(mentioned)
-    .execute(&db).await.unwrap();
+    .await;
+
+    sqlx::query("INSERT INTO comment_mentions (comment_id, participant_id) VALUES ($1, $2)")
+        .bind(comment_id)
+        .bind(mentioned)
+        .execute(&db)
+        .await
+        .unwrap();
 
     let (cid, pid): (Uuid, Uuid) = sqlx::query_as(
-        "SELECT comment_id, participant_id FROM comment_mentions WHERE comment_id = $1"
+        "SELECT comment_id, participant_id FROM comment_mentions WHERE comment_id = $1",
     )
     .bind(comment_id)
-    .fetch_one(&db).await.unwrap();
+    .fetch_one(&db)
+    .await
+    .unwrap();
 
     assert_eq!(cid, comment_id);
     assert_eq!(pid, mentioned);
@@ -121,12 +152,16 @@ async fn test_unread_mention() {
     let ctx = create_test_context(&db).await;
     let mentioned = create_participant(&db, ctx.session_id, "Bob").await;
 
-    let comment_id = create_comment(&db, ctx.task_id, ctx.participant_id, "@Bob review needed").await;
+    let comment_id =
+        create_comment(&db, ctx.task_id, ctx.participant_id, "@Bob review needed").await;
 
     // Create both mention and unread
     sqlx::query("INSERT INTO comment_mentions (comment_id, participant_id) VALUES ($1, $2)")
-        .bind(comment_id).bind(mentioned)
-        .execute(&db).await.unwrap();
+        .bind(comment_id)
+        .bind(mentioned)
+        .execute(&db)
+        .await
+        .unwrap();
 
     sqlx::query(
         "INSERT INTO unread_mentions (participant_id, comment_id, task_id, session_id) VALUES ($1, $2, $3, $4)"
@@ -135,11 +170,12 @@ async fn test_unread_mention() {
     .execute(&db).await.unwrap();
 
     // Query unread count for the mentioned participant
-    let unread_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM unread_mentions WHERE participant_id = $1"
-    )
-    .bind(mentioned)
-    .fetch_one(&db).await.unwrap();
+    let unread_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM unread_mentions WHERE participant_id = $1")
+            .bind(mentioned)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(unread_count, 1);
 }
@@ -153,8 +189,11 @@ async fn test_clear_unread_mentions() {
     let comment_id = create_comment(&db, ctx.task_id, ctx.participant_id, "@Charlie done").await;
 
     sqlx::query("INSERT INTO comment_mentions (comment_id, participant_id) VALUES ($1, $2)")
-        .bind(comment_id).bind(mentioned)
-        .execute(&db).await.unwrap();
+        .bind(comment_id)
+        .bind(mentioned)
+        .execute(&db)
+        .await
+        .unwrap();
 
     sqlx::query(
         "INSERT INTO unread_mentions (participant_id, comment_id, task_id, session_id) VALUES ($1, $2, $3, $4)"
@@ -164,16 +203,23 @@ async fn test_clear_unread_mentions() {
 
     // User views the task — clear unread mentions
     sqlx::query("DELETE FROM unread_mentions WHERE participant_id = $1 AND task_id = $2")
-        .bind(mentioned).bind(ctx.task_id)
-        .execute(&db).await.unwrap();
+        .bind(mentioned)
+        .bind(ctx.task_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
-    let unread_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM unread_mentions WHERE participant_id = $1"
-    )
-    .bind(mentioned)
-    .fetch_one(&db).await.unwrap();
+    let unread_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM unread_mentions WHERE participant_id = $1")
+            .bind(mentioned)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
-    assert_eq!(unread_count, 0, "Unread mentions should be cleared after viewing");
+    assert_eq!(
+        unread_count, 0,
+        "Unread mentions should be cleared after viewing"
+    );
 }
 
 #[tokio::test]
@@ -197,7 +243,10 @@ async fn test_unread_mention_unique_constraint() {
     .bind(mentioned).bind(comment_id).bind(ctx.task_id).bind(ctx.session_id)
     .execute(&db).await;
 
-    assert!(result.is_err(), "Duplicate unread mention (same participant + comment) should be rejected");
+    assert!(
+        result.is_err(),
+        "Duplicate unread mention (same participant + comment) should be rejected"
+    );
 }
 
 #[tokio::test]
@@ -209,8 +258,11 @@ async fn test_mention_cascade_on_comment_delete() {
     let comment_id = create_comment(&db, ctx.task_id, ctx.participant_id, "@Eve look").await;
 
     sqlx::query("INSERT INTO comment_mentions (comment_id, participant_id) VALUES ($1, $2)")
-        .bind(comment_id).bind(mentioned)
-        .execute(&db).await.unwrap();
+        .bind(comment_id)
+        .bind(mentioned)
+        .execute(&db)
+        .await
+        .unwrap();
 
     sqlx::query(
         "INSERT INTO unread_mentions (participant_id, comment_id, task_id, session_id) VALUES ($1, $2, $3, $4)"
@@ -221,22 +273,32 @@ async fn test_mention_cascade_on_comment_delete() {
     // Delete the comment
     sqlx::query("DELETE FROM task_comments WHERE id = $1")
         .bind(comment_id)
-        .execute(&db).await.unwrap();
+        .execute(&db)
+        .await
+        .unwrap();
 
-    let mention_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM comment_mentions WHERE comment_id = $1"
-    )
-    .bind(comment_id)
-    .fetch_one(&db).await.unwrap();
+    let mention_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM comment_mentions WHERE comment_id = $1")
+            .bind(comment_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
-    let unread_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM unread_mentions WHERE comment_id = $1"
-    )
-    .bind(comment_id)
-    .fetch_one(&db).await.unwrap();
+    let unread_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM unread_mentions WHERE comment_id = $1")
+            .bind(comment_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
-    assert_eq!(mention_count, 0, "Mentions should cascade-delete with comment");
-    assert_eq!(unread_count, 0, "Unread mentions should cascade-delete with comment");
+    assert_eq!(
+        mention_count, 0,
+        "Mentions should cascade-delete with comment"
+    );
+    assert_eq!(
+        unread_count, 0,
+        "Unread mentions should cascade-delete with comment"
+    );
 }
 
 #[tokio::test]
@@ -248,8 +310,11 @@ async fn test_mention_cascade_on_task_delete() {
     let comment_id = create_comment(&db, ctx.task_id, ctx.participant_id, "@Frank check").await;
 
     sqlx::query("INSERT INTO comment_mentions (comment_id, participant_id) VALUES ($1, $2)")
-        .bind(comment_id).bind(mentioned)
-        .execute(&db).await.unwrap();
+        .bind(comment_id)
+        .bind(mentioned)
+        .execute(&db)
+        .await
+        .unwrap();
 
     sqlx::query(
         "INSERT INTO unread_mentions (participant_id, comment_id, task_id, session_id) VALUES ($1, $2, $3, $4)"
@@ -260,22 +325,32 @@ async fn test_mention_cascade_on_task_delete() {
     // Delete the task — should cascade to comments → mentions
     sqlx::query("DELETE FROM tasks WHERE id = $1")
         .bind(ctx.task_id)
-        .execute(&db).await.unwrap();
+        .execute(&db)
+        .await
+        .unwrap();
 
-    let mention_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM comment_mentions WHERE comment_id = $1"
-    )
-    .bind(comment_id)
-    .fetch_one(&db).await.unwrap();
+    let mention_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM comment_mentions WHERE comment_id = $1")
+            .bind(comment_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
-    let unread_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM unread_mentions WHERE task_id = $1"
-    )
-    .bind(ctx.task_id)
-    .fetch_one(&db).await.unwrap();
+    let unread_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM unread_mentions WHERE task_id = $1")
+            .bind(ctx.task_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
-    assert_eq!(mention_count, 0, "Mentions should cascade when task is deleted");
-    assert_eq!(unread_count, 0, "Unread mentions should cascade when task is deleted");
+    assert_eq!(
+        mention_count, 0,
+        "Mentions should cascade when task is deleted"
+    );
+    assert_eq!(
+        unread_count, 0,
+        "Unread mentions should cascade when task is deleted"
+    );
 }
 
 #[tokio::test]
@@ -287,19 +362,29 @@ async fn test_multiple_mentions_per_comment() {
     let bob = create_participant(&db, ctx.session_id, "Bob").await;
     let charlie = create_participant(&db, ctx.session_id, "Charlie").await;
 
-    let comment_id = create_comment(&db, ctx.task_id, ctx.participant_id, "@Alice @Bob @Charlie all hands").await;
+    let comment_id = create_comment(
+        &db,
+        ctx.task_id,
+        ctx.participant_id,
+        "@Alice @Bob @Charlie all hands",
+    )
+    .await;
 
     for pid in &[alice, bob, charlie] {
         sqlx::query("INSERT INTO comment_mentions (comment_id, participant_id) VALUES ($1, $2)")
-            .bind(comment_id).bind(pid)
-            .execute(&db).await.unwrap();
+            .bind(comment_id)
+            .bind(pid)
+            .execute(&db)
+            .await
+            .unwrap();
     }
 
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM comment_mentions WHERE comment_id = $1"
-    )
-    .bind(comment_id)
-    .fetch_one(&db).await.unwrap();
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM comment_mentions WHERE comment_id = $1")
+            .bind(comment_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(count, 3, "Should support multiple mentions per comment");
 }
@@ -312,18 +397,32 @@ async fn test_query_mentions_for_participant() {
 
     // Create 3 comments mentioning Grace
     for i in 0..3 {
-        let cid = create_comment(&db, ctx.task_id, ctx.participant_id, &format!("@Grace item {i}")).await;
+        let cid = create_comment(
+            &db,
+            ctx.task_id,
+            ctx.participant_id,
+            &format!("@Grace item {i}"),
+        )
+        .await;
         sqlx::query("INSERT INTO comment_mentions (comment_id, participant_id) VALUES ($1, $2)")
-            .bind(cid).bind(mentioned)
-            .execute(&db).await.unwrap();
+            .bind(cid)
+            .bind(mentioned)
+            .execute(&db)
+            .await
+            .unwrap();
     }
 
     // Query: "all comments that mention this participant"
-    let mentions: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT comment_id FROM comment_mentions WHERE participant_id = $1"
-    )
-    .bind(mentioned)
-    .fetch_all(&db).await.unwrap();
+    let mentions: Vec<Uuid> =
+        sqlx::query_scalar("SELECT comment_id FROM comment_mentions WHERE participant_id = $1")
+            .bind(mentioned)
+            .fetch_all(&db)
+            .await
+            .unwrap();
 
-    assert_eq!(mentions.len(), 3, "Should find all comments mentioning the participant");
+    assert_eq!(
+        mentions.len(),
+        3,
+        "Should find all comments mentioning the participant"
+    );
 }

@@ -8,8 +8,13 @@ use uuid::Uuid;
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -29,21 +34,37 @@ struct TestSession {
 
 async fn create_session(db: &PgPool, user_id: Uuid) -> TestSession {
     let org_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
-        .bind(org_id).bind("Org").bind(format!("org-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
+    )
+    .bind(org_id)
+    .bind("Org")
+    .bind(format!("org-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let project_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(project_id).bind(org_id).bind("Proj").bind(format!("proj-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .bind("Proj")
+    .bind(format!("proj-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let session_id = Uuid::new_v4();
     sqlx::query("INSERT INTO sessions (id, project_id, code, created_by, created_at) VALUES ($1, $2, $3, $4, NOW())")
         .bind(session_id).bind(project_id).bind(format!("Q{}", &Uuid::new_v4().to_string()[..5]).to_uppercase()).bind(user_id)
         .execute(db).await.unwrap();
 
-    TestSession { session_id, project_id }
+    TestSession {
+        session_id,
+        project_id,
+    }
 }
 
 async fn create_participant(db: &PgPool, session_id: Uuid, user_id: Uuid, ptype: &str) -> Uuid {
@@ -67,17 +88,23 @@ async fn test_create_question() {
     let question_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO questions (id, session_id, project_id, asked_by, question_text, created_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())"
-    )
-    .bind(question_id).bind(sess.session_id).bind(sess.project_id)
-    .bind(participant_id).bind("What should I do next?")
-    .execute(&db).await.unwrap();
-
-    let (text, status): (String, String) = sqlx::query_as(
-        "SELECT question_text, status FROM questions WHERE id = $1"
+         VALUES ($1, $2, $3, $4, $5, NOW())",
     )
     .bind(question_id)
-    .fetch_one(&db).await.unwrap();
+    .bind(sess.session_id)
+    .bind(sess.project_id)
+    .bind(participant_id)
+    .bind("What should I do next?")
+    .execute(&db)
+    .await
+    .unwrap();
+
+    let (text, status): (String, String) =
+        sqlx::query_as("SELECT question_text, status FROM questions WHERE id = $1")
+            .bind(question_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(text, "What should I do next?");
     assert_eq!(status, "pending");
@@ -95,11 +122,16 @@ async fn test_answer_question() {
     let question_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO questions (id, session_id, project_id, asked_by, question_text)
-         VALUES ($1, $2, $3, $4, $5)"
+         VALUES ($1, $2, $3, $4, $5)",
     )
-    .bind(question_id).bind(sess.session_id).bind(sess.project_id)
-    .bind(agent_participant).bind("Should I refactor this?")
-    .execute(&db).await.unwrap();
+    .bind(question_id)
+    .bind(sess.session_id)
+    .bind(sess.project_id)
+    .bind(agent_participant)
+    .bind("Should I refactor this?")
+    .execute(&db)
+    .await
+    .unwrap();
 
     // Answer the question
     let result = sqlx::query(
@@ -111,11 +143,12 @@ async fn test_answer_question() {
 
     assert_eq!(result.rows_affected(), 1);
 
-    let (status, answer, answered_by): (String, Option<String>, Option<Uuid>) = sqlx::query_as(
-        "SELECT status, answer_text, answered_by FROM questions WHERE id = $1"
-    )
-    .bind(question_id)
-    .fetch_one(&db).await.unwrap();
+    let (status, answer, answered_by): (String, Option<String>, Option<Uuid>) =
+        sqlx::query_as("SELECT status, answer_text, answered_by FROM questions WHERE id = $1")
+            .bind(question_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(status, "answered");
     assert_eq!(answer, Some("Yes, go ahead".to_string()));
@@ -132,11 +165,16 @@ async fn test_cancel_question() {
     let question_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO questions (id, session_id, project_id, asked_by, question_text)
-         VALUES ($1, $2, $3, $4, $5)"
+         VALUES ($1, $2, $3, $4, $5)",
     )
-    .bind(question_id).bind(sess.session_id).bind(sess.project_id)
-    .bind(participant_id).bind("Never mind this")
-    .execute(&db).await.unwrap();
+    .bind(question_id)
+    .bind(sess.session_id)
+    .bind(sess.project_id)
+    .bind(participant_id)
+    .bind("Never mind this")
+    .execute(&db)
+    .await
+    .unwrap();
 
     // Cancel — only the asker can cancel
     let result = sqlx::query(
@@ -148,7 +186,10 @@ async fn test_cancel_question() {
     assert_eq!(result.rows_affected(), 1);
 
     let status: String = sqlx::query_scalar("SELECT status FROM questions WHERE id = $1")
-        .bind(question_id).fetch_one(&db).await.unwrap();
+        .bind(question_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert_eq!(status, "cancelled");
 }
 
@@ -164,11 +205,16 @@ async fn test_cannot_cancel_others_question() {
     let question_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO questions (id, session_id, project_id, asked_by, question_text)
-         VALUES ($1, $2, $3, $4, $5)"
+         VALUES ($1, $2, $3, $4, $5)",
     )
-    .bind(question_id).bind(sess.session_id).bind(sess.project_id)
-    .bind(participant_a).bind("My question")
-    .execute(&db).await.unwrap();
+    .bind(question_id)
+    .bind(sess.session_id)
+    .bind(sess.project_id)
+    .bind(participant_a)
+    .bind("My question")
+    .execute(&db)
+    .await
+    .unwrap();
 
     // participant_b tries to cancel participant_a's question — should affect 0 rows
     let result = sqlx::query(
@@ -177,10 +223,17 @@ async fn test_cannot_cancel_others_question() {
     .bind(question_id).bind(participant_b)
     .execute(&db).await.unwrap();
 
-    assert_eq!(result.rows_affected(), 0, "Should not be able to cancel another's question");
+    assert_eq!(
+        result.rows_affected(),
+        0,
+        "Should not be able to cancel another's question"
+    );
 
     let status: String = sqlx::query_scalar("SELECT status FROM questions WHERE id = $1")
-        .bind(question_id).fetch_one(&db).await.unwrap();
+        .bind(question_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert_eq!(status, "pending", "Question should still be pending");
 }
 
@@ -208,7 +261,11 @@ async fn test_cannot_answer_already_answered() {
     .bind("New answer").bind(participant_id).bind(question_id)
     .execute(&db).await.unwrap();
 
-    assert_eq!(result.rows_affected(), 0, "Should not re-answer an already answered question");
+    assert_eq!(
+        result.rows_affected(),
+        0,
+        "Should not re-answer an already answered question"
+    );
 }
 
 #[tokio::test]
@@ -221,21 +278,31 @@ async fn test_expired_question_lazy_update() {
     // Insert a question that has already expired
     sqlx::query(
         "INSERT INTO questions (id, session_id, project_id, asked_by, question_text, expires_at)
-         VALUES ($1, $2, $3, $4, $5, NOW() - INTERVAL '1 second')"
+         VALUES ($1, $2, $3, $4, $5, NOW() - INTERVAL '1 second')",
     )
-    .bind(Uuid::new_v4()).bind(sess.session_id).bind(sess.project_id)
-    .bind(participant_id).bind("Expired question")
-    .execute(&db).await.unwrap();
+    .bind(Uuid::new_v4())
+    .bind(sess.session_id)
+    .bind(sess.project_id)
+    .bind(participant_id)
+    .bind("Expired question")
+    .execute(&db)
+    .await
+    .unwrap();
 
     // Insert a non-expired question
     let active_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO questions (id, session_id, project_id, asked_by, question_text, expires_at)
-         VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '1 hour')"
+         VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '1 hour')",
     )
-    .bind(active_id).bind(sess.session_id).bind(sess.project_id)
-    .bind(participant_id).bind("Active question")
-    .execute(&db).await.unwrap();
+    .bind(active_id)
+    .bind(sess.session_id)
+    .bind(sess.project_id)
+    .bind(participant_id)
+    .bind("Active question")
+    .execute(&db)
+    .await
+    .unwrap();
 
     // Lazy expiry update (same logic as list_questions handler)
     let result = sqlx::query(
@@ -244,11 +311,18 @@ async fn test_expired_question_lazy_update() {
     .bind(sess.session_id)
     .execute(&db).await.unwrap();
 
-    assert_eq!(result.rows_affected(), 1, "Should expire exactly one question");
+    assert_eq!(
+        result.rows_affected(),
+        1,
+        "Should expire exactly one question"
+    );
 
     // Active question should still be pending
     let active_status: String = sqlx::query_scalar("SELECT status FROM questions WHERE id = $1")
-        .bind(active_id).fetch_one(&db).await.unwrap();
+        .bind(active_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert_eq!(active_status, "pending");
 }
 
@@ -261,13 +335,19 @@ async fn test_question_status_constraint() {
 
     let result = sqlx::query(
         "INSERT INTO questions (session_id, project_id, asked_by, question_text, status)
-         VALUES ($1, $2, $3, $4, 'invalid_status')"
+         VALUES ($1, $2, $3, $4, 'invalid_status')",
     )
-    .bind(sess.session_id).bind(sess.project_id)
-    .bind(participant_id).bind("Bad status")
-    .execute(&db).await;
+    .bind(sess.session_id)
+    .bind(sess.project_id)
+    .bind(participant_id)
+    .bind("Bad status")
+    .execute(&db)
+    .await;
 
-    assert!(result.is_err(), "Invalid status should be rejected by CHECK constraint");
+    assert!(
+        result.is_err(),
+        "Invalid status should be rejected by CHECK constraint"
+    );
 }
 
 #[tokio::test]
@@ -282,17 +362,24 @@ async fn test_question_directed_to() {
     let question_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO questions (id, session_id, project_id, asked_by, directed_to, question_text)
-         VALUES ($1, $2, $3, $4, $5, $6)"
-    )
-    .bind(question_id).bind(sess.session_id).bind(sess.project_id)
-    .bind(agent).bind(human).bind("Can you review this?")
-    .execute(&db).await.unwrap();
-
-    let directed: Option<Uuid> = sqlx::query_scalar(
-        "SELECT directed_to FROM questions WHERE id = $1"
+         VALUES ($1, $2, $3, $4, $5, $6)",
     )
     .bind(question_id)
-    .fetch_one(&db).await.unwrap();
+    .bind(sess.session_id)
+    .bind(sess.project_id)
+    .bind(agent)
+    .bind(human)
+    .bind("Can you review this?")
+    .execute(&db)
+    .await
+    .unwrap();
+
+    let directed: Option<Uuid> =
+        sqlx::query_scalar("SELECT directed_to FROM questions WHERE id = $1")
+            .bind(question_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(directed, Some(human));
 }
@@ -306,20 +393,29 @@ async fn test_question_cascade_on_session_delete() {
 
     sqlx::query(
         "INSERT INTO questions (session_id, project_id, asked_by, question_text)
-         VALUES ($1, $2, $3, $4)"
+         VALUES ($1, $2, $3, $4)",
     )
-    .bind(sess.session_id).bind(sess.project_id)
-    .bind(participant_id).bind("Will I survive?")
-    .execute(&db).await.unwrap();
+    .bind(sess.session_id)
+    .bind(sess.project_id)
+    .bind(participant_id)
+    .bind("Will I survive?")
+    .execute(&db)
+    .await
+    .unwrap();
 
     // Delete the session
     sqlx::query("DELETE FROM sessions WHERE id = $1")
         .bind(sess.session_id)
-        .execute(&db).await.unwrap();
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Questions should be cascade-deleted
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM questions WHERE session_id = $1")
-        .bind(sess.session_id).fetch_one(&db).await.unwrap();
+        .bind(sess.session_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert_eq!(count, 0, "Questions should be cascade-deleted with session");
 }
 
@@ -338,22 +434,32 @@ async fn test_question_filter_by_status() {
     ] {
         sqlx::query(
             "INSERT INTO questions (session_id, project_id, asked_by, question_text, status)
-             VALUES ($1, $2, $3, $4, $5)"
+             VALUES ($1, $2, $3, $4, $5)",
         )
-        .bind(sess.session_id).bind(sess.project_id)
-        .bind(participant_id).bind(*text).bind(*status)
-        .execute(&db).await.unwrap();
+        .bind(sess.session_id)
+        .bind(sess.project_id)
+        .bind(participant_id)
+        .bind(*text)
+        .bind(*status)
+        .execute(&db)
+        .await
+        .unwrap();
     }
 
     let pending_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM questions WHERE session_id = $1 AND status = 'pending'"
+        "SELECT COUNT(*) FROM questions WHERE session_id = $1 AND status = 'pending'",
     )
-    .bind(sess.session_id).fetch_one(&db).await.unwrap();
+    .bind(sess.session_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
     assert_eq!(pending_count, 1);
 
-    let total_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM questions WHERE session_id = $1"
-    )
-    .bind(sess.session_id).fetch_one(&db).await.unwrap();
+    let total_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM questions WHERE session_id = $1")
+            .bind(sess.session_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
     assert_eq!(total_count, 3);
 }

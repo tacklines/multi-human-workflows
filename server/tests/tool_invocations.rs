@@ -8,8 +8,13 @@ use uuid::Uuid;
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -26,14 +31,27 @@ async fn create_test_context(db: &PgPool) -> TestContext {
         .execute(db).await.unwrap();
 
     let org_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
-        .bind(org_id).bind("Org").bind(format!("org-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
+    )
+    .bind(org_id)
+    .bind("Org")
+    .bind(format!("org-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let project_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(project_id).bind(org_id).bind("Proj").bind(format!("proj-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .bind("Proj")
+    .bind(format!("proj-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let session_id = Uuid::new_v4();
     sqlx::query("INSERT INTO sessions (id, project_id, code, created_by, created_at) VALUES ($1, $2, $3, $4, NOW())")
@@ -50,7 +68,10 @@ async fn create_test_context(db: &PgPool) -> TestContext {
     .bind(participant_id).bind(session_id).bind(user_id).bind("Agent").bind("agent")
     .execute(db).await.unwrap();
 
-    TestContext { session_id, participant_id }
+    TestContext {
+        session_id,
+        participant_id,
+    }
 }
 
 #[tokio::test]
@@ -70,10 +91,12 @@ async fn test_insert_tool_invocation() {
     .fetch_one(&db).await.unwrap();
 
     let (tool_name, duration, is_error): (String, i32, bool) = sqlx::query_as(
-        "SELECT tool_name, duration_ms, is_error FROM tool_invocations WHERE id = $1"
+        "SELECT tool_name, duration_ms, is_error FROM tool_invocations WHERE id = $1",
     )
     .bind(inv_id)
-    .fetch_one(&db).await.unwrap();
+    .fetch_one(&db)
+    .await
+    .unwrap();
 
     assert_eq!(tool_name, "create_task");
     assert_eq!(duration, 42);
@@ -93,10 +116,12 @@ async fn test_tool_invocation_error_flag() {
     .execute(&db).await.unwrap();
 
     let is_error: bool = sqlx::query_scalar(
-        "SELECT is_error FROM tool_invocations WHERE session_id = $1 AND tool_name = 'bad_tool'"
+        "SELECT is_error FROM tool_invocations WHERE session_id = $1 AND tool_name = 'bad_tool'",
     )
     .bind(ctx.session_id)
-    .fetch_one(&db).await.unwrap();
+    .fetch_one(&db)
+    .await
+    .unwrap();
 
     assert!(is_error);
 }
@@ -117,10 +142,12 @@ async fn test_tool_invocation_ordering() {
     }
 
     let names: Vec<String> = sqlx::query_scalar(
-        "SELECT tool_name FROM tool_invocations WHERE session_id = $1 ORDER BY created_at DESC"
+        "SELECT tool_name FROM tool_invocations WHERE session_id = $1 ORDER BY created_at DESC",
     )
     .bind(ctx.session_id)
-    .fetch_all(&db).await.unwrap();
+    .fetch_all(&db)
+    .await
+    .unwrap();
 
     assert_eq!(names, vec!["tool_2", "tool_1", "tool_0"]);
 }
@@ -149,19 +176,29 @@ async fn test_tool_invocation_filter_by_participant() {
     for (pid, name) in &[(ctx.participant_id, "tool_a"), (p2, "tool_b")] {
         sqlx::query(
             "INSERT INTO tool_invocations (session_id, participant_id, tool_name, duration_ms)
-             VALUES ($1, $2, $3, 10)"
+             VALUES ($1, $2, $3, 10)",
         )
-        .bind(ctx.session_id).bind(pid).bind(name)
-        .execute(&db).await.unwrap();
+        .bind(ctx.session_id)
+        .bind(pid)
+        .bind(name)
+        .execute(&db)
+        .await
+        .unwrap();
     }
 
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM tool_invocations WHERE session_id = $1 AND participant_id = $2"
+        "SELECT COUNT(*) FROM tool_invocations WHERE session_id = $1 AND participant_id = $2",
     )
-    .bind(ctx.session_id).bind(ctx.participant_id)
-    .fetch_one(&db).await.unwrap();
+    .bind(ctx.session_id)
+    .bind(ctx.participant_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
 
-    assert_eq!(count, 1, "Should only see invocations for the filtered participant");
+    assert_eq!(
+        count, 1,
+        "Should only see invocations for the filtered participant"
+    );
 }
 
 #[tokio::test]
@@ -172,17 +209,23 @@ async fn test_tool_invocation_filter_by_tool_name() {
     for name in &["create_task", "update_task", "create_task"] {
         sqlx::query(
             "INSERT INTO tool_invocations (session_id, participant_id, tool_name, duration_ms)
-             VALUES ($1, $2, $3, 5)"
+             VALUES ($1, $2, $3, 5)",
         )
-        .bind(ctx.session_id).bind(ctx.participant_id).bind(*name)
-        .execute(&db).await.unwrap();
+        .bind(ctx.session_id)
+        .bind(ctx.participant_id)
+        .bind(*name)
+        .execute(&db)
+        .await
+        .unwrap();
     }
 
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM tool_invocations WHERE session_id = $1 AND tool_name = 'create_task'"
+        "SELECT COUNT(*) FROM tool_invocations WHERE session_id = $1 AND tool_name = 'create_task'",
     )
     .bind(ctx.session_id)
-    .fetch_one(&db).await.unwrap();
+    .fetch_one(&db)
+    .await
+    .unwrap();
 
     assert_eq!(count, 2);
 }
@@ -194,23 +237,33 @@ async fn test_tool_invocation_cascade_on_session_delete() {
 
     sqlx::query(
         "INSERT INTO tool_invocations (session_id, participant_id, tool_name, duration_ms)
-         VALUES ($1, $2, $3, 10)"
+         VALUES ($1, $2, $3, 10)",
     )
-    .bind(ctx.session_id).bind(ctx.participant_id).bind("some_tool")
-    .execute(&db).await.unwrap();
+    .bind(ctx.session_id)
+    .bind(ctx.participant_id)
+    .bind("some_tool")
+    .execute(&db)
+    .await
+    .unwrap();
 
     // Delete the session — should cascade
     sqlx::query("DELETE FROM sessions WHERE id = $1")
         .bind(ctx.session_id)
-        .execute(&db).await.unwrap();
+        .execute(&db)
+        .await
+        .unwrap();
 
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM tool_invocations WHERE session_id = $1"
-    )
-    .bind(ctx.session_id)
-    .fetch_one(&db).await.unwrap();
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM tool_invocations WHERE session_id = $1")
+            .bind(ctx.session_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
-    assert_eq!(count, 0, "Tool invocations should cascade-delete with session");
+    assert_eq!(
+        count, 0,
+        "Tool invocations should cascade-delete with session"
+    );
 }
 
 #[tokio::test]
@@ -244,10 +297,12 @@ async fn test_tool_invocation_jsonb_params() {
 
     // Query array element
     let found: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM tool_invocations WHERE id = $1 AND request_params->'tags' ? 'rust'"
+        "SELECT id FROM tool_invocations WHERE id = $1 AND request_params->'tags' ? 'rust'",
     )
     .bind(inv_id)
-    .fetch_optional(&db).await.unwrap();
+    .fetch_optional(&db)
+    .await
+    .unwrap();
 
     assert!(found.is_some(), "JSONB containment query should work");
 }

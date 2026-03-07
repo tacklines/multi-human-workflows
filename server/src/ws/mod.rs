@@ -22,6 +22,12 @@ pub struct ConnectionManager {
     mcp_agents: DashMap<String, HashSet<String>>,
 }
 
+impl Default for ConnectionManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConnectionManager {
     pub fn new() -> Self {
         Self {
@@ -66,10 +72,12 @@ impl ConnectionManager {
     }
 
     pub fn online_participant_ids(&self, session_code: &str) -> Vec<String> {
-        let mut ids: Vec<String> = self.sessions
+        let mut ids: Vec<String> = self
+            .sessions
             .get(session_code)
             .map(|conns| {
-                conns.iter()
+                conns
+                    .iter()
                     .filter_map(|c| c.participant_id.clone())
                     .collect()
             })
@@ -130,7 +138,12 @@ impl ConnectionManager {
     }
 
     /// Broadcast an agent stream message only to connections subscribed to this participant
-    pub async fn broadcast_agent_stream(&self, session_code: &str, participant_id: &str, msg: &serde_json::Value) {
+    pub async fn broadcast_agent_stream(
+        &self,
+        session_code: &str,
+        participant_id: &str,
+        msg: &serde_json::Value,
+    ) {
         let text = serde_json::to_string(msg).unwrap_or_default();
         if let Some(conns) = self.sessions.get(session_code) {
             for conn in conns.iter() {
@@ -160,7 +173,12 @@ impl ConnectionManager {
         }
     }
 
-    pub async fn send_to_participant(&self, session_code: &str, participant_id: &str, msg: &serde_json::Value) {
+    pub async fn send_to_participant(
+        &self,
+        session_code: &str,
+        participant_id: &str,
+        msg: &serde_json::Value,
+    ) {
         let text = serde_json::to_string(msg).unwrap_or_default();
         if let Some(conns) = self.sessions.get(session_code) {
             for conn in conns.iter() {

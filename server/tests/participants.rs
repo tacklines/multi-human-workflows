@@ -8,8 +8,13 @@ use uuid::Uuid;
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -26,14 +31,27 @@ async fn create_test_context(db: &PgPool) -> TestContext {
         .execute(db).await.unwrap();
 
     let org_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
-        .bind(org_id).bind("Org").bind(format!("org-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
+    )
+    .bind(org_id)
+    .bind("Org")
+    .bind(format!("org-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let project_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(project_id).bind(org_id).bind("Proj").bind(format!("proj-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .bind("Proj")
+    .bind(format!("proj-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let session_id = Uuid::new_v4();
     sqlx::query("INSERT INTO sessions (id, project_id, code, created_by, created_at) VALUES ($1, $2, $3, $4, NOW())")
@@ -42,7 +60,10 @@ async fn create_test_context(db: &PgPool) -> TestContext {
         .bind(user_id)
         .execute(db).await.unwrap();
 
-    TestContext { session_id, user_id }
+    TestContext {
+        session_id,
+        user_id,
+    }
 }
 
 #[tokio::test]
@@ -58,11 +79,12 @@ async fn test_human_participant() {
     .bind(pid).bind(ctx.session_id).bind(ctx.user_id).bind("Alice")
     .execute(&db).await.unwrap();
 
-    let (ptype, name): (String, String) = sqlx::query_as(
-        "SELECT participant_type, display_name FROM participants WHERE id = $1"
-    )
-    .bind(pid)
-    .fetch_one(&db).await.unwrap();
+    let (ptype, name): (String, String) =
+        sqlx::query_as("SELECT participant_type, display_name FROM participants WHERE id = $1")
+            .bind(pid)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(ptype, "human");
     assert_eq!(name, "Alice");
@@ -84,11 +106,11 @@ async fn test_agent_composition_metadata() {
     .execute(&db).await.unwrap();
 
     let (client_name, client_version, model): (Option<String>, Option<String>, Option<String>) =
-        sqlx::query_as(
-            "SELECT client_name, client_version, model FROM participants WHERE id = $1"
-        )
-        .bind(pid)
-        .fetch_one(&db).await.unwrap();
+        sqlx::query_as("SELECT client_name, client_version, model FROM participants WHERE id = $1")
+            .bind(pid)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(client_name, Some("claude-code".to_string()));
     assert_eq!(client_version, Some("1.0.0".to_string()));
@@ -119,20 +141,23 @@ async fn test_agent_sponsor_relationship() {
     .bind("Sponsored Agent").bind(human_id)
     .execute(&db).await.unwrap();
 
-    let sponsor: Option<Uuid> = sqlx::query_scalar(
-        "SELECT sponsor_id FROM participants WHERE id = $1"
-    )
-    .bind(agent_id)
-    .fetch_one(&db).await.unwrap();
+    let sponsor: Option<Uuid> =
+        sqlx::query_scalar("SELECT sponsor_id FROM participants WHERE id = $1")
+            .bind(agent_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(sponsor, Some(human_id));
 
     // Query agents by sponsor
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM participants WHERE sponsor_id = $1 AND participant_type = 'agent'"
+        "SELECT COUNT(*) FROM participants WHERE sponsor_id = $1 AND participant_type = 'agent'",
     )
     .bind(human_id)
-    .fetch_one(&db).await.unwrap();
+    .fetch_one(&db)
+    .await
+    .unwrap();
 
     assert_eq!(count, 1);
 }
@@ -151,22 +176,27 @@ async fn test_agent_disconnection_tracking() {
     .execute(&db).await.unwrap();
 
     // Initially no disconnected_at
-    let disconnected: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
-        "SELECT disconnected_at FROM participants WHERE id = $1"
-    )
-    .bind(pid)
-    .fetch_one(&db).await.unwrap();
+    let disconnected: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT disconnected_at FROM participants WHERE id = $1")
+            .bind(pid)
+            .fetch_one(&db)
+            .await
+            .unwrap();
     assert!(disconnected.is_none());
 
     // Mark as disconnected
     sqlx::query("UPDATE participants SET disconnected_at = NOW() WHERE id = $1")
-        .bind(pid).execute(&db).await.unwrap();
+        .bind(pid)
+        .execute(&db)
+        .await
+        .unwrap();
 
-    let disconnected: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
-        "SELECT disconnected_at FROM participants WHERE id = $1"
-    )
-    .bind(pid)
-    .fetch_one(&db).await.unwrap();
+    let disconnected: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT disconnected_at FROM participants WHERE id = $1")
+            .bind(pid)
+            .fetch_one(&db)
+            .await
+            .unwrap();
     assert!(disconnected.is_some());
 
     // Query for active (non-disconnected) agents
@@ -197,11 +227,12 @@ async fn test_participant_metadata_jsonb() {
     .bind("Meta Agent").bind(&meta)
     .execute(&db).await.unwrap();
 
-    let stored: serde_json::Value = sqlx::query_scalar(
-        "SELECT metadata FROM participants WHERE id = $1"
-    )
-    .bind(pid)
-    .fetch_one(&db).await.unwrap();
+    let stored: serde_json::Value =
+        sqlx::query_scalar("SELECT metadata FROM participants WHERE id = $1")
+            .bind(pid)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(stored["max_context"], 200000);
     assert_eq!(stored["capabilities"][0], "code");
@@ -227,10 +258,12 @@ async fn test_multiple_agents_per_session() {
     }
 
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM participants WHERE session_id = $1 AND participant_type = 'agent'"
+        "SELECT COUNT(*) FROM participants WHERE session_id = $1 AND participant_type = 'agent'",
     )
     .bind(ctx.session_id)
-    .fetch_one(&db).await.unwrap();
+    .fetch_one(&db)
+    .await
+    .unwrap();
 
     assert_eq!(count, 3, "Multiple agents from same user should be allowed");
 }
@@ -249,13 +282,15 @@ async fn test_participant_cascade_on_session_delete() {
 
     sqlx::query("DELETE FROM sessions WHERE id = $1")
         .bind(ctx.session_id)
-        .execute(&db).await.unwrap();
+        .execute(&db)
+        .await
+        .unwrap();
 
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM participants WHERE session_id = $1"
-    )
-    .bind(ctx.session_id)
-    .fetch_one(&db).await.unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM participants WHERE session_id = $1")
+        .bind(ctx.session_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
 
     assert_eq!(count, 0, "Participants should cascade-delete with session");
 }

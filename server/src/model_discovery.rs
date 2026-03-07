@@ -30,6 +30,12 @@ pub struct ModelCache {
 
 const CACHE_TTL_SECS: i64 = 3600;
 
+impl Default for ModelCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ModelCache {
     pub fn new() -> Self {
         Self {

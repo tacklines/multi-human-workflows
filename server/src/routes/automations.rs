@@ -128,10 +128,12 @@ pub async fn list_reactions(
     State(state): State<Arc<AppState>>,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<Vec<EventReactionView>>, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await.map_err(|e| {
-        tracing::error!("Failed to upsert user: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to upsert user: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     verify_project_membership(&state.db, project_id, user.id).await?;
 
     let reactions = sqlx::query_as::<_, EventReactionView>(
@@ -155,10 +157,12 @@ pub async fn create_reaction(
     Path(project_id): Path<Uuid>,
     Json(body): Json<CreateReactionRequest>,
 ) -> Result<(StatusCode, Json<EventReactionView>), StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await.map_err(|e| {
-        tracing::error!("Failed to upsert user: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to upsert user: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     verify_project_membership(&state.db, project_id, user.id).await?;
 
     let reaction = sqlx::query_as::<_, EventReactionView>(
@@ -190,10 +194,12 @@ pub async fn update_reaction(
     Path((project_id, reaction_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<UpdateReactionRequest>,
 ) -> Result<Json<EventReactionView>, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await.map_err(|e| {
-        tracing::error!("Failed to upsert user: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to upsert user: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     verify_project_membership(&state.db, project_id, user.id).await?;
 
     let mut set_clauses: Vec<String> = Vec::new();
@@ -291,10 +297,12 @@ pub async fn delete_reaction(
     State(state): State<Arc<AppState>>,
     Path((project_id, reaction_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await.map_err(|e| {
-        tracing::error!("Failed to upsert user: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to upsert user: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     verify_project_membership(&state.db, project_id, user.id).await?;
 
     let result = sqlx::query("DELETE FROM event_reactions WHERE id = $1 AND project_id = $2")
@@ -321,10 +329,12 @@ pub async fn list_scheduled_jobs(
     State(state): State<Arc<AppState>>,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<Vec<ScheduledJobView>>, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await.map_err(|e| {
-        tracing::error!("Failed to upsert user: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to upsert user: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     verify_project_membership(&state.db, project_id, user.id).await?;
 
     let jobs = sqlx::query_as::<_, ScheduledJobView>(
@@ -348,10 +358,12 @@ pub async fn create_scheduled_job(
     Path(project_id): Path<Uuid>,
     Json(body): Json<CreateScheduledJobRequest>,
 ) -> Result<(StatusCode, Json<ScheduledJobView>), StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await.map_err(|e| {
-        tracing::error!("Failed to upsert user: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to upsert user: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     verify_project_membership(&state.db, project_id, user.id).await?;
 
     let next_run_at = compute_next_run(&body.cron_expr).map_err(|e| {
@@ -387,10 +399,12 @@ pub async fn update_scheduled_job(
     Path((project_id, job_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<UpdateScheduledJobRequest>,
 ) -> Result<Json<ScheduledJobView>, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await.map_err(|e| {
-        tracing::error!("Failed to upsert user: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to upsert user: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     verify_project_membership(&state.db, project_id, user.id).await?;
 
     // If cron_expr is changing, compute new next_run_at
@@ -489,10 +503,12 @@ pub async fn delete_scheduled_job(
     State(state): State<Arc<AppState>>,
     Path((project_id, job_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, StatusCode> {
-    let user = crate::db::upsert_user(&state.db, &claims).await.map_err(|e| {
-        tracing::error!("Failed to upsert user: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let user = crate::db::upsert_user(&state.db, &claims)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to upsert user: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     verify_project_membership(&state.db, project_id, user.id).await?;
 
     let result = sqlx::query("DELETE FROM scheduled_jobs WHERE id = $1 AND project_id = $2")

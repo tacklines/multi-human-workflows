@@ -7,8 +7,13 @@ use uuid::Uuid;
 async fn setup_db() -> PgPool {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url).await.expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+    let db = PgPool::connect(&url)
+        .await
+        .expect("Failed to connect to test database");
+    sqlx::migrate!("./migrations")
+        .run(&db)
+        .await
+        .expect("Failed to run migrations");
     db
 }
 
@@ -25,22 +30,30 @@ async fn create_test_context(db: &PgPool) -> (Uuid, Uuid, Uuid, Uuid) {
         .execute(db).await.unwrap();
 
     let org_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())")
-        .bind(org_id)
-        .bind("Test Org")
-        .bind(format!("test-org-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
+    )
+    .bind(org_id)
+    .bind("Test Org")
+    .bind(format!("test-org-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let project_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(project_id)
-        .bind(org_id)
-        .bind("Test Project")
-        .bind(format!("test-proj-{}", Uuid::new_v4()))
-        .execute(db).await.unwrap();
+    sqlx::query(
+        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
+    )
+    .bind(project_id)
+    .bind(org_id)
+    .bind("Test Project")
+    .bind(format!("test-proj-{}", Uuid::new_v4()))
+    .execute(db)
+    .await
+    .unwrap();
 
     let session_id = Uuid::new_v4();
-    let session_code = format!("{}", &session_id.to_string()[..6]).to_uppercase();
+    let session_code = session_id.to_string()[..6].to_string().to_uppercase();
     sqlx::query("INSERT INTO sessions (id, project_id, code, created_by, created_at) VALUES ($1, $2, $3, $4, NOW())")
         .bind(session_id)
         .bind(project_id)
@@ -76,11 +89,12 @@ async fn test_create_requirement() {
     .bind(user_id)
     .execute(&db).await.unwrap();
 
-    let row: (String, String, String) = sqlx::query_as(
-        "SELECT title, status, priority FROM requirements WHERE id = $1"
-    )
-    .bind(req_id)
-    .fetch_one(&db).await.unwrap();
+    let row: (String, String, String) =
+        sqlx::query_as("SELECT title, status, priority FROM requirements WHERE id = $1")
+            .bind(req_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
     assert_eq!(row.0, "Real-time cursor presence");
     assert_eq!(row.1, "draft");
@@ -120,21 +134,24 @@ async fn test_requirement_hierarchy() {
 
     // Query children
     let children: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, title FROM requirements WHERE parent_id = $1 ORDER BY created_at"
+        "SELECT id, title FROM requirements WHERE parent_id = $1 ORDER BY created_at",
     )
     .bind(parent_id)
-    .fetch_all(&db).await.unwrap();
+    .fetch_all(&db)
+    .await
+    .unwrap();
 
     assert_eq!(children.len(), 2);
     assert_eq!(children[0].1, "Cursor presence");
     assert_eq!(children[1].1, "Conflict resolution");
 
     // Top-level requirements should not include children
-    let top_level: Vec<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM requirements WHERE project_id = $1 AND parent_id IS NULL"
-    )
-    .bind(project_id)
-    .fetch_all(&db).await.unwrap();
+    let top_level: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM requirements WHERE project_id = $1 AND parent_id IS NULL")
+            .bind(project_id)
+            .fetch_all(&db)
+            .await
+            .unwrap();
     assert_eq!(top_level.len(), 1);
     assert_eq!(top_level[0].0, parent_id);
 }
@@ -163,7 +180,10 @@ async fn test_requirement_status_constraint() {
     .bind(Uuid::new_v4()).bind(project_id).bind(user_id)
     .execute(&db).await;
 
-    assert!(result.is_err(), "Invalid status should be rejected by CHECK constraint");
+    assert!(
+        result.is_err(),
+        "Invalid status should be rejected by CHECK constraint"
+    );
 }
 
 #[tokio::test]
@@ -199,19 +219,27 @@ async fn test_requirement_task_linking() {
 
     // Link tasks to requirement
     sqlx::query("INSERT INTO requirement_tasks (requirement_id, task_id) VALUES ($1, $2)")
-        .bind(req_id).bind(task1_id)
-        .execute(&db).await.unwrap();
+        .bind(req_id)
+        .bind(task1_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     sqlx::query("INSERT INTO requirement_tasks (requirement_id, task_id) VALUES ($1, $2)")
-        .bind(req_id).bind(task2_id)
-        .execute(&db).await.unwrap();
+        .bind(req_id)
+        .bind(task2_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Verify links
     let linked_tasks: Vec<(Uuid,)> = sqlx::query_as(
-        "SELECT task_id FROM requirement_tasks WHERE requirement_id = $1 ORDER BY task_id"
+        "SELECT task_id FROM requirement_tasks WHERE requirement_id = $1 ORDER BY task_id",
     )
     .bind(req_id)
-    .fetch_all(&db).await.unwrap();
+    .fetch_all(&db)
+    .await
+    .unwrap();
     assert_eq!(linked_tasks.len(), 2);
 
     // Duplicate link should be prevented (ON CONFLICT DO NOTHING or unique constraint)
@@ -222,14 +250,18 @@ async fn test_requirement_task_linking() {
 
     // Unlink one task
     sqlx::query("DELETE FROM requirement_tasks WHERE requirement_id = $1 AND task_id = $2")
-        .bind(req_id).bind(task2_id)
-        .execute(&db).await.unwrap();
+        .bind(req_id)
+        .bind(task2_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
-    let remaining: Vec<(Uuid,)> = sqlx::query_as(
-        "SELECT task_id FROM requirement_tasks WHERE requirement_id = $1"
-    )
-    .bind(req_id)
-    .fetch_all(&db).await.unwrap();
+    let remaining: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT task_id FROM requirement_tasks WHERE requirement_id = $1")
+            .bind(req_id)
+            .fetch_all(&db)
+            .await
+            .unwrap();
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].0, task1_id);
 }
@@ -266,24 +298,48 @@ async fn test_requirement_cascade_delete() {
     .execute(&db).await.unwrap();
 
     sqlx::query("INSERT INTO requirement_tasks (requirement_id, task_id) VALUES ($1, $2)")
-        .bind(child_id).bind(task_id)
-        .execute(&db).await.unwrap();
+        .bind(child_id)
+        .bind(task_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
     // Delete parent — child should cascade, but task should survive
     sqlx::query("DELETE FROM requirements WHERE id = $1")
-        .bind(parent_id).execute(&db).await.unwrap();
+        .bind(parent_id)
+        .execute(&db)
+        .await
+        .unwrap();
 
-    let child_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1)")
-        .bind(child_id).fetch_one(&db).await.unwrap();
+    let child_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM requirements WHERE id = $1)")
+            .bind(child_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
     assert!(!child_exists, "Child requirement should be cascade deleted");
 
-    let link_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM requirement_tasks WHERE requirement_id = $1)")
-        .bind(child_id).fetch_one(&db).await.unwrap();
-    assert!(!link_exists, "Requirement-task link should be cascade deleted");
+    let link_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM requirement_tasks WHERE requirement_id = $1)",
+    )
+    .bind(child_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(
+        !link_exists,
+        "Requirement-task link should be cascade deleted"
+    );
 
     let task_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1)")
-        .bind(task_id).fetch_one(&db).await.unwrap();
-    assert!(task_exists, "Task should NOT be cascade deleted (only the link)");
+        .bind(task_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert!(
+        task_exists,
+        "Task should NOT be cascade deleted (only the link)"
+    );
 }
 
 #[tokio::test]
@@ -310,5 +366,8 @@ async fn test_requirement_priority_constraint() {
     .bind(Uuid::new_v4()).bind(project_id).bind(user_id)
     .execute(&db).await;
 
-    assert!(result.is_err(), "Invalid priority should be rejected by CHECK constraint");
+    assert!(
+        result.is_err(),
+        "Invalid priority should be rejected by CHECK constraint"
+    );
 }

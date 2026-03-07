@@ -16,19 +16,29 @@ pub async fn list_orgs(
     State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<Vec<OrgView>>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-    let rows = sqlx::query_as::<_, (Uuid, String, String, bool, chrono::DateTime<chrono::Utc>, OrgRole, i64)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            String,
+            bool,
+            chrono::DateTime<chrono::Utc>,
+            OrgRole,
+            i64,
+        ),
+    >(
         "SELECT o.id, o.name, o.slug, o.personal, o.created_at, om.role,
                 (SELECT COUNT(*) FROM org_members om2 WHERE om2.org_id = o.id) as member_count
          FROM organizations o
          JOIN org_members om ON om.org_id = o.id
          WHERE om.user_id = $1
-         ORDER BY o.personal DESC, o.name"
+         ORDER BY o.personal DESC, o.name",
     )
     .bind(user.id)
     .fetch_all(&state.db)
@@ -40,17 +50,29 @@ pub async fn list_orgs(
 
     // Auto-bootstrap personal org for new users
     if rows.is_empty() {
-        let _ = db::ensure_default_project(&state.db, user.id).await
+        let _ = db::ensure_default_project(&state.db, user.id)
+            .await
             .map_err(|e| tracing::warn!("Failed to bootstrap personal org: {e}"));
 
         // Re-fetch after bootstrap
-        let rows = sqlx::query_as::<_, (Uuid, String, String, bool, chrono::DateTime<chrono::Utc>, OrgRole, i64)>(
+        let rows = sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                String,
+                String,
+                bool,
+                chrono::DateTime<chrono::Utc>,
+                OrgRole,
+                i64,
+            ),
+        >(
             "SELECT o.id, o.name, o.slug, o.personal, o.created_at, om.role,
                     (SELECT COUNT(*) FROM org_members om2 WHERE om2.org_id = o.id) as member_count
              FROM organizations o
              JOIN org_members om ON om.org_id = o.id
              WHERE om.user_id = $1
-             ORDER BY o.personal DESC, o.name"
+             ORDER BY o.personal DESC, o.name",
         )
         .bind(user.id)
         .fetch_all(&state.db)
@@ -60,14 +82,38 @@ pub async fn list_orgs(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-        return Ok(Json(rows.into_iter().map(|(id, name, slug, personal, created_at, role, member_count)| {
-            OrgView { id, name, slug, personal, role, created_at, member_count }
-        }).collect()));
+        return Ok(Json(
+            rows.into_iter()
+                .map(
+                    |(id, name, slug, personal, created_at, role, member_count)| OrgView {
+                        id,
+                        name,
+                        slug,
+                        personal,
+                        role,
+                        created_at,
+                        member_count,
+                    },
+                )
+                .collect(),
+        ));
     }
 
-    Ok(Json(rows.into_iter().map(|(id, name, slug, personal, created_at, role, member_count)| {
-        OrgView { id, name, slug, personal, role, created_at, member_count }
-    }).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(
+                |(id, name, slug, personal, created_at, role, member_count)| OrgView {
+                    id,
+                    name,
+                    slug,
+                    personal,
+                    role,
+                    created_at,
+                    member_count,
+                },
+            )
+            .collect(),
+    ))
 }
 
 /// Get org by slug
@@ -76,18 +122,28 @@ pub async fn get_org(
     Path(slug): Path<String>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<OrgView>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-    let row = sqlx::query_as::<_, (Uuid, String, String, bool, chrono::DateTime<chrono::Utc>, OrgRole, i64)>(
+    let row = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            String,
+            bool,
+            chrono::DateTime<chrono::Utc>,
+            OrgRole,
+            i64,
+        ),
+    >(
         "SELECT o.id, o.name, o.slug, o.personal, o.created_at, om.role,
                 (SELECT COUNT(*) FROM org_members om2 WHERE om2.org_id = o.id) as member_count
          FROM organizations o
          JOIN org_members om ON om.org_id = o.id
-         WHERE o.slug = $1 AND om.user_id = $2"
+         WHERE o.slug = $1 AND om.user_id = $2",
     )
     .bind(&slug)
     .bind(user.id)
@@ -100,7 +156,15 @@ pub async fn get_org(
     .ok_or(StatusCode::NOT_FOUND)?;
 
     let (id, name, slug, personal, created_at, role, member_count) = row;
-    Ok(Json(OrgView { id, name, slug, personal, role, created_at, member_count }))
+    Ok(Json(OrgView {
+        id,
+        name,
+        slug,
+        personal,
+        role,
+        created_at,
+        member_count,
+    }))
 }
 
 /// Create a new organization
@@ -109,11 +173,10 @@ pub async fn create_org(
     AuthUser(claims): AuthUser,
     Json(req): Json<CreateOrgRequest>,
 ) -> Result<(StatusCode, Json<OrgView>), StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let slug = req.slug.unwrap_or_else(|| slugify(&req.name));
     let org_id = Uuid::new_v4();
@@ -147,15 +210,18 @@ pub async fn create_org(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok((StatusCode::CREATED, Json(OrgView {
-        id: org_id,
-        name: req.name,
-        slug,
-        personal: false,
-        role: OrgRole::Owner,
-        created_at: chrono::Utc::now(),
-        member_count: 1,
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(OrgView {
+            id: org_id,
+            name: req.name,
+            slug,
+            personal: false,
+            role: OrgRole::Owner,
+            created_at: chrono::Utc::now(),
+            member_count: 1,
+        }),
+    ))
 }
 
 /// Update org (owner/admin only)
@@ -165,11 +231,10 @@ pub async fn update_org(
     AuthUser(claims): AuthUser,
     Json(req): Json<UpdateOrgRequest>,
 ) -> Result<Json<OrgView>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let (org, role) = get_org_with_role(&state.db, &slug, user.id).await?;
     if role == OrgRole::Member {
@@ -188,11 +253,12 @@ pub async fn update_org(
             })?;
     }
 
-    let member_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM org_members WHERE org_id = $1")
-        .bind(org.id)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let member_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM org_members WHERE org_id = $1")
+            .bind(org.id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(OrgView {
         id: org.id,
@@ -211,32 +277,43 @@ pub async fn list_members(
     Path(slug): Path<String>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<Vec<OrgMemberView>>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    let (org, _role) = get_org_with_role(&state.db, &slug, user.id).await?;
-
-    let members = sqlx::query_as::<_, (Uuid, String, String, OrgRole, chrono::DateTime<chrono::Utc>)>(
-        "SELECT u.id, u.username, u.display_name, om.role, om.joined_at
-         FROM org_members om
-         JOIN users u ON u.id = om.user_id
-         WHERE om.org_id = $1
-         ORDER BY om.joined_at"
-    )
-    .bind(org.id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to list org members: {e}");
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(members.into_iter().map(|(user_id, username, display_name, role, joined_at)| {
-        OrgMemberView { user_id, username, display_name, role, joined_at }
-    }).collect()))
+    let (org, _role) = get_org_with_role(&state.db, &slug, user.id).await?;
+
+    let members =
+        sqlx::query_as::<_, (Uuid, String, String, OrgRole, chrono::DateTime<chrono::Utc>)>(
+            "SELECT u.id, u.username, u.display_name, om.role, om.joined_at
+         FROM org_members om
+         JOIN users u ON u.id = om.user_id
+         WHERE om.org_id = $1
+         ORDER BY om.joined_at",
+        )
+        .bind(org.id)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list org members: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(
+        members
+            .into_iter()
+            .map(
+                |(user_id, username, display_name, role, joined_at)| OrgMemberView {
+                    user_id,
+                    username,
+                    display_name,
+                    role,
+                    joined_at,
+                },
+            )
+            .collect(),
+    ))
 }
 
 /// Invite member to org (owner/admin only)
@@ -246,11 +323,10 @@ pub async fn invite_member(
     AuthUser(claims): AuthUser,
     Json(req): Json<InviteOrgMemberRequest>,
 ) -> Result<(StatusCode, Json<OrgMemberView>), StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let (org, role) = get_org_with_role(&state.db, &slug, user.id).await?;
     if role == OrgRole::Member {
@@ -277,7 +353,7 @@ pub async fn invite_member(
 
     sqlx::query(
         "INSERT INTO org_members (org_id, user_id, role, joined_at) VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (org_id, user_id) DO NOTHING"
+         ON CONFLICT (org_id, user_id) DO NOTHING",
     )
     .bind(org.id)
     .bind(invite_user.id)
@@ -289,13 +365,16 @@ pub async fn invite_member(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok((StatusCode::CREATED, Json(OrgMemberView {
-        user_id: invite_user.id,
-        username: invite_user.username,
-        display_name: invite_user.display_name,
-        role: member_role,
-        joined_at: chrono::Utc::now(),
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(OrgMemberView {
+            user_id: invite_user.id,
+            username: invite_user.username,
+            display_name: invite_user.display_name,
+            role: member_role,
+            joined_at: chrono::Utc::now(),
+        }),
+    ))
 }
 
 /// Update member role (owner only for admin promotion)
@@ -305,11 +384,10 @@ pub async fn update_member(
     AuthUser(claims): AuthUser,
     Json(req): Json<UpdateOrgMemberRequest>,
 ) -> Result<Json<OrgMemberView>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let (org, caller_role) = get_org_with_role(&state.db, &slug, user.id).await?;
 
@@ -355,11 +433,10 @@ pub async fn remove_member(
     Path((slug, member_user_id)): Path<(String, Uuid)>,
     AuthUser(claims): AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let (org, caller_role) = get_org_with_role(&state.db, &slug, user.id).await?;
 
@@ -369,15 +446,14 @@ pub async fn remove_member(
 
     // Check target's role — admins can't remove other admins/owners
     if caller_role == OrgRole::Admin {
-        let target_role: OrgRole = sqlx::query_scalar(
-            "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2"
-        )
-        .bind(org.id)
-        .bind(member_user_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        let target_role: OrgRole =
+            sqlx::query_scalar("SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2")
+                .bind(org.id)
+                .bind(member_user_id)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .ok_or(StatusCode::NOT_FOUND)?;
 
         if target_role != OrgRole::Member {
             return Err(StatusCode::FORBIDDEN);
@@ -412,16 +488,15 @@ pub async fn list_org_projects(
     Path(slug): Path<String>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<Vec<ProjectView>>, StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let (org, _role) = get_org_with_role(&state.db, &slug, user.id).await?;
 
     let projects = sqlx::query_as::<_, Project>(
-        "SELECT p.* FROM projects p WHERE p.org_id = $1 ORDER BY p.created_at"
+        "SELECT p.* FROM projects p WHERE p.org_id = $1 ORDER BY p.created_at",
     )
     .bind(org.id)
     .fetch_all(&state.db)
@@ -431,15 +506,20 @@ pub async fn list_org_projects(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(projects.into_iter().map(|p| ProjectView {
-        id: p.id,
-        name: p.name,
-        slug: p.slug,
-        ticket_prefix: p.ticket_prefix,
-        created_at: p.created_at,
-        repo_url: p.repo_url,
-        default_branch: Some(p.default_branch),
-    }).collect()))
+    Ok(Json(
+        projects
+            .into_iter()
+            .map(|p| ProjectView {
+                id: p.id,
+                name: p.name,
+                slug: p.slug,
+                ticket_prefix: p.ticket_prefix,
+                created_at: p.created_at,
+                repo_url: p.repo_url,
+                default_branch: Some(p.default_branch),
+            })
+            .collect(),
+    ))
 }
 
 /// Create project in a specific org
@@ -449,11 +529,10 @@ pub async fn create_org_project(
     AuthUser(claims): AuthUser,
     Json(req): Json<CreateProjectRequest>,
 ) -> Result<(StatusCode, Json<ProjectView>), StatusCode> {
-    let user = db::upsert_user(&state.db, &claims).await
-        .map_err(|e| {
-            tracing::error!("Failed to upsert user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
+        tracing::error!("Failed to upsert user: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let (org, role) = get_org_with_role(&state.db, &slug, user.id).await?;
 
@@ -498,15 +577,18 @@ pub async fn create_org_project(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok((StatusCode::CREATED, Json(ProjectView {
-        id: project_id,
-        name: req.name,
-        slug: project_slug,
-        ticket_prefix,
-        created_at: chrono::Utc::now(),
-        repo_url: req.repo_url,
-        default_branch: Some(default_branch),
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(ProjectView {
+            id: project_id,
+            name: req.name,
+            slug: project_slug,
+            ticket_prefix,
+            created_at: chrono::Utc::now(),
+            repo_url: req.repo_url,
+            default_branch: Some(default_branch),
+        }),
+    ))
 }
 
 // --- Helpers ---
@@ -516,11 +598,21 @@ async fn get_org_with_role(
     slug: &str,
     user_id: Uuid,
 ) -> Result<(Organization, OrgRole), StatusCode> {
-    let row = sqlx::query_as::<_, (Uuid, String, String, bool, chrono::DateTime<chrono::Utc>, OrgRole)>(
+    let row = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            String,
+            bool,
+            chrono::DateTime<chrono::Utc>,
+            OrgRole,
+        ),
+    >(
         "SELECT o.id, o.name, o.slug, o.personal, o.created_at, om.role
          FROM organizations o
          JOIN org_members om ON om.org_id = o.id
-         WHERE o.slug = $1 AND om.user_id = $2"
+         WHERE o.slug = $1 AND om.user_id = $2",
     )
     .bind(slug)
     .bind(user_id)
@@ -533,7 +625,16 @@ async fn get_org_with_role(
     .ok_or(StatusCode::NOT_FOUND)?;
 
     let (id, name, slug, personal, created_at, role) = row;
-    Ok((Organization { id, name, slug, personal, created_at }, role))
+    Ok((
+        Organization {
+            id,
+            name,
+            slug,
+            personal,
+            created_at,
+        },
+        role,
+    ))
 }
 
 fn slugify(name: &str) -> String {

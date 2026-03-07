@@ -61,13 +61,25 @@ pub async fn list_activity(
     }
     sql.push_str(&format!(" ORDER BY ae.created_at DESC LIMIT ${param_idx}"));
 
-    let mut q = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, Uuid, String, serde_json::Value, chrono::DateTime<chrono::Utc>)>(&sql)
-        .bind(session.project_id);
+    let mut q = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Uuid,
+            String,
+            String,
+            String,
+            Uuid,
+            String,
+            serde_json::Value,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(&sql)
+    .bind(session.project_id);
 
     if let Some(ref before) = query.before {
-        let before_time: chrono::DateTime<chrono::Utc> = before
-            .parse()
-            .map_err(|_| StatusCode::BAD_REQUEST)?;
+        let before_time: chrono::DateTime<chrono::Utc> =
+            before.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
         q = q.bind(before_time);
     }
     if let Some(target_id) = query.target_id {
@@ -78,17 +90,15 @@ pub async fn list_activity(
     }
     q = q.bind(limit);
 
-    let events = q.fetch_all(&state.db)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to fetch activity: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let events = q.fetch_all(&state.db).await.map_err(|e| {
+        tracing::error!("Failed to fetch activity: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let views: Vec<ActivityEventView> = events
         .into_iter()
-        .map(|(id, actor_id, actor_name, event_type, target_type, target_id, summary, metadata, created_at)| {
-            ActivityEventView {
+        .map(
+            |(
                 id,
                 actor_id,
                 actor_name,
@@ -98,8 +108,20 @@ pub async fn list_activity(
                 summary,
                 metadata,
                 created_at,
-            }
-        })
+            )| {
+                ActivityEventView {
+                    id,
+                    actor_id,
+                    actor_name,
+                    event_type,
+                    target_type,
+                    target_id,
+                    summary,
+                    metadata,
+                    created_at,
+                }
+            },
+        )
         .collect();
 
     Ok(Json(views))

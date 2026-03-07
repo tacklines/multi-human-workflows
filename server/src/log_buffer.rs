@@ -25,7 +25,7 @@ impl LogBuffer {
     }
 
     pub fn push(&self, key: Uuid, line: LogLine) {
-        let mut buf = self.buffers.entry(key).or_insert_with(VecDeque::new);
+        let mut buf = self.buffers.entry(key).or_default();
         if buf.len() >= self.max_lines {
             buf.pop_front();
         }
