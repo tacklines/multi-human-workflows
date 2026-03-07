@@ -136,6 +136,7 @@ async fn main() {
     let app = Router::new()
         // Health
         .route("/health", get(|| async { "ok" }))
+        .route("/api/health", get(|| async { "ok" }))
         // Organizations
         .route("/api/orgs", get(routes::orgs::list_orgs).post(routes::orgs::create_org))
         .route("/api/orgs/{slug}", get(routes::orgs::get_org).patch(routes::orgs::update_org))
