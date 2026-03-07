@@ -1,0 +1,54 @@
+version: v2.3.0
+
+dsn: ${DSN}
+
+serve:
+  public:
+    cors:
+      enabled: true
+      allowed_origins:
+        - https://seam.tacklines.com
+      allowed_methods:
+        - POST
+        - GET
+        - PUT
+        - PATCH
+        - DELETE
+      allowed_headers:
+        - Authorization
+        - Content-Type
+      exposed_headers:
+        - Content-Type
+  admin:
+    host: 0.0.0.0
+    port: 4445
+
+urls:
+  self:
+    issuer: https://auth.seam.tacklines.com
+  consent: https://seam.tacklines.com/auth/consent
+  login: https://seam.tacklines.com/auth/login
+  logout: https://seam.tacklines.com/auth/logout
+
+oidc:
+  subject_identifiers:
+    supported_types:
+      - public
+  dynamic_client_registration:
+    enabled: true
+
+secrets:
+  system:
+    - ${SECRETS_SYSTEM}
+
+log:
+  level: info
+  format: json
+
+strategies:
+  access_token: jwt
+
+oauth2:
+  grant:
+    jwt:
+      jti_optional: true

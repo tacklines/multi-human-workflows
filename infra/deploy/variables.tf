@@ -56,20 +56,20 @@ variable "rabbitmq_password" {
   sensitive   = true
 }
 
-variable "zitadel_masterkey" {
-  description = "Zitadel master key (exactly 32 characters)"
+variable "hydra_secrets_system" {
+  description = "Hydra system secret for cookie/token signing"
   type        = string
   sensitive   = true
 }
 
-variable "zitadel_db_password" {
-  description = "Zitadel database password"
+variable "kratos_secrets_cookie" {
+  description = "Kratos cookie secret"
   type        = string
   sensitive   = true
 }
 
-variable "zitadel_admin_password" {
-  description = "Zitadel initial admin password"
+variable "kratos_secrets_cipher" {
+  description = "Kratos cipher secret (exactly 32 chars)"
   type        = string
   sensitive   = true
 }

@@ -42,7 +42,7 @@ jobs:
           build-args: |
             VITE_AUTH_AUTHORITY=https://auth.seam.tacklines.com
             VITE_APP_URL=https://seam.tacklines.com
-            VITE_CLIENT_ID=362967076937138180
+            VITE_CLIENT_ID=seam-web
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

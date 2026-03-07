@@ -10,22 +10,22 @@ resource "aws_ssm_parameter" "rabbitmq_password" {
   value = var.rabbitmq_password
 }
 
-resource "aws_ssm_parameter" "zitadel_masterkey" {
-  name  = "/seam/zitadel-masterkey"
+resource "aws_ssm_parameter" "hydra_secrets_system" {
+  name  = "/seam/hydra-secrets-system"
   type  = "SecureString"
-  value = var.zitadel_masterkey
+  value = var.hydra_secrets_system
 }
 
-resource "aws_ssm_parameter" "zitadel_db_password" {
-  name  = "/seam/zitadel-db-password"
+resource "aws_ssm_parameter" "kratos_secrets_cookie" {
+  name  = "/seam/kratos-secrets-cookie"
   type  = "SecureString"
-  value = var.zitadel_db_password
+  value = var.kratos_secrets_cookie
 }
 
-resource "aws_ssm_parameter" "zitadel_admin_password" {
-  name  = "/seam/zitadel-admin-password"
+resource "aws_ssm_parameter" "kratos_secrets_cipher" {
+  name  = "/seam/kratos-secrets-cipher"
   type  = "SecureString"
-  value = var.zitadel_admin_password
+  value = var.kratos_secrets_cipher
 }
 
 resource "aws_ssm_parameter" "credential_master_key" {

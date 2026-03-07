@@ -6,7 +6,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      ZITADEL_DB_PASSWORD: ${ZITADEL_DATABASE_POSTGRES_USER_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/postgres:/docker-entrypoint-initdb.d
@@ -36,72 +35,71 @@ services:
     networks:
       - internal
 
-  zitadel:
-    image: ghcr.io/zitadel/zitadel:latest
-    restart: unless-stopped
-    user: "0"
+  hydra-migrate:
+    image: oryd/hydra:v2.3
+    command: migrate -c /etc/config/hydra/hydra.yml sql -e --yes
+    volumes:
+      - ./infra/ory/hydra-prod.yml:/etc/config/hydra/hydra.yml:ro
+    environment:
+      DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/hydra?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
-    command: start-from-init --masterkeyFromEnv --tlsMode external
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY}
-      ZITADEL_PORT: 8080
-      ZITADEL_TLS_ENABLED: "false"
-      ZITADEL_DATABASE_POSTGRES_HOST: postgres
-      ZITADEL_DATABASE_POSTGRES_PORT: 5432
-      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
-      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
-      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${ZITADEL_DATABASE_POSTGRES_USER_PASSWORD}
-      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
-      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${POSTGRES_USER}
-      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD}
-      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
-      ZITADEL_EXTERNALDOMAIN: auth.seam.tacklines.com
-      ZITADEL_EXTERNALPORT: 443
-      ZITADEL_EXTERNALSECURE: "true"
-      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
-      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD}
-      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: false
-      # Login V2: machine user + PAT for the login client
-      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /zitadel/bootstrap/login-client.pat
-      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
-      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Automatically Initialized IAM_LOGIN_CLIENT
-      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: "2036-01-01T00:00:00Z"
-      # Login V2 feature + redirect URLs
-      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
-      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: https://auth.seam.tacklines.com/ui/v2/login/
-      ZITADEL_OIDC_DEFAULTLOGINURLV2: https://auth.seam.tacklines.com/ui/v2/login/login?authRequest=
-      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: https://auth.seam.tacklines.com/ui/v2/login/logout?post_logout_redirect=
-      ZITADEL_SAML_DEFAULTLOGINURLV2: https://auth.seam.tacklines.com/ui/v2/login/login?samlRequest=
+    networks:
+      - internal
+    restart: "no"
+
+  hydra:
+    image: oryd/hydra:v2.3
+    command: serve all --config /etc/config/hydra/hydra.yml
     volumes:
-      - zitadel_bootstrap:/zitadel/bootstrap:rw
+      - ./infra/ory/hydra-prod.yml:/etc/config/hydra/hydra.yml:ro
+    depends_on:
+      hydra-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:4444:4444"
+      - "127.0.0.1:4445:4445"
+    environment:
+      DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/hydra?sslmode=disable
+      SECRETS_SYSTEM: ${HYDRA_SECRETS_SYSTEM}
     networks:
       - internal
 
-  zitadel-login:
-    image: ghcr.io/zitadel/zitadel-login:latest
-    restart: unless-stopped
-    user: "0"
-    depends_on:
-      - zitadel
-    environment:
-      ZITADEL_API_URL: http://zitadel:8080
-      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
-      ZITADEL_SERVICE_USER_TOKEN_FILE: /zitadel/bootstrap/login-client.pat
-      CUSTOM_REQUEST_HEADERS: "Host:auth.seam.tacklines.com,X-Forwarded-Proto:https"
-    healthcheck:
-      test: ["CMD", "/bin/sh", "-c", "node /app/healthcheck.js http://localhost:3000/ui/v2/login/healthy"]
-      interval: 10s
-      timeout: 30s
-      retries: 12
-      start_period: 20s
+  kratos-migrate:
+    image: oryd/kratos:v1.3
+    command: migrate sql -e --yes --config /etc/config/kratos/kratos.yml
     volumes:
-      - zitadel_bootstrap:/zitadel/bootstrap:ro
+      - ./infra/ory/kratos-prod.yml:/etc/config/kratos/kratos.yml:ro
+      - ./infra/ory/identity.schema.json:/etc/config/kratos/identity.schema.json:ro
+    environment:
+      DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/kratos?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: "no"
+
+  kratos:
+    image: oryd/kratos:v1.3
+    command: serve --config /etc/config/kratos/kratos.yml --watch-courier
+    volumes:
+      - ./infra/ory/kratos-prod.yml:/etc/config/kratos/kratos.yml:ro
+      - ./infra/ory/identity.schema.json:/etc/config/kratos/identity.schema.json:ro
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     ports:
-      - "127.0.0.1:3100:3000"
+      - "127.0.0.1:4433:4433"
+    environment:
+      DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/kratos?sslmode=disable
+      SECRETS_COOKIE: ${KRATOS_SECRETS_COOKIE}
+      SECRETS_CIPHER: ${KRATOS_SECRETS_CIPHER}
     networks:
       - internal
 
@@ -122,8 +120,9 @@ services:
       HOST: 0.0.0.0
       PORT: 3002
       CREDENTIAL_MASTER_KEY: ${CREDENTIAL_MASTER_KEY}
-      JWKS_URL: https://auth.seam.tacklines.com/oauth/v2/keys
+      JWKS_URL: https://auth.seam.tacklines.com/.well-known/jwks.json
       ISSUER_URL: https://auth.seam.tacklines.com
+      HYDRA_ADMIN_URL: http://hydra:4445
       CODER_URL: http://coder:7080
       CODER_TOKEN: ${CODER_TOKEN}
       MCP_AUTH_DISABLED: ${MCP_AUTH_DISABLED:-false}
@@ -178,4 +177,3 @@ networks:
 volumes:
   pgdata:
   rabbitmq_data:
-  zitadel_bootstrap:

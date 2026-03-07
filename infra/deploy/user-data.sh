@@ -41,6 +41,12 @@ seam.${domain_name} {
 	tls ${acme_email}
 	encode gzip
 
+	# Kratos browser self-service flows
+	handle /kratos/* {
+		uri strip_prefix /kratos
+		reverse_proxy localhost:4433
+	}
+
 	# API, MCP, and WebSocket — proxy to seam-server
 	handle /api/* {
 		reverse_proxy localhost:3002
@@ -65,12 +71,7 @@ seam.${domain_name} {
 
 auth.seam.${domain_name} {
 	tls ${acme_email}
-
-	# Login V2 UI (Next.js container)
-	reverse_proxy /ui/v2/login/* localhost:3100
-
-	# Zitadel API + Console + OIDC
-	reverse_proxy h2c://localhost:8080
+	reverse_proxy localhost:4444
 }
 CADDYFILE
 
@@ -180,9 +181,9 @@ REGION="${aws_region}"
 
 PG_PASS=$(aws ssm get-parameter --name "/seam/postgres-password" --with-decryption --query "Parameter.Value" --output text --region "$REGION")
 RMQ_PASS=$(aws ssm get-parameter --name "/seam/rabbitmq-password" --with-decryption --query "Parameter.Value" --output text --region "$REGION")
-ZIT_MASTER=$(aws ssm get-parameter --name "/seam/zitadel-masterkey" --with-decryption --query "Parameter.Value" --output text --region "$REGION")
-ZIT_DB_PASS=$(aws ssm get-parameter --name "/seam/zitadel-db-password" --with-decryption --query "Parameter.Value" --output text --region "$REGION")
-ZIT_ADMIN_PASS=$(aws ssm get-parameter --name "/seam/zitadel-admin-password" --with-decryption --query "Parameter.Value" --output text --region "$REGION")
+HYDRA_SYS=$(aws ssm get-parameter --name "/seam/hydra-secrets-system" --with-decryption --query "Parameter.Value" --output text --region "$REGION")
+KRATOS_COOKIE=$(aws ssm get-parameter --name "/seam/kratos-secrets-cookie" --with-decryption --query "Parameter.Value" --output text --region "$REGION")
+KRATOS_CIPHER=$(aws ssm get-parameter --name "/seam/kratos-secrets-cipher" --with-decryption --query "Parameter.Value" --output text --region "$REGION")
 CRED_KEY=$(aws ssm get-parameter --name "/seam/credential-master-key" --with-decryption --query "Parameter.Value" --output text --region "$REGION")
 WORKER_TOKEN=$(aws ssm get-parameter --name "/seam/worker-api-token" --with-decryption --query "Parameter.Value" --output text --region "$REGION")
 
@@ -195,9 +196,9 @@ POSTGRES_USER=seam
 POSTGRES_PASSWORD=$PG_PASS
 RABBITMQ_DEFAULT_USER=seam
 RABBITMQ_DEFAULT_PASS=$RMQ_PASS
-ZITADEL_MASTERKEY=$ZIT_MASTER
-ZITADEL_DATABASE_POSTGRES_USER_PASSWORD=$ZIT_DB_PASS
-ZITADEL_ADMIN_PASSWORD=$ZIT_ADMIN_PASS
+HYDRA_SECRETS_SYSTEM=$HYDRA_SYS
+KRATOS_SECRETS_COOKIE=$KRATOS_COOKIE
+KRATOS_SECRETS_CIPHER=$KRATOS_CIPHER
 SEAM_IMAGE=$ECR_URL:latest
 CREDENTIAL_MASTER_KEY=$CRED_KEY
 MCP_AUTH_DISABLED=false

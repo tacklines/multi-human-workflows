@@ -1,0 +1,113 @@
+version: v1.3.0
+
+dsn: ${DSN}
+
+serve:
+  public:
+    base_url: https://seam.tacklines.com/kratos/
+    cors:
+      enabled: true
+      allowed_origins:
+        - https://seam.tacklines.com
+      allowed_methods:
+        - POST
+        - GET
+        - PUT
+        - PATCH
+        - DELETE
+      allowed_headers:
+        - Authorization
+        - Content-Type
+        - X-Session-Token
+      exposed_headers:
+        - Content-Type
+  admin:
+    base_url: http://kratos:4434/
+
+selfservice:
+  default_browser_return_url: https://seam.tacklines.com/
+  allowed_return_urls:
+    - https://seam.tacklines.com
+
+  methods:
+    password:
+      enabled: true
+    totp:
+      enabled: true
+      config:
+        issuer: Seam
+    webauthn:
+      enabled: true
+      config:
+        rp:
+          display_name: Seam
+          id: seam.tacklines.com
+          origins:
+            - https://seam.tacklines.com
+        passwordless: false
+    passkey:
+      enabled: true
+      config:
+        rp:
+          display_name: Seam
+          id: seam.tacklines.com
+          origins:
+            - https://seam.tacklines.com
+
+  flows:
+    login:
+      ui_url: https://seam.tacklines.com/auth/login
+      lifespan: 10m
+    registration:
+      ui_url: https://seam.tacklines.com/auth/register
+      lifespan: 10m
+      after:
+        password:
+          hooks:
+            - hook: session
+    settings:
+      ui_url: https://seam.tacklines.com/settings
+      privileged_session_max_age: 15m
+    recovery:
+      enabled: true
+      ui_url: https://seam.tacklines.com/auth/recovery
+    verification:
+      enabled: true
+      ui_url: https://seam.tacklines.com/auth/verify
+    error:
+      ui_url: https://seam.tacklines.com/auth/error
+    logout:
+      after:
+        default_browser_return_url: https://seam.tacklines.com/
+
+log:
+  level: info
+  format: json
+
+identity:
+  default_schema_id: default
+  schemas:
+    - id: default
+      url: file:///etc/config/kratos/identity.schema.json
+
+session:
+  lifespan: 24h
+  cookie:
+    same_site: Lax
+
+hashers:
+  argon2:
+    parallelism: 1
+    memory: 128MB
+    iterations: 2
+    salt_length: 16
+    key_length: 16
+
+ciphers:
+  algorithm: xchacha20-poly1305
+
+secrets:
+  cookie:
+    - ${SECRETS_COOKIE}
+  cipher:
+    - ${SECRETS_CIPHER}
