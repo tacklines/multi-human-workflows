@@ -5,10 +5,8 @@ use futures::future::BoxFuture;
 use http::{Request, Response, StatusCode};
 use http_body::Body;
 use http_body_util::{Full, combinators::BoxBody, BodyExt};
-use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::agent_token;
 use crate::auth::JwksCache;
 
 /// Authenticated MCP caller identity, injected into request extensions.
@@ -16,14 +14,12 @@ use crate::auth::JwksCache;
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct McpIdentity {
-    /// Keycloak subject (for JWT) or user's external_id (for agent token)
+    /// Hydra subject (JWT `sub` claim)
     pub subject: String,
     /// Human-readable name
     pub display_name: String,
     /// The user ID in our DB
     pub user_id: Option<Uuid>,
-    /// If authenticated via agent token, the session it's scoped to
-    pub session_id: Option<Uuid>,
     /// Which auth method was used
     pub auth_method: AuthMethod,
 }
@@ -31,25 +27,23 @@ pub struct McpIdentity {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AuthMethod {
     Jwt,
-    AgentToken,
 }
 
-/// Tower layer that validates Bearer tokens (JWT or opaque agent token).
+/// Tower layer that validates Bearer JWT tokens for the MCP endpoint.
 ///
 /// Injects `Arc<McpIdentity>` into request extensions so MCP tool handlers
 /// can access them via `Extension(parts): Extension<http::request::Parts>`.
 #[derive(Clone)]
 pub struct McpAuthLayer {
     jwks: JwksCache,
-    db: PgPool,
     enabled: bool,
     /// Public base URL of this server, used for RFC 9728 resource_metadata in WWW-Authenticate.
     resource_url: String,
 }
 
 impl McpAuthLayer {
-    pub fn new(jwks: JwksCache, db: PgPool, enabled: bool, resource_url: String) -> Self {
-        Self { jwks, db, enabled, resource_url }
+    pub fn new(jwks: JwksCache, enabled: bool, resource_url: String) -> Self {
+        Self { jwks, enabled, resource_url }
     }
 }
 
@@ -60,7 +54,6 @@ impl<S> tower::Layer<S> for McpAuthLayer {
         McpAuthService {
             inner,
             jwks: self.jwks.clone(),
-            db: self.db.clone(),
             enabled: self.enabled,
             resource_url: self.resource_url.clone(),
         }
@@ -71,7 +64,6 @@ impl<S> tower::Layer<S> for McpAuthLayer {
 pub struct McpAuthService<S> {
     inner: S,
     jwks: JwksCache,
-    db: PgPool,
     enabled: bool,
     resource_url: String,
 }
@@ -126,7 +118,6 @@ where
         }
 
         let jwks = self.jwks.clone();
-        let db = self.db.clone();
         let resource_url = self.resource_url.clone();
         let mut inner = self.inner.clone();
 
@@ -145,35 +136,17 @@ where
                 ));
             };
 
-            // Dual-path auth: agent token (sat_ prefix) or JWT
-            let identity = if agent_token::is_agent_token(token) {
-                match agent_token::validate_token(&db, token).await {
-                    Ok(Some(info)) => McpIdentity {
-                        subject: info.user_external_id,
-                        display_name: info.display_name,
-                        user_id: Some(info.user_id),
-                        session_id: info.session_id,
-                        auth_method: AuthMethod::AgentToken,
-                    },
-                    Ok(None) => return Ok(unauthorized_response("Invalid or expired agent token", &resource_url)),
-                    Err(e) => {
-                        tracing::error!("Agent token validation failed: {e}");
-                        return Ok(unauthorized_response("Authentication service error", &resource_url));
-                    }
-                }
-            } else {
-                match jwks.validate_token(token).await {
-                    Ok(claims) => McpIdentity {
-                        subject: claims.sub.clone(),
-                        display_name: claims.preferred_username.clone()
-                            .or(claims.name.clone())
-                            .unwrap_or_else(|| claims.sub.clone()),
-                        user_id: None, // JWT doesn't carry our internal user_id
-                        session_id: None,
-                        auth_method: AuthMethod::Jwt,
-                    },
-                    Err(_) => return Ok(unauthorized_response("Invalid or expired token", &resource_url)),
-                }
+            // Validate JWT
+            let identity = match jwks.validate_token(token).await {
+                Ok(claims) => McpIdentity {
+                    subject: claims.sub.clone(),
+                    display_name: claims.preferred_username.clone()
+                        .or(claims.name.clone())
+                        .unwrap_or_else(|| claims.sub.clone()),
+                    user_id: None,
+                    auth_method: AuthMethod::Jwt,
+                },
+                Err(_) => return Ok(unauthorized_response("Invalid or expired token", &resource_url)),
             };
 
             // Inject identity into request extensions for tool handlers.

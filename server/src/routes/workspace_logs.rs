@@ -7,12 +7,11 @@ use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::agent_token;
 use crate::log_buffer::LogLine;
 use crate::AppState;
 
-/// Extract and validate a Bearer token from headers.
-/// Returns Ok(()) if valid agent token or auth is disabled, Err(401) otherwise.
+/// Extract and validate a Bearer JWT from headers.
+/// Returns Ok(()) if valid JWT or auth is disabled, Err(401) otherwise.
 async fn validate_agent_auth(
     state: &AppState,
     headers: &HeaderMap,
@@ -31,14 +30,9 @@ async fn validate_agent_auth(
         .strip_prefix("Bearer ")
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    if !agent_token::is_agent_token(token) {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
-
-    agent_token::validate_token(&state.db, token)
+    state.jwks.validate_token(token)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     Ok(())
 }
@@ -46,7 +40,7 @@ async fn validate_agent_auth(
 /// POST /api/workspaces/:workspace_id/logs
 ///
 /// Accepts an array of log lines from the workspace sidecar.
-/// Authenticated via agent token (sat_).
+/// Authenticated via JWT Bearer token.
 pub async fn ingest_logs(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -121,36 +115,16 @@ pub struct LogHistoryQuery {
 
 /// GET /api/workspaces/:workspace_id/logs
 ///
-/// Accepts either JWT auth (frontend users) or agent token auth (workspace agents).
+/// Accepts JWT auth (frontend users or workspace agents).
 pub async fn get_logs(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(workspace_id): Path<Uuid>,
     Query(query): Query<LogHistoryQuery>,
 ) -> Result<Json<Vec<LogLine>>, StatusCode> {
-    // Validate auth: accept JWT (frontend) or agent token (workspace sidecar)
-    if std::env::var("MCP_AUTH_DISABLED").unwrap_or_default() != "true" {
-        let auth_header = headers
-            .get("authorization")
-            .and_then(|v| v.to_str().ok())
-            .ok_or(StatusCode::UNAUTHORIZED)?;
+    // Validate auth via JWT
+    validate_agent_auth(&state, &headers).await?;
 
-        let token = auth_header
-            .strip_prefix("Bearer ")
-            .ok_or(StatusCode::UNAUTHORIZED)?;
-
-        if agent_token::is_agent_token(token) {
-            agent_token::validate_token(&state.db, token)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-                .ok_or(StatusCode::UNAUTHORIZED)?;
-        } else {
-            // Validate as JWT via JWKS
-            state.jwks.validate_token(token)
-                .await
-                .map_err(|_| StatusCode::UNAUTHORIZED)?;
-        }
-    }
     // Verify workspace exists
     let exists: Option<(Uuid,)> = sqlx::query_as(
         "SELECT id FROM workspaces WHERE id = $1"

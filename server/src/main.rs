@@ -1,4 +1,3 @@
-mod agent_token;
 mod auth;
 pub mod code_search;
 mod coder;
@@ -73,12 +72,12 @@ async fn main() {
     let resource_url = std::env::var("SEAM_URL")
         .unwrap_or_else(|_| format!("http://localhost:{port}"));
 
-    // OIDC configuration — provider-agnostic.
-    // Defaults are for local dev with Keycloak. Production sets these explicitly.
+    // OIDC configuration — defaults point at Ory Hydra for local dev.
+    // Production sets ISSUER_URL and JWKS_URL explicitly.
     let issuer_url = std::env::var("ISSUER_URL")
-        .unwrap_or_else(|_| "http://localhost:8081/realms/seam".to_string());
+        .unwrap_or_else(|_| "http://localhost:4444".to_string());
     let jwks_url = std::env::var("JWKS_URL")
-        .unwrap_or_else(|_| format!("{}/protocol/openid-connect/certs", issuer_url));
+        .unwrap_or_else(|_| format!("{}/.well-known/jwks.json", issuer_url));
 
     let coder = coder::CoderClient::from_env();
     if coder.is_some() {
@@ -105,7 +104,7 @@ async fn main() {
 
     let state = Arc::new(AppState {
         db,
-        jwks: auth::JwksCache::new(&jwks_url, &issuer_url),
+        jwks: auth::JwksCache::new(&jwks_url),
         connections: ws::ConnectionManager::new(),
         log_buffer: log_buffer::LogBuffer::new(500),
         coder,
@@ -267,7 +266,7 @@ async fn main() {
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );
-    let auth_layer = mcp_auth::McpAuthLayer::new(state.jwks.clone(), state.db.clone(), mcp_auth_enabled, resource_url.clone());
+    let auth_layer = mcp_auth::McpAuthLayer::new(state.jwks.clone(), mcp_auth_enabled, resource_url.clone());
     let authed_mcp = auth_layer.layer(mcp_service);
     let app = app.nest_service("/mcp", authed_mcp);
     tracing::info!(auth_enabled = mcp_auth_enabled, "MCP Streamable HTTP endpoint available at /mcp");
@@ -295,6 +294,9 @@ async fn well_known_protected_resource(
 
 /// Proxy to the OIDC provider's OpenID Connect discovery document.
 /// MCP clients use this to find token, authorization, and device auth endpoints.
+///
+/// Hydra omits `registration_endpoint` from its discovery doc even when DCR is
+/// enabled. We inject it so that MCP clients can perform dynamic client registration.
 async fn well_known_authorization_server(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
@@ -304,7 +306,15 @@ async fn well_known_authorization_server(
     );
     match reqwest::get(&url).await {
         Ok(resp) => match resp.json::<serde_json::Value>().await {
-            Ok(body) => (axum::http::StatusCode::OK, Json(body)).into_response(),
+            Ok(mut body) => {
+                // Inject registration_endpoint if Hydra left it null/absent
+                if body.get("registration_endpoint").map_or(true, |v| v.is_null()) {
+                    body["registration_endpoint"] = serde_json::json!(
+                        format!("{}/oauth2/register", state.issuer_url)
+                    );
+                }
+                (axum::http::StatusCode::OK, Json(body)).into_response()
+            }
             Err(_) => (
                 axum::http::StatusCode::BAD_GATEWAY,
                 Json(serde_json::json!({"error": "Failed to parse OIDC discovery response"})),
