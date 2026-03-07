@@ -39,6 +39,10 @@ jobs:
           tags: |
             ${{ steps.ecr.outputs.registry }}/seam/server:latest
             ${{ steps.ecr.outputs.registry }}/seam/server:sha-${{ github.sha }}
+          build-args: |
+            VITE_AUTH_AUTHORITY=https://auth.seam.tacklines.com
+            VITE_APP_URL=https://seam.tacklines.com
+            VITE_CLIENT_ID=362967076937138180
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
