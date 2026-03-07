@@ -39,7 +39,7 @@ Plan multi-stack features by decomposing them into ordered implementation steps 
 - **Server** (Rust/Axum): HTTP routes, MCP tools, WebSocket, DB, auth, domain events
 - **Frontend** (Lit/TS): Components, state, routing, Vite proxy API calls
 - **Agents** (Python/LangGraph): Skills, workflows, MCP clients, CLI
-- **Infra**: Docker Compose, Coder templates, Keycloak config
+- **Infra**: Docker Compose, Coder templates, Ory Hydra/Kratos config
 
 ### Common Vertical Slice Pattern
 Most features follow this order:

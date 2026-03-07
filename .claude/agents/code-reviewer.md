@@ -20,7 +20,7 @@ Review code changes in the Seam monorepo for correctness, security, pattern comp
 - Verify API calls go through Vite proxy (never hardcode backend URL)
 - Check auth middleware is applied to protected routes
 - Verify migrations are additive and sequentially numbered
-- Check for credential/secret leaks (especially `sat_` tokens, Fernet keys)
+- Check for credential/secret leaks (especially Fernet keys, JWTs)
 
 ## Workflow
 
@@ -41,7 +41,7 @@ Review code changes in the Seam monorepo for correctness, security, pattern comp
 - SQL queries use parameterized queries (no string interpolation)
 - `changes.clone()` used when a serde_json Map feeds multiple callsites
 - Domain events emitted BEFORE delete operations (to capture entity data)
-- Auth: Keycloak JWT + `sat_` opaque tokens both handled
+- Auth: Hydra JWT handled via JWKS validation
 
 ### Frontend (Lit/TypeScript)
 - Components extend `LitElement` with Shoelace UI primitives
@@ -61,9 +61,8 @@ Review code changes in the Seam monorepo for correctness, security, pattern comp
 - MCP tool handlers updated if schema affects tool parameters
 
 ### Security
-- No credentials in code (CREDENTIAL_MASTER_KEY, CODER_TOKEN, sat_ tokens)
+- No credentials in code (CREDENTIAL_MASTER_KEY, CODER_TOKEN, JWTs)
 - Auth middleware on new protected routes
-- Agent tokens use SHA-256 hashed storage
 
 ## What NOT to Do
 

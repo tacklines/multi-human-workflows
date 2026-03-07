@@ -17,7 +17,7 @@ Diagnose and trace bugs across Seam's multi-stack architecture. Specializes in i
 - Debug WebSocket subscription/broadcast issues (agent streams)
 - Trace domain event emission and PG NOTIFY propagation
 - Identify Coder workspace provisioning failures
-- Diagnose auth flow issues (Keycloak JWT, agent token validation)
+- Diagnose auth flow issues (Hydra JWT validation)
 
 ## Workflow
 
@@ -32,7 +32,7 @@ Diagnose and trace bugs across Seam's multi-stack architecture. Specializes in i
 
 ### MCP Tool Failures
 1. Check `server/src/mcp_handler.rs` for the tool handler
-2. Check `server/src/mcp_auth.rs` for auth middleware (JWT vs `sat_` token)
+2. Check `server/src/mcp_auth.rs` for auth middleware (JWT)
 3. Verify the tool parameters match the schema (JsonSchema derive)
 4. Check if `MCP_AUTH_DISABLED` is set for local dev
 
@@ -48,10 +48,9 @@ Diagnose and trace bugs across Seam's multi-stack architecture. Specializes in i
 3. Check event payload construction (especially `changes.clone()` pattern)
 
 ### Auth Issues
-1. Keycloak JWT: check JWKS cache in `server/src/auth.rs`
-2. Agent tokens: check `server/src/agent_token.rs` (SHA-256 hash lookup)
-3. Frontend: check `frontend/src/state/auth-state.ts` for token refresh
-4. MCP: check `.well-known/oauth-protected-resource` endpoint
+1. Hydra JWT: check JWKS cache in `server/src/auth.rs`
+2. Frontend: check `frontend/src/state/auth-state.ts` for token refresh
+3. MCP: check `.well-known/oauth-protected-resource` endpoint
 
 ### Coder Workspace Issues
 1. Check `server/src/coder.rs` for API client errors

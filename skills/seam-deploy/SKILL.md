@@ -531,7 +531,7 @@ Useful for checking if the current production version is healthy after a period 
 
 - `/api/health` endpoint does not exist — the Dockerfile HEALTHCHECK will always fail. Treat this as advisory.
 - EC2 push to ECR is not permitted — build must happen locally or in CI.
-- Zitadel JWT access tokens lack profile claims — the server calls userinfo endpoint for each request. Not a deploy blocker.
+- Ory Hydra JWT access tokens may lack profile claims — the server calls Kratos for user details. Not a deploy blocker.
 
 ## See Also
 

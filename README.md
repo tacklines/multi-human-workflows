@@ -20,7 +20,7 @@ Agents connect via MCP (Model Context Protocol). The primary interface is a Stre
 |-------|------|
 | Frontend | Lit web components, Vite, Tailwind, Shoelace |
 | Backend | Rust (Axum), PostgreSQL |
-| Auth | Keycloak OIDC (PKCE) |
+| Auth | Ory Hydra (OAuth2/OIDC) + Ory Kratos (identity) |
 | Agents | Python, LangGraph, MCP (optional) |
 | Sandboxes | Coder workspaces (optional) |
 | Infra | Docker Compose |
@@ -38,15 +38,15 @@ Agents connect via MCP (Model Context Protocol). The primary interface is a Stre
 
 ```bash
 cp .env.example .env    # adjust ports if defaults conflict
-just dev                # starts Postgres, Keycloak, backend, and frontend
+just dev                # starts Postgres, Hydra, Kratos, backend, and frontend
 ```
 
-The frontend is at `http://localhost:5173`. Log in with `testuser` / `testpass`.
+The frontend is at `http://localhost:5173`. Register a new account at `http://localhost:5173/auth/register`.
 
 ### Run pieces individually
 
 ```bash
-just infra-up           # Postgres + Keycloak only
+just infra-up           # Postgres + Hydra + Kratos only
 just server             # backend on :3002
 just server-noauth      # backend with MCP auth disabled
 just frontend           # frontend on :5173
@@ -57,7 +57,7 @@ just infra-reset        # stop + wipe volumes
 
 ### MCP Server
 
-Agents join sessions via MCP over Streamable HTTP, served by the API server. The endpoint requires Keycloak JWT authentication.
+Agents join sessions via MCP over Streamable HTTP, served by the API server. The endpoint requires Hydra JWT authentication.
 
 ```json
 // .mcp.json
@@ -70,9 +70,9 @@ Agents join sessions via MCP over Streamable HTTP, served by the API server. The
 }
 ```
 
-MCP clients with OAuth support (e.g., Claude Code) auto-discover authentication via `GET /.well-known/oauth-protected-resource`. The server delegates to Keycloak and supports the device authorization flow (RFC 8628) for headless agents.
+MCP clients with OAuth support (e.g., Claude Code) auto-discover authentication via `GET /.well-known/oauth-protected-resource`. The server delegates to Hydra and supports the device authorization flow (RFC 8628) for headless agents.
 
-For local development without Keycloak, set `MCP_AUTH_DISABLED=true` on the server.
+For local development without auth, set `MCP_AUTH_DISABLED=true` on the server.
 
 After connecting, agents call `join_session` with their 8-character agent code to enter a session.
 
@@ -93,7 +93,7 @@ export CODER_TOKEN=$(coder tokens create --name seam-integration)
 frontend/       Lit components, Vite dev server
 server/         Rust API server (includes MCP endpoint)
 agents/         Python LangGraph agents (optional, see agents/README.md)
-infra/          Keycloak realm config, Coder templates, Postgres init
+infra/          Ory Hydra/Kratos config, Coder templates, Postgres init
 docs/           Design docs and plans
 ```
 
@@ -104,7 +104,7 @@ just check              # cargo check
 just check-frontend     # tsc --noEmit
 just check-all          # both
 just test               # cargo test
-just token              # grab a Keycloak JWT for curl testing
+just token              # grab a Hydra JWT for curl testing
 just test-session       # create a session via the API
 ```
 

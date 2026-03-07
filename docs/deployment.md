@@ -10,16 +10,16 @@ Internet → Caddy (TLS) → Docker Compose services
                         ├── seam-worker    (Rust worker)
                         ├── postgres       (pgvector/pg17)
                         ├── rabbitmq       (3-management)
-                        ├── zitadel        (OIDC provider, :8080)
-                        ├── zitadel-login  (Login V2 Next.js, :3100)
+                        ├── hydra          (OAuth2/OIDC provider, :4444/:4445)
+                        ├── kratos         (Identity management, :4433)
                         └── coder          (workspace manager, :7080)
 ```
 
 ### Caddy Routing
 
 Two virtual hosts:
-- `seam.tacklines.com` — frontend (static files from `/opt/seam/static/`) + API proxy (`/api/*`, `/mcp`, `/ws`, `/.well-known/*` → `:3002`)
-- `auth.seam.tacklines.com` — Zitadel OIDC (`/ui/v2/login/*` → `:3100` Login V2, everything else → `h2c://:8080` Zitadel API)
+- `seam.tacklines.com` — frontend (static files from `/opt/seam/static/`) + API proxy (`/api/*`, `/mcp`, `/ws`, `/.well-known/*`, `/auth/*` → `:3002`)
+- `auth.seam.tacklines.com` — Ory Hydra OAuth2 (`:4444` public, `:4445` admin) + Kratos identity (`:4433`)
 
 ### Frontend Serving
 
@@ -46,13 +46,13 @@ docker build \
   -f server/Dockerfile .
 ```
 
-**Critical**: `VITE_AUTH_AUTHORITY`, `VITE_APP_URL`, and `VITE_CLIENT_ID` are baked into the frontend at build time (Vite inlines env vars). Without these, the frontend falls back to `localhost` / Keycloak defaults.
+**Critical**: `VITE_AUTH_AUTHORITY`, `VITE_APP_URL`, and `VITE_CLIENT_ID` are baked into the frontend at build time (Vite inlines env vars). Without these, the frontend falls back to `localhost` defaults.
 
 ### Build Args
 
 | Arg | Production Value | Default (local dev) |
 |---|---|---|
-| `VITE_AUTH_AUTHORITY` | `https://auth.seam.tacklines.com` | `http://localhost:8081/realms/seam` |
+| `VITE_AUTH_AUTHORITY` | `https://auth.seam.tacklines.com` | `http://localhost:4444` |
 | `VITE_APP_URL` | `https://seam.tacklines.com` | `http://localhost:5173` |
 | `VITE_CLIENT_ID` | `362967076937138180` | `web-app` |
 
@@ -116,40 +116,40 @@ sudo /usr/local/bin/docker-compose -f docker-compose.prod.yml restart seam-serve
 
 ## OIDC Configuration
 
-### Zitadel Setup
+### Ory Hydra + Kratos Setup
 
-Zitadel is the OIDC provider (replaced Keycloak). Key settings:
+Ory Hydra is the OAuth2/OIDC provider. Ory Kratos handles identity management (registration, login, account recovery). Key settings:
 
-- **External domain**: `auth.seam.tacklines.com`
-- **TLS mode**: `external` (Caddy handles TLS)
-- **Login V2**: Enabled via separate `zitadel-login` Next.js container
-- **Admin**: `admin` user, password in SSM `/seam/zitadel-admin-password`
+- **Hydra public**: `:4444` (token endpoint, authorization endpoint)
+- **Hydra admin**: `:4445` (client management, consent/login flow management)
+- **Kratos public**: `:4433` (self-service flows: login, registration, recovery)
+- **Auth UI**: Seam server serves auth UI pages at `/auth/*` (login, registration, consent)
 
 ### Server OIDC
 
-The Rust server reads two env vars for OIDC:
+The Rust server reads env vars for OIDC:
 
 | Env Var | Value | Purpose |
 |---|---|---|
-| `ISSUER_URL` | `https://auth.seam.tacklines.com` | Token issuer validation, OIDC discovery proxy |
-| `JWKS_URL` | `https://auth.seam.tacklines.com/oauth/v2/keys` | JWT signature verification |
-
-**Note**: JWKS_URL uses the external URL (through Caddy) because Zitadel requires the correct `Host` header matching `ZITADEL_EXTERNALDOMAIN`. Internal Docker URLs (e.g., `http://zitadel:8080`) return 404 without the right Host.
+| `ISSUER_URL` | `https://auth.seam.tacklines.com` | Token issuer validation, OIDC discovery |
+| `JWKS_URL` | `https://auth.seam.tacklines.com/.well-known/jwks.json` | JWT signature verification |
+| `HYDRA_ADMIN_URL` | `http://hydra:4445` | Hydra admin API for login/consent flow |
+| `KRATOS_PUBLIC_URL` | `http://kratos:4433` | Kratos public API for identity lookups |
 
 ### Frontend OIDC
 
-The frontend uses `oidc-client-ts` with authority `https://auth.seam.tacklines.com`. This is baked at build time via `VITE_AUTH_AUTHORITY`. The client ID is set via `VITE_CLIENT_ID` (Zitadel assigns numeric IDs, unlike Keycloak's user-chosen names).
+The frontend uses `oidc-client-ts` with authority pointing to Hydra's public endpoint. This is baked at build time via `VITE_AUTH_AUTHORITY`.
 
-### Required Zitadel Client
+### Required Hydra Client
 
-An application must be configured in Zitadel (Admin Console → Projects → New Application):
-- **Name**: Any (e.g. `seam-frontend`)
-- **Type**: User Agent (SPA/public)
-- **Auth method**: PKCE
-- **Client ID**: `362967076937138180` (assigned by Zitadel, passed as `VITE_CLIENT_ID` build arg)
+An OAuth2 client must be registered in Hydra:
+- **Client ID**: configured via `VITE_CLIENT_ID` build arg
+- **Grant types**: `authorization_code`, `refresh_token`
+- **Response types**: `code`
+- **Auth method**: `none` (public/SPA client, uses PKCE)
 - **Redirect URIs**: `https://seam.tacklines.com/auth/callback`
 - **Post-logout redirect**: `https://seam.tacklines.com/`
-- **Scopes**: `openid profile email`
+- **Scopes**: `openid profile email offline_access`
 - **Dev redirect URIs** (optional): `http://localhost:5173/auth/callback`, `http://localhost:5173/`
 
 ## Secrets
@@ -158,11 +158,10 @@ All secrets stored in AWS SSM Parameter Store (SecureString):
 
 | Parameter | Used By |
 |---|---|
-| `/seam/postgres-password` | Postgres, seam-server, seam-worker, coder |
+| `/seam/postgres-password` | Postgres, seam-server, seam-worker, hydra, kratos, coder |
 | `/seam/rabbitmq-password` | RabbitMQ, seam-server, seam-worker |
-| `/seam/zitadel-masterkey` | Zitadel encryption |
-| `/seam/zitadel-db-password` | Zitadel DB user |
-| `/seam/zitadel-admin-password` | Zitadel admin UI |
+| `/seam/hydra-system-secret` | Hydra encryption |
+| `/seam/kratos-secret` | Kratos cookie/session secret |
 | `/seam/credential-master-key` | Fernet key for credential encryption |
 | `/seam/worker-api-token` | Worker → server API auth |
 
@@ -227,10 +226,8 @@ After deploying, containers may show "Running" instead of "Recreated" if the ima
 sudo /usr/local/bin/docker-compose -f docker-compose.prod.yml up -d --force-recreate seam-server seam-worker
 ```
 
-### Zitadel Access Tokens Lack User Claims
+### Hydra Access Tokens and User Claims
 
-Zitadel's JWT access tokens contain only `sub`, `iss`, `aud`, and standard fields — no `name`, `email`, or `preferred_username`. This differs from Keycloak which embeds user profile claims in access tokens.
+Hydra JWT access tokens contain standard OAuth2 claims (`sub`, `iss`, `aud`, `scope`). User profile information (name, email) is fetched from Kratos identity data during the consent flow and included as custom claims, or retrieved via the userinfo endpoint.
 
-The server works around this by calling Zitadel's **userinfo endpoint** (`/oidc/v1/userinfo`) with the access token to fetch profile claims, cached per-user for 5 minutes. The frontend also calls `GET /api/me` after login to get the enriched display name.
-
-If userinfo returns empty profile fields, check that the Zitadel user has First Name / Last Name / Display Name / Username populated in the admin console.
+The server calls the **userinfo endpoint** to fetch profile claims when needed, cached per-user for 5 minutes. The frontend also calls `GET /api/me` after login to get the enriched display name.

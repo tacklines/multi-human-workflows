@@ -16,7 +16,7 @@ Add and modify MCP tools that agents use to interact with Seam. Handles the full
 - Implement tool handler logic with database queries
 - Wire auth context (McpIdentity) for permission checks
 - Update agent-side tool definitions in `agents/src/seam_agents/tools.py`
-- Ensure tools work with both JWT and `sat_` token auth
+- Ensure tools work with JWT auth (Hydra)
 
 ## Workflow
 

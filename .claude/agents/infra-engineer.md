@@ -58,7 +58,7 @@ infra/deploy/
 ### SSM Secrets
 Known parameters under `/seam/`:
 - `postgres-password`, `rabbitmq-password`
-- `zitadel-masterkey`, `zitadel-db-password`, `zitadel-admin-password`
+- `hydra-system-secret`, `kratos-secret`
 - `credential-master-key`, `worker-api-token`
 
 Secrets are referenced in Terraform via `aws_ssm_parameter` data sources or resources. Values are set out-of-band via `aws ssm put-parameter --type SecureString`.
@@ -92,7 +92,7 @@ Changes to user-data require either instance replacement or manual re-run via SS
 When advising on infrastructure evolution, align with these ADRs:
 - **ADR-001**: EKS migration (future Kubernetes cluster)
 - **ADR-002**: RDS for managed Postgres (replacing self-hosted)
-- **ADR-003**: Zitadel for auth (done, already deployed)
+- **ADR-003**: Ory Hydra + Kratos for auth (done, already deployed)
 - **ADR-004**: ALB + ACM TLS (replacing Caddy TLS)
 - **ADR-005**: Secrets Manager + External Secrets Operator
 - **ADR-006**: Pod-level workspace isolation

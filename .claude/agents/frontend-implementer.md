@@ -65,7 +65,7 @@ export class MyComponent extends LitElement {
 ### State Management
 State modules live in `frontend/src/state/`:
 - `app-state.ts` — global app state
-- `auth-state.ts` — Keycloak auth token management
+- `auth-state.ts` — OIDC auth token management (Hydra)
 - `org-api.ts` — org/member/credential operations + reactive org state
 - `session-connection.ts` — WebSocket connection to `/ws`
 - `agent-stream.ts` — agent activity subscriptions

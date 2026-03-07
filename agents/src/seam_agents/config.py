@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Seam MCP (Streamable HTTP)
     seam_url: str = "http://localhost:3002"
-    seam_token: str = ""  # Optional: agent token (sat_ prefix) for auth
+    seam_token: str = ""  # Optional: JWT bearer token for auth
 
     # Coder (workspace sandbox management)
     coder_binary: str = "coder"

@@ -21,7 +21,7 @@ Communication between stacks flows through HTTP APIs and WebSocket only. Never i
 
 - Routes go in `server/src/routes/` as separate modules, registered in `main.rs`
 - Database queries use sqlx with compile-time or runtime checking
-- Auth: Keycloak JWT validation via JWKS, plus `sat_` opaque agent tokens
+- Auth: Hydra JWT validation via JWKS (unified auth, no bespoke agent tokens)
 - Domain events: emit via `events::emit()` for state changes (fire-and-forget)
 - Migrations: sequential files in `server/migrations/`
 

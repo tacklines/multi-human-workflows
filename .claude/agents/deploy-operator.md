@@ -30,7 +30,7 @@ Execute, monitor, and roll back deployments for the Seam platform. This agent is
 | Registry | ECR `seam/server` (tags: `latest`, `sha-<commit>`) |
 | Database | PostgreSQL 17 in Docker on EC2 |
 | Reverse Proxy | Caddy (ACME TLS, proxy to :3002) |
-| Auth | Zitadel OIDC (auth.seam.tacklines.com) |
+| Auth | Ory Hydra + Kratos (auth.seam.tacklines.com) |
 | Secrets | AWS SSM Parameter Store |
 | Domain | seam.tacklines.com |
 | Static files | `/opt/seam/static/`, served by Caddy |
@@ -38,7 +38,7 @@ Execute, monitor, and roll back deployments for the Seam platform. This agent is
 
 ### Services in docker-compose.prod.yml
 
-`postgres`, `rabbitmq`, `zitadel`, `zitadel-login`, `seam-server` (:3002), `seam-worker`, `coder` (:7080)
+`postgres`, `rabbitmq`, `hydra`, `kratos`, `seam-server` (:3002), `seam-worker`, `coder` (:7080)
 
 The `SEAM_IMAGE` env var in `/opt/seam/.env` controls which ECR image `seam-server` and `seam-worker` use.
 
@@ -109,7 +109,7 @@ Note: There is no `/api/health` endpoint yet. Do not attempt to curl it.
 
 - EC2 instance role can only **pull** from ECR, not push. Manual builds must push from a machine with ECR write access (your local machine or CI).
 - The build is ARM64-native. If building on x86, you need `--platform linux/arm64` (or use Docker Buildx with QEMU, which is slow).
-- Zitadel JWT tokens currently lack profile claims — this is a known issue, not a deploy problem.
+- Hydra JWT tokens may lack profile claims — user data is fetched from Kratos. Not a deploy problem.
 - Static file extraction is required because Caddy serves them directly (not proxied through the Rust server).
 
 ## What NOT to Do
@@ -119,7 +119,7 @@ Note: There is no `/api/health` endpoint yet. Do not attempt to curl it.
 - Never expose, log, or echo secrets (SSM parameters, `.env` contents, tokens)
 - Never force-push or rewrite git history
 - Never deploy without user confirmation for manual deploys
-- Never restart `postgres`, `rabbitmq`, or `zitadel` containers during a routine deploy — only `seam-server` and `seam-worker` should be cycled
+- Never restart `postgres`, `rabbitmq`, `hydra`, or `kratos` containers during a routine deploy — only `seam-server` and `seam-worker` should be cycled
 - Never run `docker-compose down` in production (it destroys volumes)
 
 ## Investigation Protocol

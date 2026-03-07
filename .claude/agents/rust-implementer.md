@@ -75,8 +75,7 @@ events::emit(&db, DomainEvent::new(
 - Use `changes.clone()` when payload feeds multiple callsites
 
 ### Auth
-- Keycloak JWT validated via JWKS (`server/src/auth.rs`)
-- Agent tokens: `sat_` prefix, SHA-256 hashed in `agent_tokens` table
+- Hydra JWT validated via JWKS (`server/src/auth.rs`)
 - `McpIdentity` injected into request extensions by `mcp_auth.rs`
 - Protected routes use auth extractor from `server/src/auth.rs`
 

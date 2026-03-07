@@ -65,7 +65,7 @@ pub struct ProjectMember {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
     pub id: Uuid,
-    /// Keycloak subject ID
+    /// OIDC subject ID
     pub external_id: String,
     pub username: String,
     pub display_name: String,

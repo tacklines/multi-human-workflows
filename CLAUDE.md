@@ -30,7 +30,7 @@ just dev-noauth           # Same but with MCP auth disabled
 just worker               # Start the seam-worker (event bridge + scheduler)
 just test                 # cargo test (server)
 just check-all            # cargo check + tsc --noEmit
-just token                # Get test JWT from Keycloak
+just token                # Get test JWT from Hydra
 ```
 
 ## Skill Quick Reference
@@ -48,11 +48,11 @@ just token                # Get test JWT from Keycloak
 
 - **Frontend**: `frontend/` — Lit web components + Vite + Tailwind + Shoelace
 - **Backend**: `server/` — Rust (Axum) with PostgreSQL
-- **Auth**: Keycloak OIDC (realm: `seam`, client: `web-app` public PKCE)
+- **Auth**: Ory Hydra (OAuth2/OIDC) + Ory Kratos (identity)
 - **Sandboxes**: Coder workspaces for agent task execution (optional)
 - **Worker**: `server/src/bin/worker.rs` — seam-worker binary (event bridge + reactions + scheduler)
 - **Message Queue**: RabbitMQ (topic exchange `seam.events`, queue `seam.reactions`)
-- **Infra**: Docker Compose (Keycloak + Postgres + RabbitMQ; Coder via `--profile coder`)
+- **Infra**: Docker Compose (Hydra + Kratos + Postgres + RabbitMQ; Coder via `--profile coder`)
 
 ## Data Model
 
@@ -67,12 +67,12 @@ Organization (tenant) → Project → Session → Participants (human/agent)
 ## Development
 
 ```bash
-docker compose up -d          # Keycloak + Postgres
+docker compose up -d          # Hydra + Kratos + Postgres
 cd server && cargo run         # Rust API on :3002
 cd frontend && npm run dev     # Vite on :5173
 ```
 
-Test user: `testuser` / `testpass` (Keycloak)
+Test user: register at http://localhost:5173/auth/register (Kratos)
 
 ### Coder Integration (optional)
 
@@ -88,10 +88,9 @@ Health check: `GET /api/integrations/coder/status`
 
 ## MCP Access
 
-Agents connect via Streamable HTTP at `/mcp`. Two auth methods:
+Agents connect via Streamable HTTP at `/mcp`. Auth via Hydra JWT:
 
-1. **Keycloak JWT** — external clients authenticate via OAuth; auto-discovered from `/.well-known/oauth-protected-resource`
-2. **Agent tokens** (`sat_` prefix) — server-spawned agents get opaque tokens injected as `SEAM_TOKEN`; validated via SHA-256 hash lookup in `agent_tokens` table
+1. **Hydra JWT** — all clients (external and agent) authenticate via OAuth; auto-discovered from `/.well-known/oauth-protected-resource`
 
 ```json
 {
@@ -364,5 +363,5 @@ Invocations carry `model_hint`, `budget_tier`, `provider` fields. At creation, s
 ## Conventions
 
 - Frontend API calls go through Vite proxy (`/api` → `:3002`, `/ws` → WebSocket)
-- Auth tokens: Bearer JWT from Keycloak, validated via JWKS
+- Auth tokens: Bearer JWT from Hydra, validated via JWKS
 - Session codes: uppercase alphanumeric, no ambiguous chars (0/O, 1/I/L)
