@@ -12,7 +12,7 @@
           "format": "email",
           "title": "Email",
           "maxLength": 320,
-          "ory.com/kratos": {
+          "ory.sh/kratos": {
             "credentials": {
               "password": {
                 "identifier": true
