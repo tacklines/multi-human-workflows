@@ -28,6 +28,13 @@ export function initRouter(outlet: HTMLElement): Router {
       },
     },
     {
+      path: "/auth/success",
+      component: "auth-consent-success-page",
+      action: async () => {
+        await import("./components/auth/consent-success-page.js");
+      },
+    },
+    {
       path: "/auth/error",
       component: "auth-error-page",
       action: async () => {
