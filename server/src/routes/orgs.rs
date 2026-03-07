@@ -38,6 +38,33 @@ pub async fn list_orgs(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+    // Auto-bootstrap personal org for new users
+    if rows.is_empty() {
+        let _ = db::ensure_default_project(&state.db, user.id).await
+            .map_err(|e| tracing::warn!("Failed to bootstrap personal org: {e}"));
+
+        // Re-fetch after bootstrap
+        let rows = sqlx::query_as::<_, (Uuid, String, String, bool, chrono::DateTime<chrono::Utc>, OrgRole, i64)>(
+            "SELECT o.id, o.name, o.slug, o.personal, o.created_at, om.role,
+                    (SELECT COUNT(*) FROM org_members om2 WHERE om2.org_id = o.id) as member_count
+             FROM organizations o
+             JOIN org_members om ON om.org_id = o.id
+             WHERE om.user_id = $1
+             ORDER BY o.personal DESC, o.name"
+        )
+        .bind(user.id)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list orgs after bootstrap: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        return Ok(Json(rows.into_iter().map(|(id, name, slug, personal, created_at, role, member_count)| {
+            OrgView { id, name, slug, personal, role, created_at, member_count }
+        }).collect()));
+    }
+
     Ok(Json(rows.into_iter().map(|(id, name, slug, personal, created_at, role, member_count)| {
         OrgView { id, name, slug, personal, role, created_at, member_count }
     }).collect()))

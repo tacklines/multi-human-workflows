@@ -48,8 +48,8 @@ pub async fn ensure_default_project(pool: &PgPool, user_id: Uuid) -> Result<Uuid
     // Create personal org
     let org_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO organizations (id, name, slug, created_at)
-         VALUES ($1, 'Personal', $2, NOW())"
+        "INSERT INTO organizations (id, name, slug, personal, created_at)
+         VALUES ($1, 'Personal', $2, true, NOW())"
     )
     .bind(org_id)
     .bind(format!("personal-{}", &user_id.to_string()[..8]))

@@ -103,7 +103,7 @@ async fn main() {
 
     let state = Arc::new(AppState {
         db,
-        jwks: auth::JwksCache::new(&jwks_url),
+        jwks: auth::JwksCache::new(&jwks_url, &issuer_url),
         connections: ws::ConnectionManager::new(),
         log_buffer: log_buffer::LogBuffer::new(500),
         coder,
