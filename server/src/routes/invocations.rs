@@ -133,12 +133,14 @@ pub async fn create_invocation(
     Path(project_id): Path<Uuid>,
     AuthUser(claims): AuthUser,
     Json(req): Json<CreateInvocationRequest>,
-) -> Result<(StatusCode, Json<InvocationView>), StatusCode> {
+) -> Result<(StatusCode, Json<InvocationView>), (StatusCode, Json<serde_json::Value>)> {
     let user = db::upsert_user(&state.db, &claims).await.map_err(|e| {
         tracing::error!("Failed to upsert user: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"})))
     })?;
-    verify_project_member(&state.db, project_id, user.id).await?;
+    verify_project_member(&state.db, project_id, user.id)
+        .await
+        .map_err(|s| (s, Json(serde_json::json!({"error": "not found or forbidden"}))))?;
 
     // Resolve workspace: use provided ID or find/create from pool
     let workspace_id = match req.workspace_id {
@@ -153,10 +155,10 @@ pub async fn create_invocation(
             .await
             .map_err(|e| {
                 tracing::error!("Failed to check workspace: {e}");
-                StatusCode::INTERNAL_SERVER_ERROR
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"})))
             })?;
             if ws_exists.is_none() {
-                return Err(StatusCode::NOT_FOUND);
+                return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "workspace not found"}))));
             }
             ws_id
         }
@@ -171,7 +173,7 @@ pub async fn create_invocation(
             .await
             .map_err(|e| {
                 tracing::error!("Failed to resolve workspace from pool: {e}");
-                StatusCode::SERVICE_UNAVAILABLE
+                (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error": "workspace unavailable"})))
             })?
         }
     };
@@ -188,6 +190,22 @@ pub async fn create_invocation(
             req.provider.as_deref(),
         )
         .await;
+
+    // Enforce org model allowlist/denylist policy
+    if let Some(org_id) = crate::dispatch::org_id_for_project_pub(&state.db, project_id).await {
+        if let Err(msg) = crate::dispatch::enforce_org_model_policy(
+            &state.db,
+            org_id,
+            effective_model_hint.as_deref(),
+        )
+        .await
+        {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": msg })),
+            ));
+        }
+    }
 
     let inv = sqlx::query_as::<_, Invocation>(
         "INSERT INTO invocations
@@ -212,7 +230,7 @@ pub async fn create_invocation(
     .await
     .map_err(|e| {
         tracing::error!("Failed to create invocation: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "internal error"})))
     })?;
 
     let event = crate::events::DomainEvent::new(

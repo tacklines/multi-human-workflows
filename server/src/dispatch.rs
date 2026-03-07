@@ -299,6 +299,11 @@ async fn create_pool_workspace(
     }
 }
 
+/// Look up org_id for a project (public for use in route handlers).
+pub async fn org_id_for_project_pub(db: &PgPool, project_id: Uuid) -> Option<Uuid> {
+    org_id_for_project(db, project_id).await
+}
+
 /// Look up org_id for a project.
 async fn org_id_for_project(db: &PgPool, project_id: Uuid) -> Option<Uuid> {
     let row: Option<(Uuid,)> = sqlx::query_as("SELECT org_id FROM projects WHERE id = $1")
@@ -406,6 +411,75 @@ pub async fn resolve_model_config(
     }
 
     (model_hint, budget_tier, provider)
+}
+
+/// Enforce org-level model allowlist/denylist policy.
+///
+/// - If `model_denylist` is set and `model_hint` matches any entry, returns Err.
+/// - If `model_allowlist` is set and non-empty, and `model_hint` does NOT match any entry, returns Err.
+/// - A missing or empty allowlist means "allow all".
+/// - When `model_hint` is None, policy is not enforced (no model specified).
+pub async fn enforce_org_model_policy(
+    db: &PgPool,
+    org_id: Uuid,
+    model_hint: Option<&str>,
+) -> Result<(), String> {
+    let model = match model_hint {
+        Some(m) => m,
+        None => return Ok(()),
+    };
+
+    let prefs: Vec<(String, serde_json::Value)> = sqlx::query_as(
+        "SELECT preference_key, preference_value
+         FROM org_model_preferences
+         WHERE org_id = $1 AND preference_key IN ('model_allowlist', 'model_denylist')",
+    )
+    .bind(org_id)
+    .fetch_all(db)
+    .await
+    .map_err(|e| format!("Failed to fetch org model preferences: {e}"))?;
+
+    let mut denylist: Option<Vec<String>> = None;
+    let mut allowlist: Option<Vec<String>> = None;
+
+    for (key, value) in &prefs {
+        let entries: Vec<String> = value
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        match key.as_str() {
+            "model_denylist" => denylist = Some(entries),
+            "model_allowlist" => allowlist = Some(entries),
+            _ => {}
+        }
+    }
+
+    // Check denylist first
+    if let Some(ref denied) = denylist {
+        if denied.iter().any(|entry| entry == model) {
+            return Err(format!(
+                "Model '{}' is not allowed by organization policy (denylist)",
+                model
+            ));
+        }
+    }
+
+    // Check allowlist (only if non-empty)
+    if let Some(ref allowed) = allowlist {
+        if !allowed.is_empty() && !allowed.iter().any(|entry| entry == model) {
+            return Err(format!(
+                "Model '{}' is not allowed by organization policy (not in allowlist)",
+                model
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 /// A line tagged with its file descriptor.
