@@ -590,8 +590,8 @@ async fn dispatch_inference(
         ResultTarget::UpdateField { table, column, parse_json } => {
             // Validate table and column names to prevent SQL injection
             // (these come from trusted operator config, but guard defensively)
-            let table = sanitize_identifier(table)?;
-            let column = sanitize_identifier(column)?;
+            let table = sanitize_identifier(table, true)?;
+            let column = sanitize_identifier(column, false)?;
 
             let aggregate_id = ctx.event_payload
                 .as_ref()
@@ -645,14 +645,19 @@ async fn dispatch_inference(
     Ok(())
 }
 
+/// Tables that inference result_target is allowed to write to.
+const ALLOWED_TABLES: &[&str] = &["tasks", "task_comments", "sessions", "requests"];
+
 /// Validate a SQL identifier (table or column name) to prevent injection.
-/// Allows only alphanumeric characters and underscores.
-fn sanitize_identifier(name: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    if name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && !name.is_empty() {
-        Ok(name.to_string())
-    } else {
-        Err(format!("Invalid SQL identifier: {:?}", name).into())
+/// Tables are additionally checked against ALLOWED_TABLES.
+fn sanitize_identifier(name: &str, is_table: bool) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return Err(format!("Invalid SQL identifier: {:?}", name).into());
     }
+    if is_table && !ALLOWED_TABLES.contains(&name) {
+        return Err(format!("Table {:?} not in inference allowlist", name).into());
+    }
+    Ok(name.to_string())
 }
 
 #[cfg(test)]
