@@ -176,12 +176,13 @@ pub async fn create_invocation(
         }
     };
 
-    // Resolve effective model config: request params > user prefs > org prefs
+    // Resolve effective model config: request params > task-level > user prefs > org prefs
     let (effective_model_hint, effective_budget_tier, effective_provider) =
         crate::dispatch::resolve_model_config(
             &state.db,
             project_id,
             Some(user.id),
+            req.task_id,
             req.model_hint.as_deref(),
             req.budget_tier.as_deref(),
             req.provider.as_deref(),

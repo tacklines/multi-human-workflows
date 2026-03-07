@@ -1386,6 +1386,102 @@ export class TaskDetail extends LitElement {
             </div>`
           : nothing
         }
+
+        <sl-divider style="--spacing: 0.25rem;"></sl-divider>
+
+        <!-- Model Config -->
+        <div class="sidebar-heading">Model Config</div>
+
+        <!-- Model Hint -->
+        ${this._editingField === 'model_hint'
+          ? html`
+            <div class="meta-row">
+              <sl-input
+                size="small"
+                placeholder="e.g. claude-opus-4-5"
+                value=${task.model_hint ?? ''}
+                style="width: 100%; font-family: var(--sl-font-mono); font-size: 0.75rem;"
+                @sl-change=${(e: Event) => {
+                  const val = (e.target as HTMLInputElement).value.trim();
+                  this._updateField({ model_hint: val || null });
+                  this._editingField = null;
+                }}
+                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Escape') this._editingField = null; }}
+              ></sl-input>
+            </div>`
+          : html`
+            <div class="meta-row editable" @click=${() => { this._editingField = 'model_hint'; }}>
+              <span class="meta-label">Model</span>
+              <span class="meta-value">
+                ${task.model_hint
+                  ? html`<span style="font-family: var(--sl-font-mono); font-size: 0.75rem;">${task.model_hint}</span>`
+                  : html`<span style="color: var(--text-tertiary);">default</span>`
+                }
+                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
+              </span>
+            </div>`
+        }
+
+        <!-- Budget Tier -->
+        ${this._editingField === 'budget_tier'
+          ? html`
+            <div class="meta-row">
+              <sl-select size="small" value=${task.budget_tier ?? ''}
+                @sl-change=${(e: Event) => {
+                  const val = (e.target as HTMLSelectElement).value;
+                  this._updateField({ budget_tier: val || null });
+                  this._editingField = null;
+                }}
+                style="width: 100%;"
+              >
+                <sl-option value="">default</sl-option>
+                <sl-option value="high">High</sl-option>
+                <sl-option value="medium">Medium</sl-option>
+                <sl-option value="low">Low</sl-option>
+              </sl-select>
+            </div>`
+          : html`
+            <div class="meta-row editable" @click=${() => { this._editingField = 'budget_tier'; }}>
+              <span class="meta-label">Budget</span>
+              <span class="meta-value">
+                ${task.budget_tier
+                  ? html`<span>${task.budget_tier}</span>`
+                  : html`<span style="color: var(--text-tertiary);">default</span>`
+                }
+                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
+              </span>
+            </div>`
+        }
+
+        <!-- Provider -->
+        ${this._editingField === 'provider'
+          ? html`
+            <div class="meta-row">
+              <sl-input
+                size="small"
+                placeholder="e.g. anthropic"
+                value=${task.provider ?? ''}
+                style="width: 100%;"
+                @sl-change=${(e: Event) => {
+                  const val = (e.target as HTMLInputElement).value.trim();
+                  this._updateField({ provider: val || null });
+                  this._editingField = null;
+                }}
+                @keydown=${(e: KeyboardEvent) => { if (e.key === 'Escape') this._editingField = null; }}
+              ></sl-input>
+            </div>`
+          : html`
+            <div class="meta-row editable" @click=${() => { this._editingField = 'provider'; }}>
+              <span class="meta-label">Provider</span>
+              <span class="meta-value">
+                ${task.provider
+                  ? html`<span>${task.provider}</span>`
+                  : html`<span style="color: var(--text-tertiary);">default</span>`
+                }
+                <sl-icon class="edit-pencil" name="pencil"></sl-icon>
+              </span>
+            </div>`
+        }
       </div>
     `;
   }

@@ -325,7 +325,7 @@ struct InvocationRow {
 }
 
 /// Resolve effective model configuration by merging:
-/// request params > user prefs > org prefs > system defaults.
+/// request params > task-level config > user prefs > org prefs > system defaults.
 ///
 /// Stored at invocation CREATE time so the stored values are already the
 /// merged result and dispatch can simply read them from the row.
@@ -333,6 +333,7 @@ pub async fn resolve_model_config(
     db: &PgPool,
     project_id: Uuid,
     user_id: Option<Uuid>,
+    task_id: Option<Uuid>,
     request_model_hint: Option<&str>,
     request_budget_tier: Option<&str>,
     request_provider: Option<&str>,
@@ -340,6 +341,27 @@ pub async fn resolve_model_config(
     let mut model_hint = request_model_hint.map(|s| s.to_string());
     let mut budget_tier = request_budget_tier.map(|s| s.to_string());
     let mut provider = request_provider.map(|s| s.to_string());
+
+    // Task-level config (between request params and user prefs)
+    if let Some(tid) = task_id {
+        if let Ok(Some((task_hint, task_budget, task_provider))) = sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>)>(
+            "SELECT model_hint, budget_tier, provider FROM tasks WHERE id = $1",
+        )
+        .bind(tid)
+        .fetch_optional(db)
+        .await
+        {
+            if model_hint.is_none() {
+                model_hint = task_hint;
+            }
+            if budget_tier.is_none() {
+                budget_tier = task_budget;
+            }
+            if provider.is_none() {
+                provider = task_provider;
+            }
+        }
+    }
 
     // Look up user preferences (if user_id available)
     if let Some(uid) = user_id {

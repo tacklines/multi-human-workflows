@@ -195,6 +195,10 @@ pub struct Task {
     pub commit_hashes: Vec<String>,
     pub no_code_change: bool,
     pub source_task_id: Option<Uuid>,
+    /// Per-task model routing preferences (inherited by invocations when task_id is set)
+    pub model_hint: Option<String>,
+    pub budget_tier: Option<String>,
+    pub provider: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,

@@ -22,6 +22,9 @@ export interface TaskView {
   no_code_change: boolean;
   session_ids: string[];
   source_task_id: string | null;
+  model_hint: string | null;
+  budget_tier: string | null;
+  provider: string | null;
   created_at: string;
   updated_at: string;
   closed_at: string | null;

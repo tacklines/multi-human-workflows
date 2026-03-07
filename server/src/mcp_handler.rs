@@ -71,6 +71,12 @@ struct CreateTaskParams {
     complexity: Option<String>,
     /// Source task ID — the task whose work produced this new task (provenance tracking)
     source_task_id: Option<String>,
+    /// Model hint for invocations on this task (e.g. "claude-opus-4-5")
+    model_hint: Option<String>,
+    /// Budget tier for invocations on this task (e.g. "high", "medium", "low")
+    budget_tier: Option<String>,
+    /// Provider for invocations on this task (e.g. "anthropic", "ollama")
+    provider: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -121,6 +127,12 @@ struct UpdateTaskParams {
     commit_hashes: Option<Vec<String>>,
     /// Mark as no-code-change task (required if closing without commits)
     no_code_change: Option<bool>,
+    /// Model hint for invocations on this task (e.g. "claude-opus-4-5")
+    model_hint: Option<String>,
+    /// Budget tier for invocations on this task (e.g. "high", "medium", "low")
+    budget_tier: Option<String>,
+    /// Provider for invocations on this task (e.g. "anthropic", "ollama")
+    provider: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -634,8 +646,8 @@ impl SeamMcp {
 
         let task_id = Uuid::new_v4();
         match sqlx::query(
-            "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, priority, complexity, assigned_to, created_by, source_task_id, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, NOW(), NOW())"
+            "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, priority, complexity, assigned_to, created_by, source_task_id, model_hint, budget_tier, provider, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())"
         )
         .bind(task_id)
         .bind(session_id)
@@ -650,6 +662,9 @@ impl SeamMcp {
         .bind(assigned_to)
         .bind(participant_id)
         .bind(source_task_id)
+        .bind(&params.model_hint)
+        .bind(&params.budget_tier)
+        .bind(&params.provider)
         .execute(&self.db)
         .await {
             Ok(_) => {
@@ -949,6 +964,11 @@ impl SeamMcp {
             None => task.parent_id,
         };
 
+        // Merge model config (request value wins; fall back to current)
+        let model_hint = params.model_hint.clone().or_else(|| task.model_hint.clone());
+        let budget_tier = params.budget_tier.clone().or_else(|| task.budget_tier.clone());
+        let provider = params.provider.clone().or_else(|| task.provider.clone());
+
         // Merge commit_hashes
         let mut commit_hashes = task.commit_hashes.clone();
         if let Some(ref new_hashes) = params.commit_hashes {
@@ -976,7 +996,7 @@ impl SeamMcp {
         };
 
         match sqlx::query(
-            "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, commit_hashes = $8, no_code_change = $9, closed_at = COALESCE($10, closed_at), updated_at = NOW() WHERE id = $11 AND project_id = $12"
+            "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, commit_hashes = $8, no_code_change = $9, closed_at = COALESCE($10, closed_at), model_hint = $11, budget_tier = $12, provider = $13, updated_at = NOW() WHERE id = $14 AND project_id = $15"
         )
         .bind(title)
         .bind(description)
@@ -988,6 +1008,9 @@ impl SeamMcp {
         .bind(&commit_hashes)
         .bind(no_code_change)
         .bind(closed_at)
+        .bind(&model_hint)
+        .bind(&budget_tier)
+        .bind(&provider)
         .bind(task_id)
         .bind(project_id)
         .execute(&self.db)
@@ -3366,6 +3389,9 @@ impl SeamMcp {
             "commit_hashes": task.commit_hashes,
             "no_code_change": task.no_code_change,
             "source_task_id": task.source_task_id,
+            "model_hint": task.model_hint,
+            "budget_tier": task.budget_tier,
+            "provider": task.provider,
             "created_at": task.created_at,
             "updated_at": task.updated_at,
             "closed_at": task.closed_at,
@@ -3401,6 +3427,9 @@ impl SeamMcp {
             "commit_hashes": task.commit_hashes,
             "no_code_change": task.no_code_change,
             "source_task_id": task.source_task_id,
+            "model_hint": task.model_hint,
+            "budget_tier": task.budget_tier,
+            "provider": task.provider,
             "created_at": task.created_at,
             "updated_at": task.updated_at,
             "closed_at": task.closed_at,

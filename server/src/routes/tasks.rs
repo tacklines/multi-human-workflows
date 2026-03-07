@@ -46,6 +46,9 @@ pub struct CreateTaskRequest {
     pub priority: Option<String>,
     pub complexity: Option<String>,
     pub source_task_id: Option<Uuid>,
+    pub model_hint: Option<String>,
+    pub budget_tier: Option<String>,
+    pub provider: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -61,6 +64,9 @@ pub struct UpdateTaskRequest {
     pub parent_id: Option<Uuid>,
     pub commit_hashes: Option<Vec<String>>,
     pub no_code_change: Option<bool>,
+    pub model_hint: Option<String>,
+    pub budget_tier: Option<String>,
+    pub provider: Option<String>,
 }
 
 fn deserialize_optional_field<'de, D>(deserializer: D) -> Result<Option<Option<Uuid>>, D::Error>
@@ -111,6 +117,9 @@ pub struct TaskView {
     pub commit_hashes: Vec<String>,
     pub no_code_change: bool,
     pub source_task_id: Option<Uuid>,
+    pub model_hint: Option<String>,
+    pub budget_tier: Option<String>,
+    pub provider: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub closed_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -182,6 +191,9 @@ impl TaskView {
             commit_hashes: t.commit_hashes,
             no_code_change: t.no_code_change,
             source_task_id: t.source_task_id,
+            model_hint: t.model_hint,
+            budget_tier: t.budget_tier,
+            provider: t.provider,
             created_at: t.created_at,
             updated_at: t.updated_at,
             closed_at: t.closed_at,
@@ -260,8 +272,8 @@ pub async fn create_task(
 
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, priority, complexity, assigned_to, created_by, source_task_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, NOW(), NOW())"
+        "INSERT INTO tasks (id, session_id, project_id, ticket_number, parent_id, task_type, title, description, status, priority, complexity, assigned_to, created_by, source_task_id, model_hint, budget_tier, provider, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())"
     )
     .bind(task_id)
     .bind(session.id)
@@ -276,6 +288,9 @@ pub async fn create_task(
     .bind(req.assigned_to)
     .bind(participant.id)
     .bind(req.source_task_id)
+    .bind(&req.model_hint)
+    .bind(&req.budget_tier)
+    .bind(&req.provider)
     .execute(&state.db)
     .await
     .map_err(|e| {
@@ -580,6 +595,9 @@ pub async fn update_task(
     let parent_id = req.parent_id.or(task.parent_id);
     let commit_hashes = req.commit_hashes.clone().unwrap_or_else(|| task.commit_hashes.clone());
     let no_code_change = req.no_code_change.unwrap_or(task.no_code_change);
+    let model_hint = req.model_hint.clone().or_else(|| task.model_hint.clone());
+    let budget_tier = req.budget_tier.clone().or_else(|| task.budget_tier.clone());
+    let provider = req.provider.clone().or_else(|| task.provider.clone());
 
     let is_closing = (status_str == "closed" || status_str == "done") && task.closed_at.is_none();
 
@@ -595,7 +613,7 @@ pub async fn update_task(
     };
 
     sqlx::query(
-        "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, commit_hashes = $8, no_code_change = $9, closed_at = $10, updated_at = NOW() WHERE id = $11"
+        "UPDATE tasks SET title = $1, description = $2, status = $3, priority = $4, complexity = $5, assigned_to = $6, parent_id = $7, commit_hashes = $8, no_code_change = $9, closed_at = $10, model_hint = $11, budget_tier = $12, provider = $13, updated_at = NOW() WHERE id = $14"
     )
     .bind(title)
     .bind(description)
@@ -607,6 +625,9 @@ pub async fn update_task(
     .bind(&commit_hashes)
     .bind(no_code_change)
     .bind(closed_at)
+    .bind(&model_hint)
+    .bind(&budget_tier)
+    .bind(&provider)
     .bind(task_id)
     .execute(&state.db)
     .await

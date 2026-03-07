@@ -81,7 +81,7 @@ export async function createTask(
 export async function updateTask(
   sessionCode: string,
   taskId: string,
-  data: { title?: string; description?: string | null; status?: string; priority?: string; complexity?: string; assigned_to?: string | null; parent_id?: string; commit_hashes?: string[]; no_code_change?: boolean },
+  data: { title?: string; description?: string | null; status?: string; priority?: string; complexity?: string; assigned_to?: string | null; parent_id?: string; commit_hashes?: string[]; no_code_change?: boolean; model_hint?: string | null; budget_tier?: string | null; provider?: string | null },
 ): Promise<TaskView> {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/tasks/${taskId}`, {
     method: 'PATCH',
