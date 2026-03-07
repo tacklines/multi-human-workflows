@@ -806,6 +806,43 @@ export const messagesEn: Record<string, string> = {
   "graph.legendDone": "Done",
   "graph.legendClosed": "Closed",
   "graph.stats": "{{visible}}/{{total}} nodes · {{edges}} edges",
+
+  // ── auth pages ──
+  "auth.login.title": "Sign in",
+  "auth.login.subtitle": "Welcome back to Seam",
+  "auth.login.loading": "Loading...",
+  "auth.login.signIn": "Sign in",
+  "auth.login.noAccount": "Don't have an account?",
+  "auth.login.register": "Register",
+  "auth.login.errorLoad": "Failed to load login flow",
+  "auth.login.errorGeneric": "Login failed. Please try again.",
+  "auth.login.errorAccept": "Failed to complete login",
+
+  "auth.register.title": "Create account",
+  "auth.register.subtitle": "Get started with Seam",
+  "auth.register.loading": "Loading...",
+  "auth.register.submit": "Create account",
+  "auth.register.haveAccount": "Already have an account? ",
+  "auth.register.signIn": "Sign in",
+  "auth.register.errorLoad": "Failed to load registration flow",
+  "auth.register.errorGeneric": "Registration failed. Please try again.",
+
+  "auth.consent.title": "Authorize access",
+  "auth.consent.autoAccepting": "Authorizing...",
+  "auth.consent.requestsAccess": "is requesting access to your account",
+  "auth.consent.requestedScopes": "Requested permissions",
+  "auth.consent.approve": "Approve",
+  "auth.consent.deny": "Deny",
+  "auth.consent.errorNoChallenge": "Missing consent challenge",
+  "auth.consent.errorLoad": "Failed to load consent request",
+  "auth.consent.errorAccept": "Failed to approve consent",
+  "auth.consent.errorDeny": "Failed to deny consent",
+
+  "auth.error.title": "Authentication error",
+  "auth.error.noId": "No error ID provided",
+  "auth.error.fetchFailed": "Failed to load error details",
+  "auth.error.unknown": "An unknown error occurred",
+  "auth.error.backToLogin": "Back to login",
 };
 
 // Wire English into the locale map
