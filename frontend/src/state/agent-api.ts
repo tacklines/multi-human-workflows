@@ -10,37 +10,6 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-export interface LaunchAgentRequest {
-  agent_type?: string;
-  task_id?: string;
-  branch?: string;
-  instructions?: string;
-}
-
-export interface LaunchAgentResponse {
-  workspace_id: string;
-  participant_id: string;
-  agent_code: string;
-  branch: string;
-  status: string;
-}
-
-export async function launchAgent(
-  sessionCode: string,
-  req: LaunchAgentRequest,
-): Promise<LaunchAgentResponse> {
-  const res = await fetch(`${API_BASE}/api/sessions/${sessionCode}/agents`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
 // --- Project-level agent views ---
 
 export type TaskStatus = 'open' | 'in_progress' | 'done' | 'closed';

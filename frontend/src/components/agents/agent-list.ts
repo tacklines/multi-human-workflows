@@ -2,21 +2,13 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   fetchProjectAgents,
-  launchAgent,
   type ProjectAgentView,
 } from "../../state/agent-api.js";
-import { type SessionView } from "../../state/app-state.js";
 import { t } from "../../lib/i18n.js";
 
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
-import "@shoelace-style/shoelace/dist/components/button/button.js";
-import "@shoelace-style/shoelace/dist/components/dialog/dialog.js";
 import "@shoelace-style/shoelace/dist/components/icon/icon.js";
-import "@shoelace-style/shoelace/dist/components/input/input.js";
-import "@shoelace-style/shoelace/dist/components/option/option.js";
-import "@shoelace-style/shoelace/dist/components/select/select.js";
 import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
-import "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
 import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
 import "@shoelace-style/shoelace/dist/components/alert/alert.js";
 
@@ -285,21 +277,11 @@ export class AgentList extends LitElement {
   `;
 
   @property() projectId = "";
-  @property() sessions: SessionView[] = [];
 
   @state() private _agents: ProjectAgentView[] = [];
   @state() private _loading = true;
   @state() private _error = "";
   @state() private _showAll = false;
-
-  @state() private _showLaunchDialog = false;
-  @state() private _launchSession = "";
-  @state() private _launchType = "coder";
-  @state() private _launchBranch = "";
-  @state() private _launchInstructions = "";
-  @state() private _launchLoading = false;
-  @state() private _launchError = "";
-  @state() private _toastMessage = "";
 
   connectedCallback() {
     super.connectedCallback();
@@ -374,10 +356,6 @@ export class AgentList extends LitElement {
             ${t("agentList.emptyHint")}
           </div>
         </div>
-        ${this._renderLaunchButton()} ${this._renderLaunchDialog()}
-        ${this._toastMessage
-          ? html`<div class="toast">${this._toastMessage}</div>`
-          : nothing}
       `;
     }
 
@@ -410,166 +388,13 @@ export class AgentList extends LitElement {
               : t("agentList.showAll")}
           </div>
         </div>
-        ${this._renderLaunchButton()}
       </div>
 
       <div class="agent-grid">
         ${online.map((a) => this._renderCard(a))}
         ${offline.map((a) => this._renderCard(a))}
       </div>
-
-      ${this._renderLaunchDialog()}
-      ${this._toastMessage
-        ? html`<div class="toast">${this._toastMessage}</div>`
-        : nothing}
     `;
-  }
-
-  private _renderLaunchButton() {
-    return html`
-      <sl-button
-        variant="primary"
-        size="small"
-        @click=${() => {
-          this._showLaunchDialog = true;
-          this._launchError = "";
-        }}
-      >
-        <sl-icon slot="prefix" name="rocket-takeoff"></sl-icon>
-        ${t("agentList.launchAgent")}
-      </sl-button>
-    `;
-  }
-
-  private _renderLaunchDialog() {
-    if (!this._showLaunchDialog) return nothing;
-    return html`
-      <sl-dialog
-        label=${t("agentList.launch.title")}
-        ?open=${this._showLaunchDialog}
-        @sl-request-close=${() => {
-          this._showLaunchDialog = false;
-        }}
-      >
-        <div style="display: flex; flex-direction: column; gap: 1rem;">
-          <p style="margin: 0; font-size: 0.85rem; color: var(--text-tertiary);">
-            ${t("agentList.launch.subtitle")}
-          </p>
-          ${this._launchError
-            ? html`<sl-alert variant="danger" open
-                >${this._launchError}</sl-alert
-              >`
-            : nothing}
-          ${this.sessions.length === 0
-            ? html`
-                <sl-alert variant="warning" open
-                  >${t("agentList.launch.noSessions")}</sl-alert
-                >
-              `
-            : html`
-                <sl-select
-                  label=${t("agentList.launch.sessionLabel")}
-                  placeholder=${t("agentList.launch.sessionPlaceholder")}
-                  help-text=${t("agentList.launch.sessionHelp")}
-                  value=${this._launchSession}
-                  @sl-change=${(e: Event) => {
-                    this._launchSession = (e.target as HTMLSelectElement).value;
-                  }}
-                >
-                  ${this.sessions.map(
-                    (s) => html`
-                      <sl-option value=${s.code}>${s.name ?? s.code}</sl-option>
-                    `,
-                  )}
-                </sl-select>
-              `}
-
-          <sl-select
-            label=${t("agentList.launch.typeLabel")}
-            value=${this._launchType}
-            @sl-change=${(e: Event) => {
-              this._launchType = (e.target as HTMLSelectElement).value;
-            }}
-          >
-            <sl-option value="coder">
-              <sl-icon slot="prefix" name="code-slash"></sl-icon>
-              ${t("agentList.launch.typeCoder")}
-            </sl-option>
-            <sl-option value="planner">
-              <sl-icon slot="prefix" name="diagram-3"></sl-icon>
-              ${t("agentList.launch.typePlanner")}
-            </sl-option>
-            <sl-option value="reviewer">
-              <sl-icon slot="prefix" name="search"></sl-icon>
-              ${t("agentList.launch.typeReviewer")}
-            </sl-option>
-          </sl-select>
-
-          <sl-input
-            label=${t("agentList.launch.branchLabel")}
-            placeholder=${t("agentList.launch.branchPlaceholder")}
-            help-text=${t("agentList.launch.branchHelp")}
-            value=${this._launchBranch}
-            @sl-input=${(e: Event) => {
-              this._launchBranch = (e.target as HTMLInputElement).value;
-            }}
-          ></sl-input>
-
-          <sl-textarea
-            label=${t("agentList.launch.instructionsLabel")}
-            placeholder=${t("agentList.launch.instructionsPlaceholder")}
-            value=${this._launchInstructions}
-            @sl-input=${(e: Event) => {
-              this._launchInstructions = (
-                e.target as HTMLTextAreaElement
-              ).value;
-            }}
-            rows="3"
-          ></sl-textarea>
-        </div>
-
-        <sl-button
-          slot="footer"
-          variant="primary"
-          ?loading=${this._launchLoading}
-          ?disabled=${!this._launchSession}
-          @click=${() => this._handleLaunch()}
-        >
-          <sl-icon slot="prefix" name="rocket-takeoff"></sl-icon>
-          ${t("agentList.launch.submit")}
-        </sl-button>
-      </sl-dialog>
-    `;
-  }
-
-  private async _handleLaunch() {
-    if (!this._launchSession) return;
-    this._launchLoading = true;
-    this._launchError = "";
-    try {
-      const result = await launchAgent(this._launchSession, {
-        agent_type: this._launchType,
-        branch: this._launchBranch || undefined,
-        instructions: this._launchInstructions || undefined,
-      });
-      this._showLaunchDialog = false;
-      this._launchSession = "";
-      this._launchType = "coder";
-      this._launchBranch = "";
-      this._launchInstructions = "";
-      this._toastMessage = t("agentList.launch.success", {
-        branch: result.branch,
-      });
-      setTimeout(() => {
-        this._toastMessage = "";
-      }, 4000);
-      await this._load();
-    } catch (err) {
-      this._launchError =
-        err instanceof Error ? err.message : t("agentList.launch.error");
-    } finally {
-      this._launchLoading = false;
-    }
   }
 
   private _renderCard(agent: ProjectAgentView) {

@@ -165,7 +165,7 @@ export class AutomationPanel extends LitElement {
   @state() private _reactionName = '';
   @state() private _reactionAggregateType = 'task';
   @state() private _reactionEventType = '';
-  @state() private _reactionActionType = 'launch_agent';
+  @state() private _reactionActionType = 'invoke_agent';
   @state() private _reactionActionConfig = '{}';
   @state() private _reactionFilter = '';
   @state() private _reactionSaving = false;
@@ -175,7 +175,7 @@ export class AutomationPanel extends LitElement {
   @state() private _editingJobId: string | null = null;
   @state() private _jobName = '';
   @state() private _jobCronExpr = '';
-  @state() private _jobActionType = 'launch_agent';
+  @state() private _jobActionType = 'invoke_agent';
   @state() private _jobActionConfig = '{}';
   @state() private _jobSaving = false;
 
@@ -214,7 +214,7 @@ export class AutomationPanel extends LitElement {
     this._reactionName = '';
     this._reactionAggregateType = 'task';
     this._reactionEventType = '';
-    this._reactionActionType = 'launch_agent';
+    this._reactionActionType = 'invoke_agent';
     this._reactionActionConfig = '{}';
     this._reactionFilter = '';
     this._showReactionDialog = true;
@@ -295,7 +295,7 @@ export class AutomationPanel extends LitElement {
     this._editingJobId = null;
     this._jobName = '';
     this._jobCronExpr = '';
-    this._jobActionType = 'launch_agent';
+    this._jobActionType = 'invoke_agent';
     this._jobActionConfig = '{}';
     this._showJobDialog = true;
   }
@@ -542,7 +542,7 @@ export class AutomationPanel extends LitElement {
 
           <sl-select label="Action Type" value=${this._reactionActionType}
             @sl-change=${(e: CustomEvent) => { this._reactionActionType = (e.target as SlInput).value; }}>
-            <sl-option value="launch_agent">launch_agent</sl-option>
+            <sl-option value="invoke_agent">invoke_agent</sl-option>
             <sl-option value="webhook">webhook</sl-option>
             <sl-option value="mcp_tool">mcp_tool</sl-option>
           </sl-select>
@@ -587,7 +587,7 @@ export class AutomationPanel extends LitElement {
 
           <sl-select label="Action Type" value=${this._jobActionType}
             @sl-change=${(e: CustomEvent) => { this._jobActionType = (e.target as SlInput).value; }}>
-            <sl-option value="launch_agent">launch_agent</sl-option>
+            <sl-option value="invoke_agent">invoke_agent</sl-option>
             <sl-option value="webhook">webhook</sl-option>
             <sl-option value="mcp_tool">mcp_tool</sl-option>
           </sl-select>

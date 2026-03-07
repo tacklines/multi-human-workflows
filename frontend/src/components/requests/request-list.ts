@@ -144,7 +144,7 @@ export class RequestList extends LitElement {
       ]);
       this._requests = requests;
       this._autoAnalysis = reactions.find(
-        r => r.aggregate_type === 'request' && r.event_type === 'request_created' && r.action_type === 'launch_agent',
+        r => r.aggregate_type === 'request' && r.event_type === 'request_created' && r.action_type === 'invoke_agent',
       ) ?? null;
     } catch (err) {
       this._error = err instanceof Error ? err.message : t('requestList.errorLoad');
@@ -165,7 +165,7 @@ export class RequestList extends LitElement {
           name: 'Auto-analyze requests',
           event_type: 'request_created',
           aggregate_type: 'request',
-          action_type: 'launch_agent',
+          action_type: 'invoke_agent',
           action_config: {
             skill: 'blossom',
             instructions: 'Analyze this feature request against the project\'s existing requirements and features. Decompose into requirements and tasks.\n\nRequest: {{title}}\n\n{{body}}\n\nUse list_requirements to see existing requirements. Use create_requirement to add new ones. Link them with link_requirement_task and link_request_requirement.',
