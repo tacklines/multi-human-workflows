@@ -237,6 +237,12 @@ async fn main() {
         .route("/api/projects/{project_id}/reactions/{reaction_id}", patch(routes::automations::update_reaction).delete(routes::automations::delete_reaction))
         .route("/api/projects/{project_id}/scheduled-jobs", get(routes::automations::list_scheduled_jobs).post(routes::automations::create_scheduled_job))
         .route("/api/projects/{project_id}/scheduled-jobs/{job_id}", patch(routes::automations::update_scheduled_job).delete(routes::automations::delete_scheduled_job))
+        // Auth bridge (Hydra/Kratos — unauthenticated, part of login flow)
+        .route("/api/auth/login", get(routes::auth_bridge::get_login_request))
+        .route("/api/auth/login/accept", axum::routing::put(routes::auth_bridge::accept_login))
+        .route("/api/auth/consent", get(routes::auth_bridge::get_consent_request))
+        .route("/api/auth/consent/accept", axum::routing::put(routes::auth_bridge::accept_consent))
+        .route("/api/auth/consent/reject", axum::routing::put(routes::auth_bridge::reject_consent))
         // WebSocket
         .route("/ws", get(ws::handler::ws_upgrade))
         // OAuth discovery for MCP clients
