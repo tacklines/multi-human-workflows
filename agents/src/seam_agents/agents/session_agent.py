@@ -87,6 +87,14 @@ def _build_llm(requirement: ModelRequirement | None = None) -> tuple[BaseChatMod
             api_key=settings.openrouter_api_key,
             max_tokens=4096,
         )
+    elif profile.provider == "deepseek":
+        from langchain_openai import ChatOpenAI
+        llm = ChatOpenAI(
+            model=profile.name,
+            base_url="https://api.deepseek.com/v1",
+            api_key=settings.deepseek_api_key,
+            max_tokens=4096,
+        )
     else:
         raise ValueError(f"Unknown provider: {profile.provider}")
 

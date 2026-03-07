@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     llamacpp_base_url: str = "http://192.168.1.14:8080/v1"
     anthropic_api_key: str = ""
     openrouter_api_key: str = ""  # enables OpenRouter models if set
+    deepseek_api_key: str = ""  # enables DeepSeek models if set
 
     # Seam MCP (Streamable HTTP)
     seam_url: str = "http://localhost:3002"
@@ -69,6 +70,12 @@ def build_model_registry():
     if settings.openrouter_api_key:
         for name, profile in KNOWN_PROFILES.items():
             if profile.provider == "openrouter":
+                registry.register(profile)
+
+    # Register DeepSeek models if API key is set
+    if settings.deepseek_api_key:
+        for name, profile in KNOWN_PROFILES.items():
+            if profile.provider == "deepseek":
                 registry.register(profile)
 
     return registry

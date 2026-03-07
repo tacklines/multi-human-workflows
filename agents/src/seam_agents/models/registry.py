@@ -148,6 +148,40 @@ KNOWN_PROFILES: dict[str, ModelProfile] = {
         tok_per_sec=70.0,
     ),
 
+    # DeepSeek models — available via DeepSeek API (OpenAI-compatible)
+    "deepseek-chat": ModelProfile(
+        name="deepseek-chat",
+        provider="deepseek",
+        capabilities={
+            Capability.CODING: 0.9,
+            Capability.REASONING: 0.9,
+            Capability.TOOL_USE: 0.85,
+            Capability.LONG_CONTEXT: 0.9,
+            Capability.SPEED: 0.7,
+            Capability.CREATIVE: 0.8,
+            Capability.INSTRUCTION_FOLLOWING: 0.85,
+        },
+        budget=Budget.ECONOMY,
+        context_window=131072,
+        tok_per_sec=60.0,
+    ),
+    "deepseek-reasoner": ModelProfile(
+        name="deepseek-reasoner",
+        provider="deepseek",
+        capabilities={
+            Capability.REASONING: 0.95,
+            Capability.CODING: 0.9,
+            Capability.TOOL_USE: 0.7,
+            Capability.LONG_CONTEXT: 0.85,
+            Capability.SPEED: 0.3,
+            Capability.CREATIVE: 0.75,
+            Capability.INSTRUCTION_FOLLOWING: 0.85,
+        },
+        budget=Budget.ECONOMY,
+        context_window=131072,
+        tok_per_sec=20.0,
+    ),
+
     # API models — available only when API keys are configured
     "claude-opus-4-6": ModelProfile(
         name="claude-opus-4-6",
@@ -212,8 +246,11 @@ MODEL_ALIASES: dict[str, str] = {
     "devstral-small-2": "devstral-tuned",
     "qwen3.5": "qwen/qwen3.5-coder-32b",
     "qwen3.5-coder": "qwen/qwen3.5-coder-32b",
-    "deepseek": "deepseek/deepseek-v3-0324",
-    "deepseek-v3": "deepseek/deepseek-v3-0324",
+    "deepseek": "deepseek-chat",
+    "deepseek-v3": "deepseek-chat",
+    "deepseek-r1": "deepseek-reasoner",
+    "r1": "deepseek-reasoner",
+    "deepseek-or": "deepseek/deepseek-v3-0324",
     "maverick": "meta-llama/llama-4-maverick",
     "llama-4": "meta-llama/llama-4-maverick",
 }
