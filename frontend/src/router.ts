@@ -6,6 +6,35 @@ let router: Router | null = null;
 export function initRouter(outlet: HTMLElement): Router {
   router = new Router(outlet);
   router.setRoutes([
+    // Auth routes — accessible without authentication
+    {
+      path: "/auth/login",
+      component: "auth-login-page",
+      action: async () => {
+        await import("./components/auth/login-page.js");
+      },
+    },
+    {
+      path: "/auth/register",
+      component: "auth-registration-page",
+      action: async () => {
+        await import("./components/auth/registration-page.js");
+      },
+    },
+    {
+      path: "/auth/consent",
+      component: "auth-consent-page",
+      action: async () => {
+        await import("./components/auth/consent-page.js");
+      },
+    },
+    {
+      path: "/auth/error",
+      component: "auth-error-page",
+      action: async () => {
+        await import("./components/auth/error-page.js");
+      },
+    },
     {
       path: "/",
       action: async (_context, commands) => {

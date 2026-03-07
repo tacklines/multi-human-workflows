@@ -1,13 +1,13 @@
-import { defineConfig, PluginOption } from 'vite';
-import tailwindcss from '@tailwindcss/vite';
+import { defineConfig, PluginOption } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 
 // Lit custom elements can't be re-registered via HMR — force full reload
 function litFullReload(): PluginOption {
   return {
-    name: 'lit-full-reload',
+    name: "lit-full-reload",
     handleHotUpdate({ file, server }) {
-      if (file.endsWith('.ts') && file.includes('/src/components/')) {
-        server.ws.send({ type: 'full-reload' });
+      if (file.endsWith(".ts") && file.includes("/src/components/")) {
+        server.ws.send({ type: "full-reload" });
         return [];
       }
     },
@@ -18,23 +18,27 @@ export default defineConfig({
   plugins: [tailwindcss(), litFullReload()],
   resolve: {
     alias: {
-      '@': '/src',
+      "@": "/src",
     },
   },
   server: {
     headers: {
-      'Cache-Control': 'no-store',
+      "Cache-Control": "no-store",
     },
     proxy: {
-      '/api': 'http://localhost:3002',
-      '/mcp': 'http://localhost:3002',
-      '/.well-known': 'http://localhost:3002',
-      '/ws': {
-        target: 'ws://localhost:3002',
+      "/api": "http://localhost:3002",
+      "/mcp": "http://localhost:3002",
+      "/.well-known": "http://localhost:3002",
+      "/ws": {
+        target: "ws://localhost:3002",
         ws: true,
+      },
+      "/kratos": {
+        target: "http://localhost:4433",
+        rewrite: (path: string) => path.replace(/^\/kratos/, ""),
       },
     },
   },
   // History API fallback so /projects/xyz resolves to index.html
-  appType: 'spa',
+  appType: "spa",
 });

@@ -1,31 +1,46 @@
-import { LitElement, html, css, nothing } from 'lit';
-import { customElement, state, query } from 'lit/decorators.js';
-import { authStore, type AuthState } from '../../state/auth-state.js';
-import { store, type AppState, type SessionState, type SessionParticipant } from '../../state/app-state.js';
-import { disconnectSession } from '../../state/session-connection.js';
-import { fetchUnreadMentions, clearUnreadMentions, type UnreadMentionView } from '../../state/task-api.js';
-import { fetchOrgs, setOrgs, setCurrentOrg, getCurrentOrg, subscribeOrg, type OrgView } from '../../state/org-api.js';
-import { initRouter, navigateTo } from '../../router.js';
-import { t } from '../../lib/i18n.js';
+import { LitElement, html, css, nothing } from "lit";
+import { customElement, state, query } from "lit/decorators.js";
+import { authStore, type AuthState } from "../../state/auth-state.js";
+import {
+  store,
+  type AppState,
+  type SessionState,
+  type SessionParticipant,
+} from "../../state/app-state.js";
+import { disconnectSession } from "../../state/session-connection.js";
+import {
+  fetchUnreadMentions,
+  clearUnreadMentions,
+  type UnreadMentionView,
+} from "../../state/task-api.js";
+import {
+  fetchOrgs,
+  setOrgs,
+  setCurrentOrg,
+  getCurrentOrg,
+  subscribeOrg,
+  type OrgView,
+} from "../../state/org-api.js";
+import { initRouter, navigateTo } from "../../router.js";
+import { t } from "../../lib/i18n.js";
 
-import '@shoelace-style/shoelace/dist/components/button/button.js';
-import '@shoelace-style/shoelace/dist/components/icon/icon.js';
-import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import '@shoelace-style/shoelace/dist/components/badge/badge.js';
-import '@shoelace-style/shoelace/dist/components/divider/divider.js';
-import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
-import '@shoelace-style/shoelace/dist/components/dropdown/dropdown.js';
-import '@shoelace-style/shoelace/dist/components/menu/menu.js';
-import '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js';
+import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/icon/icon.js";
+import "@shoelace-style/shoelace/dist/components/icon-button/icon-button.js";
+import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
+import "@shoelace-style/shoelace/dist/components/badge/badge.js";
+import "@shoelace-style/shoelace/dist/components/divider/divider.js";
+import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
+import "@shoelace-style/shoelace/dist/components/dropdown/dropdown.js";
+import "@shoelace-style/shoelace/dist/components/menu/menu.js";
+import "@shoelace-style/shoelace/dist/components/menu-item/menu-item.js";
 
-import './presence-bar.js';
-import './activity-feed.js';
-import './question-panel.js';
-import '../session/agent-console.js';
+import "./presence-bar.js";
+import "./activity-feed.js";
+import "./question-panel.js";
+import "../session/agent-console.js";
 
-
-@customElement('app-shell')
+@customElement("app-shell")
 export class AppShell extends LitElement {
   static styles = css`
     :host {
@@ -129,7 +144,9 @@ export class AppShell extends LitElement {
       font-weight: 500;
       color: var(--text-secondary);
       border: 1px solid transparent;
-      transition: background 0.15s, border-color 0.15s;
+      transition:
+        background 0.15s,
+        border-color 0.15s;
     }
 
     .org-switcher:hover {
@@ -171,7 +188,9 @@ export class AppShell extends LitElement {
       border-right: 1px solid var(--border-color);
       overflow-y: auto;
       overflow-x: hidden;
-      transition: width 0.2s ease, opacity 0.2s ease;
+      transition:
+        width 0.2s ease,
+        opacity 0.2s ease;
     }
 
     .sidebar-collapsed .sidebar {
@@ -330,7 +349,7 @@ export class AppShell extends LitElement {
   @state() private _orgs: OrgView[] = [];
   @state() private _currentOrg: OrgView | null = null;
 
-  @query('#outlet') private _outlet!: HTMLElement;
+  @query("#outlet") private _outlet!: HTMLElement;
 
   private _authUnsub: (() => void) | null = null;
   private _appUnsub: (() => void) | null = null;
@@ -354,21 +373,29 @@ export class AppShell extends LitElement {
 
     this._appUnsub = store.subscribe((event) => {
       this._appState = store.get();
-      if (event.type === 'mentioned' || event.type === 'session-connected') {
+      if (event.type === "mentioned" || event.type === "session-connected") {
         this._loadUnreadMentions();
       }
-      if (event.type === 'session-disconnected') {
+      if (event.type === "session-disconnected") {
         const orgSlug = this._currentOrg?.slug;
-        if (orgSlug && !window.location.pathname.startsWith(`/orgs/${orgSlug}`)) {
+        if (
+          orgSlug &&
+          !window.location.pathname.startsWith(`/orgs/${orgSlug}`)
+        ) {
           navigateTo(`/orgs/${orgSlug}`);
         }
       }
     });
 
-    if (window.location.pathname === '/auth/callback') {
+    if (window.location.pathname === "/auth/callback") {
       authStore.handleCallback();
     } else {
       authStore.initialize();
+    }
+
+    // For Ory auth pages, initialize the router immediately (no auth needed)
+    if (window.location.pathname.startsWith("/auth/")) {
+      this._initRouter();
     }
   }
 
@@ -382,7 +409,7 @@ export class AppShell extends LitElement {
   private _initRouter() {
     // Wait for the outlet element to be rendered
     this.updateComplete.then(() => {
-      const outlet = this.renderRoot.querySelector('#outlet');
+      const outlet = this.renderRoot.querySelector("#outlet");
       if (outlet && !this._routerReady) {
         initRouter(outlet as HTMLElement);
         this._routerReady = true;
@@ -395,14 +422,20 @@ export class AppShell extends LitElement {
   }
 
   private async _copyToClipboard(text: string) {
-    try { await navigator.clipboard.writeText(text); } catch { /* blocked */ }
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      /* blocked */
+    }
   }
 
   private async _loadOrgs() {
     try {
       this._orgs = await fetchOrgs();
       setOrgs(this._orgs);
-    } catch { /* silent — router will handle */ }
+    } catch {
+      /* silent — router will handle */
+    }
   }
 
   private _switchOrg(org: OrgView) {
@@ -418,7 +451,7 @@ export class AppShell extends LitElement {
     if (orgSlug && projectId) {
       navigateTo(`/orgs/${orgSlug}/projects/${projectId}`);
     } else {
-      navigateTo(orgSlug ? `/orgs/${orgSlug}` : '/');
+      navigateTo(orgSlug ? `/orgs/${orgSlug}` : "/");
     }
   }
 
@@ -427,13 +460,16 @@ export class AppShell extends LitElement {
     if (!code) return;
     try {
       this._unreadMentions = await fetchUnreadMentions(code);
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   }
 
   private _onParticipantClicked(e: CustomEvent<{ id: string }>) {
-    const participants = this._appState.sessionState?.session.participants ?? [];
-    const p = participants.find(p => p.id === e.detail.id);
-    if (p?.participant_type === 'agent') {
+    const participants =
+      this._appState.sessionState?.session.participants ?? [];
+    const p = participants.find((p) => p.id === e.detail.id);
+    if (p?.participant_type === "agent") {
       this._agentConsoleParticipant = p;
     }
   }
@@ -453,54 +489,94 @@ export class AppShell extends LitElement {
     try {
       await clearUnreadMentions(code);
       this._unreadMentions = [];
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   }
 
   private _renderSessionSidebar(session: SessionState, currentId: string) {
     const { session: s, agentCode } = session;
     return html`
       <div class="sidebar-section">
-        <div class="sidebar-section-label">${t('app.sidebar.session')}</div>
-        ${s.name ? html`<div style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">${s.name}</div>` : nothing}
-        <sl-tooltip content="${t('app.tooltip.clickToCopy')}">
-          <div class="session-code-display" @click=${() => this._copyToClipboard(s.code)}>
+        <div class="sidebar-section-label">${t("app.sidebar.session")}</div>
+        ${s.name
+          ? html`<div
+              style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;"
+            >
+              ${s.name}
+            </div>`
+          : nothing}
+        <sl-tooltip content="${t("app.tooltip.clickToCopy")}">
+          <div
+            class="session-code-display"
+            @click=${() => this._copyToClipboard(s.code)}
+          >
             ${s.code}
           </div>
         </sl-tooltip>
       </div>
 
-      ${agentCode ? html`
-        <div class="sidebar-section">
-          <div class="sidebar-section-label">${t('app.sidebar.agentCode')}</div>
-          <sl-tooltip content="${t('app.tooltip.clickToCopy')}">
-            <div class="agent-code-display" @click=${() => this._copyToClipboard(agentCode)}>
-              ${agentCode}
+      ${agentCode
+        ? html`
+            <div class="sidebar-section">
+              <div class="sidebar-section-label">
+                ${t("app.sidebar.agentCode")}
+              </div>
+              <sl-tooltip content="${t("app.tooltip.clickToCopy")}">
+                <div
+                  class="agent-code-display"
+                  @click=${() => this._copyToClipboard(agentCode)}
+                >
+                  ${agentCode}
+                </div>
+              </sl-tooltip>
+              <div class="agent-code-hint">
+                ${t("app.sidebar.agentCodeHint")}
+              </div>
             </div>
-          </sl-tooltip>
-          <div class="agent-code-hint">${t('app.sidebar.agentCodeHint')}</div>
-        </div>
-      ` : nothing}
+          `
+        : nothing}
 
       <sl-divider></sl-divider>
 
       <div class="sidebar-section">
         <div class="sidebar-section-label">
-          ${t('app.sidebar.participants')}
-          <sl-badge variant="neutral" pill style="margin-left: 0.3rem; vertical-align: middle;">${s.participants.length}</sl-badge>
+          ${t("app.sidebar.participants")}
+          <sl-badge
+            variant="neutral"
+            pill
+            style="margin-left: 0.3rem; vertical-align: middle;"
+            >${s.participants.length}</sl-badge
+          >
         </div>
         <ul class="sidebar-participant-list">
-          ${s.participants.map(p => {
+          ${s.participants.map((p) => {
             const isMe = p.id === currentId;
-            const isAgent = p.participant_type === 'agent';
+            const isAgent = p.participant_type === "agent";
             return html`
               <li
-                class="sidebar-participant ${isMe ? 'is-me' : ''} ${isAgent ? 'clickable' : ''}"
-                @click=${isAgent ? () => { this._agentConsoleParticipant = p; } : nothing}
+                class="sidebar-participant ${isMe ? "is-me" : ""} ${isAgent
+                  ? "clickable"
+                  : ""}"
+                @click=${isAgent
+                  ? () => {
+                      this._agentConsoleParticipant = p;
+                    }
+                  : nothing}
               >
-                <sl-icon name=${isAgent ? 'robot' : 'person-fill'}></sl-icon>
+                <sl-icon name=${isAgent ? "robot" : "person-fill"}></sl-icon>
                 <span class="name">${p.display_name}</span>
-                ${isMe ? html`<span class="you-tag">${t('app.sidebar.youTag')}</span>` : nothing}
-                ${isAgent ? html`<sl-icon name="terminal" style="font-size: 0.7rem; opacity: 0.5;"></sl-icon>` : nothing}
+                ${isMe
+                  ? html`<span class="you-tag"
+                      >${t("app.sidebar.youTag")}</span
+                    >`
+                  : nothing}
+                ${isAgent
+                  ? html`<sl-icon
+                      name="terminal"
+                      style="font-size: 0.7rem; opacity: 0.5;"
+                    ></sl-icon>`
+                  : nothing}
               </li>
             `;
           })}
@@ -509,9 +585,15 @@ export class AppShell extends LitElement {
 
       <sl-divider></sl-divider>
 
-      <sl-button class="leave-btn" variant="neutral" size="small" outline @click=${this._leaveSession}>
+      <sl-button
+        class="leave-btn"
+        variant="neutral"
+        size="small"
+        outline
+        @click=${this._leaveSession}
+      >
         <sl-icon slot="prefix" name="box-arrow-left"></sl-icon>
-        ${t('app.sidebar.backToProject')}
+        ${t("app.sidebar.backToProject")}
       </sl-button>
 
       <sl-divider></sl-divider>
@@ -534,11 +616,16 @@ export class AppShell extends LitElement {
   }
 
   render() {
+    // Allow Ory auth pages to render without authentication
+    if (window.location.pathname.startsWith("/auth/")) {
+      return html`<div id="outlet"></div>`;
+    }
+
     if (this._authState.isLoading) {
       return html`
         <div class="auth-loading">
           <sl-spinner style="font-size: 2rem;"></sl-spinner>
-          <span>${t('app.auth.loading')}</span>
+          <span>${t("app.auth.loading")}</span>
         </div>
       `;
     }
@@ -546,14 +633,20 @@ export class AppShell extends LitElement {
     if (!this._authState.isAuthenticated) {
       return html`
         <div class="login-screen">
-          <h1>${t('app.login.title')}</h1>
-          <p>${t('app.login.description')}</p>
-          <sl-button variant="primary" size="large" @click=${() => authStore.login()}>
+          <h1>${t("app.login.title")}</h1>
+          <p>${t("app.login.description")}</p>
+          <sl-button
+            variant="primary"
+            size="large"
+            @click=${() => authStore.login()}
+          >
             <sl-icon slot="prefix" name="box-arrow-in-right"></sl-icon>
-            ${t('app.login.signIn')}
+            ${t("app.login.signIn")}
           </sl-button>
           ${this._authState.error
-            ? html`<p style="color: var(--sl-color-danger-500);">${this._authState.error}</p>`
+            ? html`<p style="color: var(--sl-color-danger-500);">
+                ${this._authState.error}
+              </p>`
             : nothing}
         </div>
       `;
@@ -561,44 +654,85 @@ export class AppShell extends LitElement {
 
     const session = this._appState.sessionState;
     const participants = session?.session.participants ?? [];
-    const currentId = session?.participantId ?? '';
+    const currentId = session?.participantId ?? "";
 
     return html`
-      <div class="app-layout ${!session ? 'no-sidebar' : this._sidebarCollapsed ? 'sidebar-collapsed' : ''}">
+      <div
+        class="app-layout ${!session
+          ? "no-sidebar"
+          : this._sidebarCollapsed
+            ? "sidebar-collapsed"
+            : ""}"
+      >
         <header class="header">
           <div class="header-left">
             <sl-icon-button
               name="list"
-              label="${t('app.sidebar.toggleLabel')}"
+              label="${t("app.sidebar.toggleLabel")}"
               @click=${this._toggleSidebar}
             ></sl-icon-button>
-            <span class="logo-wordmark" @click=${() => navigateTo('/')} style="cursor: pointer;">${t('app.brand')}</span>
-            ${this._currentOrg && this._orgs.length > 0 ? html`
-              <span class="org-divider">/</span>
-              ${this._orgs.length === 1 ? html`
-                <span class="org-switcher" @click=${() => navigateTo(`/orgs/${this._currentOrg!.slug}`)}>
-                  ${this._currentOrg.name}
-                </span>
-              ` : html`
-                <sl-dropdown>
-                  <span class="org-switcher" slot="trigger">
-                    ${this._currentOrg.name}
-                    <sl-icon name="chevron-down" style="font-size: 0.7rem;"></sl-icon>
-                  </span>
-                  <sl-menu @sl-select=${(e: CustomEvent) => {
-                    const org = this._orgs.find(o => o.slug === e.detail.item.value);
-                    if (org) this._switchOrg(org);
-                  }}>
-                    ${this._orgs.map(o => html`
-                      <sl-menu-item value=${o.slug} ?checked=${o.slug === this._currentOrg?.slug}>
-                        ${o.name}
-                        ${o.personal ? html`<sl-badge variant="neutral" pill slot="suffix" style="font-size: 0.6rem;">${t('app.header.orgPersonal')}</sl-badge>` : nothing}
-                      </sl-menu-item>
-                    `)}
-                  </sl-menu>
-                </sl-dropdown>
-              `}
-            ` : nothing}
+            <span
+              class="logo-wordmark"
+              @click=${() => navigateTo("/")}
+              style="cursor: pointer;"
+              >${t("app.brand")}</span
+            >
+            ${this._currentOrg && this._orgs.length > 0
+              ? html`
+                  <span class="org-divider">/</span>
+                  ${this._orgs.length === 1
+                    ? html`
+                        <span
+                          class="org-switcher"
+                          @click=${() =>
+                            navigateTo(`/orgs/${this._currentOrg!.slug}`)}
+                        >
+                          ${this._currentOrg.name}
+                        </span>
+                      `
+                    : html`
+                        <sl-dropdown>
+                          <span class="org-switcher" slot="trigger">
+                            ${this._currentOrg.name}
+                            <sl-icon
+                              name="chevron-down"
+                              style="font-size: 0.7rem;"
+                            ></sl-icon>
+                          </span>
+                          <sl-menu
+                            @sl-select=${(e: CustomEvent) => {
+                              const org = this._orgs.find(
+                                (o) => o.slug === e.detail.item.value,
+                              );
+                              if (org) this._switchOrg(org);
+                            }}
+                          >
+                            ${this._orgs.map(
+                              (o) => html`
+                                <sl-menu-item
+                                  value=${o.slug}
+                                  ?checked=${o.slug === this._currentOrg?.slug}
+                                >
+                                  ${o.name}
+                                  ${o.personal
+                                    ? html`<sl-badge
+                                        variant="neutral"
+                                        pill
+                                        slot="suffix"
+                                        style="font-size: 0.6rem;"
+                                        >${t(
+                                          "app.header.orgPersonal",
+                                        )}</sl-badge
+                                      >`
+                                    : nothing}
+                                </sl-menu-item>
+                              `,
+                            )}
+                          </sl-menu>
+                        </sl-dropdown>
+                      `}
+                `
+              : nothing}
           </div>
 
           <div class="header-center">
@@ -610,29 +744,47 @@ export class AppShell extends LitElement {
           </div>
 
           <div class="header-right">
-            ${session && this._unreadMentions.length > 0 ? html`
-              <sl-tooltip content="${t('app.header.unreadMentions', { count: this._unreadMentions.length })}">
-                <sl-button size="small" variant="text" @click=${this._clearMentions} style="position: relative;">
-                  <sl-icon name="bell-fill" style="color: var(--sl-color-warning-500);"></sl-icon>
-                  <sl-badge variant="danger" pill style="position: absolute; top: -2px; right: -2px; font-size: 0.6rem;">
-                    ${this._unreadMentions.length}
-                  </sl-badge>
-                </sl-button>
-              </sl-tooltip>
-            ` : nothing}
+            ${session && this._unreadMentions.length > 0
+              ? html`
+                  <sl-tooltip
+                    content="${t("app.header.unreadMentions", {
+                      count: this._unreadMentions.length,
+                    })}"
+                  >
+                    <sl-button
+                      size="small"
+                      variant="text"
+                      @click=${this._clearMentions}
+                      style="position: relative;"
+                    >
+                      <sl-icon
+                        name="bell-fill"
+                        style="color: var(--sl-color-warning-500);"
+                      ></sl-icon>
+                      <sl-badge
+                        variant="danger"
+                        pill
+                        style="position: absolute; top: -2px; right: -2px; font-size: 0.6rem;"
+                      >
+                        ${this._unreadMentions.length}
+                      </sl-badge>
+                    </sl-button>
+                  </sl-tooltip>
+                `
+              : nothing}
             <sl-dropdown>
               <sl-button slot="trigger" size="small" variant="text" caret>
                 ${this._authState.user?.name}
               </sl-button>
               <sl-menu>
-                <sl-menu-item @click=${() => navigateTo('/settings')}>
+                <sl-menu-item @click=${() => navigateTo("/settings")}>
                   <sl-icon slot="prefix" name="gear"></sl-icon>
-                  ${t('app.header.settings')}
+                  ${t("app.header.settings")}
                 </sl-menu-item>
                 <sl-divider></sl-divider>
                 <sl-menu-item @click=${() => authStore.logout()}>
                   <sl-icon slot="prefix" name="box-arrow-right"></sl-icon>
-                  ${t('app.header.signOut')}
+                  ${t("app.header.signOut")}
                 </sl-menu-item>
               </sl-menu>
             </sl-dropdown>
@@ -641,23 +793,25 @@ export class AppShell extends LitElement {
 
         <aside class="sidebar">
           <div class="sidebar-content">
-            ${session ? this._renderSessionSidebar(session, currentId) : nothing}
+            ${session
+              ? this._renderSessionSidebar(session, currentId)
+              : nothing}
           </div>
         </aside>
 
-        <main class="main">
-          ${this._renderMain()}
-        </main>
+        <main class="main">${this._renderMain()}</main>
       </div>
 
-      ${session && this._agentConsoleParticipant ? html`
-        <agent-console
-          session-code=${session.code}
-          .participant=${this._agentConsoleParticipant}
-          ?open=${!!this._agentConsoleParticipant}
-          @close=${this._closeAgentConsole}
-        ></agent-console>
-      ` : nothing}
+      ${session && this._agentConsoleParticipant
+        ? html`
+            <agent-console
+              session-code=${session.code}
+              .participant=${this._agentConsoleParticipant}
+              ?open=${!!this._agentConsoleParticipant}
+              @close=${this._closeAgentConsole}
+            ></agent-console>
+          `
+        : nothing}
     `;
   }
 }
