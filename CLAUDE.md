@@ -320,24 +320,41 @@ User-controlled model selection across multiple inference providers.
 
 ```
 Request-level override (invocation params)
-  > User preference (personal default)
-    > Org preference (org-wide default)
-      > System default (config.py fallback)
+  > Task-level config (task model_hint/budget_tier/provider)
+    > User preference (personal default)
+      > Org preference (org-wide default)
+        > System default (config.py fallback)
 ```
+
+### Org Policy Enforcement
+
+Org admins can set `model_allowlist` (JSON array of allowed model IDs) and `model_denylist` (JSON array of blocked model IDs) in org model preferences. Enforcement happens at invocation creation — returns 400 if the resolved model violates policy.
+
+### Model Discovery
+
+`GET /api/models` returns available models from all providers. OpenRouter models are fetched and cached in-memory with 1-hour TTL. Anthropic models are built-in. Used by frontend for model selection dropdowns.
+
+### Cost Tracking
+
+Invocations record `model_used`, `input_tokens`, `output_tokens`, and `cost_usd` extracted from Claude JSON output on completion. `GET /api/projects/:id/cost-summary` aggregates total spend and per-model breakdown.
 
 ### Key Tables
 
 - `user_model_preferences` — per-user defaults (default_model, default_budget, default_provider)
 - `org_model_preferences` — org-wide defaults + policy (model_allowlist, model_denylist)
+- Tasks carry `model_hint`, `budget_tier`, `provider` columns for per-task model config
+- Invocations carry `model_hint`, `budget_tier`, `provider` (resolved at creation) + `model_used`, `input_tokens`, `output_tokens`, `cost_usd` (populated on completion)
 
 ### API Endpoints
 
+- `GET /api/models` — list available models (cached OpenRouter + built-in Anthropic)
 - `GET/PUT /api/me/model-preferences` — user model preferences
 - `GET/PUT /api/orgs/:slug/model-preferences` — org model preferences (admin only for PUT)
+- `GET /api/projects/:id/cost-summary` — aggregated invocation costs
 
 ### Dispatch Integration
 
-Invocations carry `model_hint`, `budget_tier`, `provider` fields. At creation, server merges request > user prefs > org prefs. Resolved values are passed as `SEAM_MODEL_HINT`, `SEAM_BUDGET_TIER`, `SEAM_PROVIDER` env vars to workspaces. Agent CLI reads these as defaults below CLI flags.
+Invocations carry `model_hint`, `budget_tier`, `provider` fields. At creation, server merges request > task > user prefs > org prefs, then enforces org allowlist/denylist. Resolved values are passed as `SEAM_MODEL_HINT`, `SEAM_BUDGET_TIER`, `SEAM_PROVIDER` env vars to workspaces. Agent CLI reads these as defaults below CLI flags.
 
 ### Credential Types for Providers
 
