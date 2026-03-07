@@ -150,17 +150,17 @@ class AuthStore {
       this.state = { ...this.state, isLoading: true };
       this.notify({ type: 'auth-loading' });
       const user = await this.userManager.signinRedirectCallback();
-      this.setUser(user);
-      // After OIDC callback, redirect to the originally requested path or default to /projects
+      // Replace URL before setUser — setUser triggers router init which reads the current URL
       const returnPath = sessionStorage.getItem('seam_return_path') || '/';
       sessionStorage.removeItem('seam_return_path');
       window.history.replaceState({}, '', returnPath);
+      this.setUser(user);
     } catch (err) {
       // Stale OIDC state (e.g. authority changed) — clear and restart
       await this.userManager.removeUser();
       await this.userManager.clearStaleState();
+      window.history.replaceState({}, '', '/');
       this.clearUser();
-      window.history.replaceState({}, '', '/projects');
     }
   }
 
