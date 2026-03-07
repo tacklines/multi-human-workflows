@@ -120,7 +120,7 @@ services:
       HOST: 0.0.0.0
       PORT: 3002
       CREDENTIAL_MASTER_KEY: ${CREDENTIAL_MASTER_KEY}
-      JWKS_URL: https://auth.seam.tacklines.com/.well-known/jwks.json
+      JWKS_URL: https://auth.seam.tacklines.com/oauth/v2/keys
       ISSUER_URL: https://auth.seam.tacklines.com
       HYDRA_ADMIN_URL: http://hydra:4445
       CODER_URL: http://coder:7080
