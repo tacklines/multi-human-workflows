@@ -77,7 +77,7 @@ async fn main() {
     let issuer_url = std::env::var("ISSUER_URL")
         .unwrap_or_else(|_| "http://localhost:4444".to_string());
     let jwks_url = std::env::var("JWKS_URL")
-        .unwrap_or_else(|_| format!("{}/oauth/v2/keys", issuer_url));
+        .unwrap_or_else(|_| format!("{}/.well-known/jwks.json", issuer_url));
 
     let coder = coder::CoderClient::from_env();
     if coder.is_some() {

@@ -132,7 +132,7 @@ The Rust server reads env vars for OIDC:
 | Env Var | Value | Purpose |
 |---|---|---|
 | `ISSUER_URL` | `https://auth.seam.tacklines.com` | Token issuer validation, OIDC discovery |
-| `JWKS_URL` | `https://auth.seam.tacklines.com/oauth/v2/keys` | JWT signature verification |
+| `JWKS_URL` | `https://auth.seam.tacklines.com/.well-known/jwks.json` | JWT signature verification |
 | `HYDRA_ADMIN_URL` | `http://hydra:4445` | Hydra admin API for login/consent flow |
 | `KRATOS_PUBLIC_URL` | `http://kratos:4433` | Kratos public API for identity lookups |
 
