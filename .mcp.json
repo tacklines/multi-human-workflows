@@ -1,3 +1,8 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "seam": {
+      "type": "url",
+      "url": "https://seam.tacklines.com/mcp"
+    }
+  }
 }
