@@ -306,6 +306,45 @@ Tantivy-based full-text search for repository files (`code_search.rs`). Separate
 - `knowledge_chunks` — indexed content with optional pgvector embeddings
 - `consumer_cursors` — cursor tracking for the indexer consumer
 
+## Multi-Provider Model Routing
+
+User-controlled model selection across multiple inference providers.
+
+### Providers
+
+- **Anthropic** — Claude models (opus, sonnet, haiku) via Anthropic API
+- **OpenRouter** — Open-weight models (Qwen 3.5, DeepSeek V3, Llama 4) via OpenAI-compatible API
+- **Ollama** — Local models (qwen35-tuned, devstral-tuned)
+- **llama.cpp** — Local models via OpenAI-compatible server
+
+### Preference Hierarchy
+
+```
+Request-level override (invocation params)
+  > User preference (personal default)
+    > Org preference (org-wide default)
+      > System default (config.py fallback)
+```
+
+### Key Tables
+
+- `user_model_preferences` — per-user defaults (default_model, default_budget, default_provider)
+- `org_model_preferences` — org-wide defaults + policy (model_allowlist, model_denylist)
+
+### API Endpoints
+
+- `GET/PUT /api/me/model-preferences` — user model preferences
+- `GET/PUT /api/orgs/:slug/model-preferences` — org model preferences (admin only for PUT)
+
+### Dispatch Integration
+
+Invocations carry `model_hint`, `budget_tier`, `provider` fields. At creation, server merges request > user prefs > org prefs. Resolved values are passed as `SEAM_MODEL_HINT`, `SEAM_BUDGET_TIER`, `SEAM_PROVIDER` env vars to workspaces. Agent CLI reads these as defaults below CLI flags.
+
+### Credential Types for Providers
+
+- `openrouter_api_key` → `OPENROUTER_API_KEY`
+- `anthropic_api_key` → `ANTHROPIC_API_KEY` (existing)
+
 ## Conventions
 
 - Frontend API calls go through Vite proxy (`/api` → `:3002`, `/ws` → WebSocket)
