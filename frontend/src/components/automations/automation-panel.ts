@@ -1,35 +1,49 @@
-import { LitElement, html, css, nothing } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { LitElement, html, css, nothing } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
 import {
-  fetchReactions, createReaction, updateReaction, deleteReaction,
-  fetchScheduledJobs, createScheduledJob, updateScheduledJob, deleteScheduledJob,
-  type EventReaction, type ScheduledJob, type CreateReactionRequest, type CreateScheduledJobRequest,
-} from '../../state/automation-api.js';
+  fetchReactions,
+  createReaction,
+  updateReaction,
+  deleteReaction,
+  fetchScheduledJobs,
+  createScheduledJob,
+  updateScheduledJob,
+  deleteScheduledJob,
+  type EventReaction,
+  type ScheduledJob,
+  type CreateReactionRequest,
+  type CreateScheduledJobRequest,
+} from "../../state/automation-api.js";
+import "./hook-bundles-panel.js";
 
-import '@shoelace-style/shoelace/dist/components/card/card.js';
-import '@shoelace-style/shoelace/dist/components/button/button.js';
-import '@shoelace-style/shoelace/dist/components/input/input.js';
-import '@shoelace-style/shoelace/dist/components/select/select.js';
-import '@shoelace-style/shoelace/dist/components/option/option.js';
-import '@shoelace-style/shoelace/dist/components/switch/switch.js';
-import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
-import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
-import '@shoelace-style/shoelace/dist/components/badge/badge.js';
-import '@shoelace-style/shoelace/dist/components/divider/divider.js';
-import '@shoelace-style/shoelace/dist/components/alert/alert.js';
-import '@shoelace-style/shoelace/dist/components/textarea/textarea.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js';
+import "@shoelace-style/shoelace/dist/components/card/card.js";
+import "@shoelace-style/shoelace/dist/components/button/button.js";
+import "@shoelace-style/shoelace/dist/components/input/input.js";
+import "@shoelace-style/shoelace/dist/components/select/select.js";
+import "@shoelace-style/shoelace/dist/components/option/option.js";
+import "@shoelace-style/shoelace/dist/components/switch/switch.js";
+import "@shoelace-style/shoelace/dist/components/dialog/dialog.js";
+import "@shoelace-style/shoelace/dist/components/icon-button/icon-button.js";
+import "@shoelace-style/shoelace/dist/components/badge/badge.js";
+import "@shoelace-style/shoelace/dist/components/divider/divider.js";
+import "@shoelace-style/shoelace/dist/components/alert/alert.js";
+import "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
+import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
+import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
 
 type SlInput = HTMLInputElement & { value: string };
 type SlSwitch = HTMLInputElement & { checked: boolean };
 
-@customElement('automation-panel')
+@customElement("automation-panel")
 export class AutomationPanel extends LitElement {
   static styles = css`
-    :host { display: block; }
+    :host {
+      display: block;
+    }
 
-    .section { margin-bottom: 2rem; }
+    .section {
+      margin-bottom: 2rem;
+    }
 
     .section-header {
       display: flex;
@@ -152,31 +166,31 @@ export class AutomationPanel extends LitElement {
     }
   `;
 
-  @property() projectId = '';
+  @property() projectId = "";
 
   @state() private _reactions: EventReaction[] = [];
   @state() private _jobs: ScheduledJob[] = [];
   @state() private _loading = true;
-  @state() private _error = '';
+  @state() private _error = "";
 
   /* Reaction dialog state */
   @state() private _showReactionDialog = false;
   @state() private _editingReactionId: string | null = null;
-  @state() private _reactionName = '';
-  @state() private _reactionAggregateType = 'task';
-  @state() private _reactionEventType = '';
-  @state() private _reactionActionType = 'invoke_agent';
-  @state() private _reactionActionConfig = '{}';
-  @state() private _reactionFilter = '';
+  @state() private _reactionName = "";
+  @state() private _reactionAggregateType = "task";
+  @state() private _reactionEventType = "";
+  @state() private _reactionActionType = "invoke_agent";
+  @state() private _reactionActionConfig = "{}";
+  @state() private _reactionFilter = "";
   @state() private _reactionSaving = false;
 
   /* Job dialog state */
   @state() private _showJobDialog = false;
   @state() private _editingJobId: string | null = null;
-  @state() private _jobName = '';
-  @state() private _jobCronExpr = '';
-  @state() private _jobActionType = 'invoke_agent';
-  @state() private _jobActionConfig = '{}';
+  @state() private _jobName = "";
+  @state() private _jobCronExpr = "";
+  @state() private _jobActionType = "invoke_agent";
+  @state() private _jobActionConfig = "{}";
   @state() private _jobSaving = false;
 
   connectedCallback() {
@@ -185,14 +199,14 @@ export class AutomationPanel extends LitElement {
   }
 
   updated(changed: Map<string, unknown>) {
-    if (changed.has('projectId') && this.projectId) {
+    if (changed.has("projectId") && this.projectId) {
       this._load();
     }
   }
 
   private async _load() {
     this._loading = true;
-    this._error = '';
+    this._error = "";
     try {
       const [reactions, jobs] = await Promise.all([
         fetchReactions(this.projectId),
@@ -201,7 +215,8 @@ export class AutomationPanel extends LitElement {
       this._reactions = reactions;
       this._jobs = jobs;
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to load automations';
+      this._error =
+        err instanceof Error ? err.message : "Failed to load automations";
     } finally {
       this._loading = false;
     }
@@ -211,12 +226,12 @@ export class AutomationPanel extends LitElement {
 
   private _openNewReaction() {
     this._editingReactionId = null;
-    this._reactionName = '';
-    this._reactionAggregateType = 'task';
-    this._reactionEventType = '';
-    this._reactionActionType = 'invoke_agent';
-    this._reactionActionConfig = '{}';
-    this._reactionFilter = '';
+    this._reactionName = "";
+    this._reactionAggregateType = "task";
+    this._reactionEventType = "";
+    this._reactionActionType = "invoke_agent";
+    this._reactionActionConfig = "{}";
+    this._reactionFilter = "";
     this._showReactionDialog = true;
   }
 
@@ -227,27 +242,36 @@ export class AutomationPanel extends LitElement {
     this._reactionEventType = r.event_type;
     this._reactionActionType = r.action_type;
     this._reactionActionConfig = JSON.stringify(r.action_config, null, 2);
-    this._reactionFilter = Object.keys(r.filter).length > 0 ? JSON.stringify(r.filter, null, 2) : '';
+    this._reactionFilter =
+      Object.keys(r.filter).length > 0 ? JSON.stringify(r.filter, null, 2) : "";
     this._showReactionDialog = true;
   }
 
   private async _saveReaction() {
     this._reactionSaving = true;
-    this._error = '';
+    this._error = "";
     try {
       const actionConfig = JSON.parse(this._reactionActionConfig);
-      const filter = this._reactionFilter.trim() ? JSON.parse(this._reactionFilter) : {};
+      const filter = this._reactionFilter.trim()
+        ? JSON.parse(this._reactionFilter)
+        : {};
 
       if (this._editingReactionId) {
-        const updated = await updateReaction(this.projectId, this._editingReactionId, {
-          name: this._reactionName.trim(),
-          aggregate_type: this._reactionAggregateType,
-          event_type: this._reactionEventType.trim(),
-          action_type: this._reactionActionType,
-          action_config: actionConfig,
-          filter,
-        });
-        this._reactions = this._reactions.map(r => r.id === updated.id ? updated : r);
+        const updated = await updateReaction(
+          this.projectId,
+          this._editingReactionId,
+          {
+            name: this._reactionName.trim(),
+            aggregate_type: this._reactionAggregateType,
+            event_type: this._reactionEventType.trim(),
+            action_type: this._reactionActionType,
+            action_config: actionConfig,
+            filter,
+          },
+        );
+        this._reactions = this._reactions.map((r) =>
+          r.id === updated.id ? updated : r,
+        );
       } else {
         const data: CreateReactionRequest = {
           name: this._reactionName.trim(),
@@ -264,7 +288,8 @@ export class AutomationPanel extends LitElement {
       }
       this._showReactionDialog = false;
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to save reaction';
+      this._error =
+        err instanceof Error ? err.message : "Failed to save reaction";
     } finally {
       this._reactionSaving = false;
     }
@@ -272,10 +297,15 @@ export class AutomationPanel extends LitElement {
 
   private async _toggleReaction(r: EventReaction) {
     try {
-      const updated = await updateReaction(this.projectId, r.id, { enabled: !r.enabled });
-      this._reactions = this._reactions.map(x => x.id === updated.id ? updated : x);
+      const updated = await updateReaction(this.projectId, r.id, {
+        enabled: !r.enabled,
+      });
+      this._reactions = this._reactions.map((x) =>
+        x.id === updated.id ? updated : x,
+      );
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to toggle reaction';
+      this._error =
+        err instanceof Error ? err.message : "Failed to toggle reaction";
     }
   }
 
@@ -283,9 +313,10 @@ export class AutomationPanel extends LitElement {
     if (!confirm(`Delete reaction "${r.name}"?`)) return;
     try {
       await deleteReaction(this.projectId, r.id);
-      this._reactions = this._reactions.filter(x => x.id !== r.id);
+      this._reactions = this._reactions.filter((x) => x.id !== r.id);
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to delete reaction';
+      this._error =
+        err instanceof Error ? err.message : "Failed to delete reaction";
     }
   }
 
@@ -293,10 +324,10 @@ export class AutomationPanel extends LitElement {
 
   private _openNewJob() {
     this._editingJobId = null;
-    this._jobName = '';
-    this._jobCronExpr = '';
-    this._jobActionType = 'invoke_agent';
-    this._jobActionConfig = '{}';
+    this._jobName = "";
+    this._jobCronExpr = "";
+    this._jobActionType = "invoke_agent";
+    this._jobActionConfig = "{}";
     this._showJobDialog = true;
   }
 
@@ -311,18 +342,22 @@ export class AutomationPanel extends LitElement {
 
   private async _saveJob() {
     this._jobSaving = true;
-    this._error = '';
+    this._error = "";
     try {
       const actionConfig = JSON.parse(this._jobActionConfig);
 
       if (this._editingJobId) {
-        const updated = await updateScheduledJob(this.projectId, this._editingJobId, {
-          name: this._jobName.trim(),
-          cron_expr: this._jobCronExpr.trim(),
-          action_type: this._jobActionType,
-          action_config: actionConfig,
-        });
-        this._jobs = this._jobs.map(j => j.id === updated.id ? updated : j);
+        const updated = await updateScheduledJob(
+          this.projectId,
+          this._editingJobId,
+          {
+            name: this._jobName.trim(),
+            cron_expr: this._jobCronExpr.trim(),
+            action_type: this._jobActionType,
+            action_config: actionConfig,
+          },
+        );
+        this._jobs = this._jobs.map((j) => (j.id === updated.id ? updated : j));
       } else {
         const data: CreateScheduledJobRequest = {
           name: this._jobName.trim(),
@@ -335,7 +370,8 @@ export class AutomationPanel extends LitElement {
       }
       this._showJobDialog = false;
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to save scheduled job';
+      this._error =
+        err instanceof Error ? err.message : "Failed to save scheduled job";
     } finally {
       this._jobSaving = false;
     }
@@ -343,10 +379,12 @@ export class AutomationPanel extends LitElement {
 
   private async _toggleJob(j: ScheduledJob) {
     try {
-      const updated = await updateScheduledJob(this.projectId, j.id, { enabled: !j.enabled });
-      this._jobs = this._jobs.map(x => x.id === updated.id ? updated : x);
+      const updated = await updateScheduledJob(this.projectId, j.id, {
+        enabled: !j.enabled,
+      });
+      this._jobs = this._jobs.map((x) => (x.id === updated.id ? updated : x));
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to toggle job';
+      this._error = err instanceof Error ? err.message : "Failed to toggle job";
     }
   }
 
@@ -354,9 +392,10 @@ export class AutomationPanel extends LitElement {
     if (!confirm(`Delete scheduled job "${j.name}"?`)) return;
     try {
       await deleteScheduledJob(this.projectId, j.id);
-      this._jobs = this._jobs.filter(x => x.id !== j.id);
+      this._jobs = this._jobs.filter((x) => x.id !== j.id);
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to delete scheduled job';
+      this._error =
+        err instanceof Error ? err.message : "Failed to delete scheduled job";
     }
   }
 
@@ -364,25 +403,38 @@ export class AutomationPanel extends LitElement {
 
   render() {
     if (this._loading) {
-      return html`<div class="loading"><sl-spinner style="font-size: 2rem;"></sl-spinner></div>`;
+      return html`<div class="loading">
+        <sl-spinner style="font-size: 2rem;"></sl-spinner>
+      </div>`;
     }
 
     return html`
-      ${this._error ? html`
-        <sl-alert class="error-banner" variant="danger" open closable
-          @sl-after-hide=${() => { this._error = ''; }}>
-          ${this._error}
-        </sl-alert>
-      ` : nothing}
-
+      ${this._error
+        ? html`
+            <sl-alert
+              class="error-banner"
+              variant="danger"
+              open
+              closable
+              @sl-after-hide=${() => {
+                this._error = "";
+              }}
+            >
+              ${this._error}
+            </sl-alert>
+          `
+        : nothing}
       ${this._renderReactions()}
 
       <sl-divider></sl-divider>
 
       ${this._renderJobs()}
 
-      ${this._renderReactionDialog()}
-      ${this._renderJobDialog()}
+      <sl-divider></sl-divider>
+
+      <hook-bundles-panel .projectId=${this.projectId}></hook-bundles-panel>
+
+      ${this._renderReactionDialog()} ${this._renderJobDialog()}
     `;
   }
 
@@ -392,22 +444,31 @@ export class AutomationPanel extends LitElement {
         <div class="section-header">
           <span class="section-title">
             Event Reactions
-            <sl-badge variant="neutral" pill>${this._reactions.length}</sl-badge>
+            <sl-badge variant="neutral" pill
+              >${this._reactions.length}</sl-badge
+            >
           </span>
-          <sl-button size="small" variant="primary" @click=${() => this._openNewReaction()}>
+          <sl-button
+            size="small"
+            variant="primary"
+            @click=${() => this._openNewReaction()}
+          >
             Add Reaction
           </sl-button>
         </div>
 
-        ${this._reactions.length === 0 ? html`
-          <div class="empty-state">
-            No event reactions configured. Reactions trigger actions when domain events occur.
-          </div>
-        ` : html`
-          <div class="item-grid">
-            ${this._reactions.map(r => this._renderReactionCard(r))}
-          </div>
-        `}
+        ${this._reactions.length === 0
+          ? html`
+              <div class="empty-state">
+                No event reactions configured. Reactions trigger actions when
+                domain events occur.
+              </div>
+            `
+          : html`
+              <div class="item-grid">
+                ${this._reactions.map((r) => this._renderReactionCard(r))}
+              </div>
+            `}
       </div>
     `;
   }
@@ -422,16 +483,25 @@ export class AutomationPanel extends LitElement {
               @sl-change=${() => void this._toggleReaction(r)}
             ></sl-switch>
             <span class="card-name">${r.name}</span>
-            <sl-badge class="action-badge" variant=${r.enabled ? 'success' : 'neutral'}>
-              ${r.enabled ? 'Active' : 'Disabled'}
+            <sl-badge
+              class="action-badge"
+              variant=${r.enabled ? "success" : "neutral"}
+            >
+              ${r.enabled ? "Active" : "Disabled"}
             </sl-badge>
           </div>
           <div class="card-actions">
             <sl-tooltip content="Edit">
-              <sl-icon-button name="pencil" @click=${() => this._openEditReaction(r)}></sl-icon-button>
+              <sl-icon-button
+                name="pencil"
+                @click=${() => this._openEditReaction(r)}
+              ></sl-icon-button>
             </sl-tooltip>
             <sl-tooltip content="Delete">
-              <sl-icon-button name="trash" @click=${() => void this._deleteReaction(r)}></sl-icon-button>
+              <sl-icon-button
+                name="trash"
+                @click=${() => void this._deleteReaction(r)}
+              ></sl-icon-button>
             </sl-tooltip>
           </div>
         </div>
@@ -439,7 +509,9 @@ export class AutomationPanel extends LitElement {
           <span class="meta-label">On</span>
           <span class="meta-value">${r.aggregate_type}.${r.event_type}</span>
           <span class="meta-label">Action</span>
-          <sl-badge variant="primary" class="action-badge">${r.action_type}</sl-badge>
+          <sl-badge variant="primary" class="action-badge"
+            >${r.action_type}</sl-badge
+          >
         </div>
       </sl-card>
     `;
@@ -453,20 +525,27 @@ export class AutomationPanel extends LitElement {
             Scheduled Jobs
             <sl-badge variant="neutral" pill>${this._jobs.length}</sl-badge>
           </span>
-          <sl-button size="small" variant="primary" @click=${() => this._openNewJob()}>
+          <sl-button
+            size="small"
+            variant="primary"
+            @click=${() => this._openNewJob()}
+          >
             Add Job
           </sl-button>
         </div>
 
-        ${this._jobs.length === 0 ? html`
-          <div class="empty-state">
-            No scheduled jobs configured. Jobs run actions on a cron schedule.
-          </div>
-        ` : html`
-          <div class="item-grid">
-            ${this._jobs.map(j => this._renderJobCard(j))}
-          </div>
-        `}
+        ${this._jobs.length === 0
+          ? html`
+              <div class="empty-state">
+                No scheduled jobs configured. Jobs run actions on a cron
+                schedule.
+              </div>
+            `
+          : html`
+              <div class="item-grid">
+                ${this._jobs.map((j) => this._renderJobCard(j))}
+              </div>
+            `}
       </div>
     `;
   }
@@ -481,16 +560,25 @@ export class AutomationPanel extends LitElement {
               @sl-change=${() => void this._toggleJob(j)}
             ></sl-switch>
             <span class="card-name">${j.name}</span>
-            <sl-badge class="action-badge" variant=${j.enabled ? 'success' : 'neutral'}>
-              ${j.enabled ? 'Active' : 'Disabled'}
+            <sl-badge
+              class="action-badge"
+              variant=${j.enabled ? "success" : "neutral"}
+            >
+              ${j.enabled ? "Active" : "Disabled"}
             </sl-badge>
           </div>
           <div class="card-actions">
             <sl-tooltip content="Edit">
-              <sl-icon-button name="pencil" @click=${() => this._openEditJob(j)}></sl-icon-button>
+              <sl-icon-button
+                name="pencil"
+                @click=${() => this._openEditJob(j)}
+              ></sl-icon-button>
             </sl-tooltip>
             <sl-tooltip content="Delete">
-              <sl-icon-button name="trash" @click=${() => void this._deleteJob(j)}></sl-icon-button>
+              <sl-icon-button
+                name="trash"
+                @click=${() => void this._deleteJob(j)}
+              ></sl-icon-button>
             </sl-tooltip>
           </div>
         </div>
@@ -498,19 +586,29 @@ export class AutomationPanel extends LitElement {
           <span class="meta-label">Schedule</span>
           <span class="meta-value">${j.cron_expr}</span>
           <span class="meta-label">Action</span>
-          <sl-badge variant="primary" class="action-badge">${j.action_type}</sl-badge>
-          ${j.last_run_at ? html`
-            <span class="meta-label">Last run</span>
-            <span style="font-size: 0.75rem; color: var(--text-3, #6b6f80);">
-              ${new Date(j.last_run_at).toLocaleString()}
-            </span>
-          ` : nothing}
-          ${j.next_run_at ? html`
-            <span class="meta-label">Next run</span>
-            <span style="font-size: 0.75rem; color: var(--text-3, #6b6f80);">
-              ${new Date(j.next_run_at).toLocaleString()}
-            </span>
-          ` : nothing}
+          <sl-badge variant="primary" class="action-badge"
+            >${j.action_type}</sl-badge
+          >
+          ${j.last_run_at
+            ? html`
+                <span class="meta-label">Last run</span>
+                <span
+                  style="font-size: 0.75rem; color: var(--text-3, #6b6f80);"
+                >
+                  ${new Date(j.last_run_at).toLocaleString()}
+                </span>
+              `
+            : nothing}
+          ${j.next_run_at
+            ? html`
+                <span class="meta-label">Next run</span>
+                <span
+                  style="font-size: 0.75rem; color: var(--text-3, #6b6f80);"
+                >
+                  ${new Date(j.next_run_at).toLocaleString()}
+                </span>
+              `
+            : nothing}
         </div>
       </sl-card>
     `;
@@ -519,49 +617,83 @@ export class AutomationPanel extends LitElement {
   private _renderReactionDialog() {
     const isEdit = this._editingReactionId !== null;
     return html`
-      <sl-dialog label=${isEdit ? 'Edit Reaction' : 'New Event Reaction'}
-                 ?open=${this._showReactionDialog}
-                 @sl-after-hide=${(e: Event) => { if (e.target === e.currentTarget) this._showReactionDialog = false; }}>
+      <sl-dialog
+        label=${isEdit ? "Edit Reaction" : "New Event Reaction"}
+        ?open=${this._showReactionDialog}
+        @sl-after-hide=${(e: Event) => {
+          if (e.target === e.currentTarget) this._showReactionDialog = false;
+        }}
+      >
         <div class="dialog-form">
-          <sl-input label="Name" placeholder="e.g. Auto-triage new tasks"
+          <sl-input
+            label="Name"
+            placeholder="e.g. Auto-triage new tasks"
             value=${this._reactionName}
-            @sl-input=${(e: CustomEvent) => { this._reactionName = (e.target as SlInput).value; }}
+            @sl-input=${(e: CustomEvent) => {
+              this._reactionName = (e.target as SlInput).value;
+            }}
           ></sl-input>
 
-          <sl-select label="Aggregate Type" value=${this._reactionAggregateType}
-            @sl-change=${(e: CustomEvent) => { this._reactionAggregateType = (e.target as SlInput).value; }}>
+          <sl-select
+            label="Aggregate Type"
+            value=${this._reactionAggregateType}
+            @sl-change=${(e: CustomEvent) => {
+              this._reactionAggregateType = (e.target as SlInput).value;
+            }}
+          >
             <sl-option value="task">task</sl-option>
             <sl-option value="session">session</sl-option>
             <sl-option value="workspace">workspace</sl-option>
           </sl-select>
 
-          <sl-input label="Event Type" placeholder="e.g. created, updated, closed"
+          <sl-input
+            label="Event Type"
+            placeholder="e.g. created, updated, closed"
             value=${this._reactionEventType}
-            @sl-input=${(e: CustomEvent) => { this._reactionEventType = (e.target as SlInput).value; }}
+            @sl-input=${(e: CustomEvent) => {
+              this._reactionEventType = (e.target as SlInput).value;
+            }}
           ></sl-input>
 
-          <sl-select label="Action Type" value=${this._reactionActionType}
-            @sl-change=${(e: CustomEvent) => { this._reactionActionType = (e.target as SlInput).value; }}>
+          <sl-select
+            label="Action Type"
+            value=${this._reactionActionType}
+            @sl-change=${(e: CustomEvent) => {
+              this._reactionActionType = (e.target as SlInput).value;
+            }}
+          >
             <sl-option value="invoke_agent">invoke_agent</sl-option>
             <sl-option value="webhook">webhook</sl-option>
             <sl-option value="mcp_tool">mcp_tool</sl-option>
           </sl-select>
 
-          <sl-textarea label="Action Config (JSON)" rows="4"
+          <sl-textarea
+            label="Action Config (JSON)"
+            rows="4"
             value=${this._reactionActionConfig}
-            @sl-input=${(e: CustomEvent) => { this._reactionActionConfig = (e.target as SlInput).value; }}
+            @sl-input=${(e: CustomEvent) => {
+              this._reactionActionConfig = (e.target as SlInput).value;
+            }}
           ></sl-textarea>
 
-          <sl-textarea label="Filter (JSON, optional)" rows="3"
+          <sl-textarea
+            label="Filter (JSON, optional)"
+            rows="3"
             placeholder='{"status": "open"}'
             value=${this._reactionFilter}
-            @sl-input=${(e: CustomEvent) => { this._reactionFilter = (e.target as SlInput).value; }}
+            @sl-input=${(e: CustomEvent) => {
+              this._reactionFilter = (e.target as SlInput).value;
+            }}
           ></sl-textarea>
         </div>
 
-        <sl-button slot="footer" variant="primary" ?loading=${this._reactionSaving}
-          @click=${() => void this._saveReaction()}>
-          ${isEdit ? 'Save Changes' : 'Create Reaction'}
+        <sl-button
+          slot="footer"
+          variant="primary"
+          ?loading=${this._reactionSaving}
+          @click=${() => void this._saveReaction()}
+        >
+          ${isEdit ? "Save Changes" : "Create Reaction"}
         </sl-button>
       </sl-dialog>
     `;
@@ -570,37 +702,62 @@ export class AutomationPanel extends LitElement {
   private _renderJobDialog() {
     const isEdit = this._editingJobId !== null;
     return html`
-      <sl-dialog label=${isEdit ? 'Edit Scheduled Job' : 'New Scheduled Job'}
-                 ?open=${this._showJobDialog}
-                 @sl-after-hide=${(e: Event) => { if (e.target === e.currentTarget) this._showJobDialog = false; }}>
+      <sl-dialog
+        label=${isEdit ? "Edit Scheduled Job" : "New Scheduled Job"}
+        ?open=${this._showJobDialog}
+        @sl-after-hide=${(e: Event) => {
+          if (e.target === e.currentTarget) this._showJobDialog = false;
+        }}
+      >
         <div class="dialog-form">
-          <sl-input label="Name" placeholder="e.g. Nightly cleanup"
+          <sl-input
+            label="Name"
+            placeholder="e.g. Nightly cleanup"
             value=${this._jobName}
-            @sl-input=${(e: CustomEvent) => { this._jobName = (e.target as SlInput).value; }}
+            @sl-input=${(e: CustomEvent) => {
+              this._jobName = (e.target as SlInput).value;
+            }}
           ></sl-input>
 
-          <sl-input label="Cron Expression" placeholder="0 3 * * *"
+          <sl-input
+            label="Cron Expression"
+            placeholder="0 3 * * *"
             help-text="Standard 5-field cron (min hour dom mon dow)"
             value=${this._jobCronExpr}
-            @sl-input=${(e: CustomEvent) => { this._jobCronExpr = (e.target as SlInput).value; }}
+            @sl-input=${(e: CustomEvent) => {
+              this._jobCronExpr = (e.target as SlInput).value;
+            }}
           ></sl-input>
 
-          <sl-select label="Action Type" value=${this._jobActionType}
-            @sl-change=${(e: CustomEvent) => { this._jobActionType = (e.target as SlInput).value; }}>
+          <sl-select
+            label="Action Type"
+            value=${this._jobActionType}
+            @sl-change=${(e: CustomEvent) => {
+              this._jobActionType = (e.target as SlInput).value;
+            }}
+          >
             <sl-option value="invoke_agent">invoke_agent</sl-option>
             <sl-option value="webhook">webhook</sl-option>
             <sl-option value="mcp_tool">mcp_tool</sl-option>
           </sl-select>
 
-          <sl-textarea label="Action Config (JSON)" rows="4"
+          <sl-textarea
+            label="Action Config (JSON)"
+            rows="4"
             value=${this._jobActionConfig}
-            @sl-input=${(e: CustomEvent) => { this._jobActionConfig = (e.target as SlInput).value; }}
+            @sl-input=${(e: CustomEvent) => {
+              this._jobActionConfig = (e.target as SlInput).value;
+            }}
           ></sl-textarea>
         </div>
 
-        <sl-button slot="footer" variant="primary" ?loading=${this._jobSaving}
-          @click=${() => void this._saveJob()}>
-          ${isEdit ? 'Save Changes' : 'Create Job'}
+        <sl-button
+          slot="footer"
+          variant="primary"
+          ?loading=${this._jobSaving}
+          @click=${() => void this._saveJob()}
+        >
+          ${isEdit ? "Save Changes" : "Create Job"}
         </sl-button>
       </sl-dialog>
     `;
@@ -609,6 +766,6 @@ export class AutomationPanel extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'automation-panel': AutomationPanel;
+    "automation-panel": AutomationPanel;
   }
 }

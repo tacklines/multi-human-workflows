@@ -18,6 +18,7 @@ import {
 } from "../../state/task-api.js";
 import {
   type TaskDetailView,
+  type AiTriage,
   TASK_TYPE_ICONS,
   TASK_TYPE_COLORS,
   STATUS_LABELS,
@@ -27,6 +28,8 @@ import { store, type SessionParticipant } from "../../state/app-state.js";
 import { t } from "../../lib/i18n.js";
 
 import "@shoelace-style/shoelace/dist/components/alert/alert.js";
+import "@shoelace-style/shoelace/dist/components/tag/tag.js";
+import "@shoelace-style/shoelace/dist/components/details/details.js";
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/button/button.js";
 import "@shoelace-style/shoelace/dist/components/divider/divider.js";
@@ -237,6 +240,69 @@ export class TaskDetail extends LitElement {
       border: 1px dashed var(--border-subtle);
       text-align: center;
     }
+
+    /* ── AI Suggestions ── */
+    .ai-suggestions-card {
+      background: var(--surface-card);
+      border: 1px solid var(--sl-color-primary-700);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .ai-suggestions-header {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--sl-color-primary-400);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.6rem;
+    }
+
+    .ai-suggestions-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .ai-reasoning {
+      font-size: 0.8rem;
+      color: var(--text-tertiary);
+      line-height: 1.4;
+      margin: 0;
+    }
+
+    /* ── Completion Summary ── */
+    .completion-summary {
+      background: var(--surface-card);
+      border: 1px solid var(--sl-color-success-700);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .completion-summary-header {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--sl-color-success-400);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+
+    .completion-summary-text {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin: 0;
+    }
   `;
 
   @property({ type: String, attribute: "session-code" }) sessionCode = "";
@@ -385,6 +451,53 @@ export class TaskDetail extends LitElement {
     } catch {
       /* ignore */
     }
+  }
+
+  private _renderAiSuggestions(task: TaskDetailView) {
+    const ai = task.ai_triage;
+    if (!ai) return nothing;
+
+    return html`
+      <div class="ai-suggestions-card">
+        <div class="ai-suggestions-header">
+          <sl-icon name="robot"></sl-icon>
+          AI Suggestions
+        </div>
+        <div class="ai-suggestions-chips">
+          ${ai.suggested_priority
+            ? html`<sl-tag variant="primary" size="small"
+                >Priority: ${ai.suggested_priority}</sl-tag
+              >`
+            : nothing}
+          ${ai.suggested_complexity
+            ? html`<sl-tag variant="primary" size="small"
+                >Complexity: ${ai.suggested_complexity}</sl-tag
+              >`
+            : nothing}
+          ${ai.suggested_type
+            ? html`<sl-tag variant="primary" size="small"
+                >Type: ${ai.suggested_type}</sl-tag
+              >`
+            : nothing}
+        </div>
+        ${ai.reasoning
+          ? html`<p class="ai-reasoning">${ai.reasoning}</p>`
+          : nothing}
+      </div>
+    `;
+  }
+
+  private _renderCompletionSummary(task: TaskDetailView) {
+    if (!task.completion_summary) return nothing;
+    return html`
+      <div class="completion-summary">
+        <div class="completion-summary-header">
+          <sl-icon name="check-circle"></sl-icon>
+          Completion Summary
+        </div>
+        <p class="completion-summary-text">${task.completion_summary}</p>
+      </div>
+    `;
   }
 
   private _renderChildren(task: TaskDetailView) {
@@ -658,6 +771,8 @@ export class TaskDetail extends LitElement {
                 </div>
               `
             : nothing}
+          ${this._renderAiSuggestions(task)}
+          ${this._renderCompletionSummary(task)}
 
           <task-description
             .description=${task.description}

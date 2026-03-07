@@ -8,6 +8,7 @@ import type { CommentView } from "../../state/task-types.js";
 import type { ActivityEvent } from "../../state/task-api.js";
 import "../shared/markdown-content.js";
 
+import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/button/button.js";
 import "@shoelace-style/shoelace/dist/components/icon/icon.js";
 import "@shoelace-style/shoelace/dist/components/textarea/textarea.js";
@@ -65,8 +66,16 @@ export class TaskCommentThread extends LitElement {
     .comment-header {
       display: flex;
       align-items: center;
+      gap: 0.5rem;
       justify-content: space-between;
       margin-bottom: 0.35rem;
+    }
+
+    .comment-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-width: 0;
     }
 
     .comment-author {
@@ -154,6 +163,23 @@ export class TaskCommentThread extends LitElement {
   @state() private _submittingComment = false;
   @state() private _expanded = false;
 
+  private _intentVariant(intent: string): string {
+    switch (intent) {
+      case "question":
+        return "primary";
+      case "decision":
+        return "success";
+      case "blocker":
+        return "danger";
+      case "status_update":
+      case "code_reference":
+      case "discussion":
+      case "other":
+      default:
+        return "neutral";
+    }
+  }
+
   private _activityIcon(eventType: string): string {
     switch (eventType) {
       case "task_created":
@@ -238,12 +264,27 @@ export class TaskCommentThread extends LitElement {
                     ? html`
                         <div class="comment">
                           <div class="comment-header">
-                            <span class="comment-author"
-                              >${getParticipantName(
-                                item.data.author_id,
-                                this.participants,
-                              )}</span
-                            >
+                            <div class="comment-header-left">
+                              <span class="comment-author"
+                                >${getParticipantName(
+                                  item.data.author_id,
+                                  this.participants,
+                                )}</span
+                              >
+                              ${item.data.intent
+                                ? html`<sl-badge
+                                    variant=${this._intentVariant(
+                                      item.data.intent,
+                                    )}
+                                    size="small"
+                                    pill
+                                    >${item.data.intent.replace(
+                                      "_",
+                                      " ",
+                                    )}</sl-badge
+                                  >`
+                                : nothing}
+                            </div>
                             <sl-tooltip content=${formatDate(item.created_at)}>
                               <span class="comment-time"
                                 >${relativeTime(item.created_at)}</span
