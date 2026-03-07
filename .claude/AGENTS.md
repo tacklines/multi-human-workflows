@@ -15,6 +15,8 @@ Quick reference for which agent to dispatch for each task type in the Seam monor
 | `mcp-tool-developer` | MCP tools end-to-end (schema, handler, agent-side) | sonnet | New tools for agents |
 | `event-auditor` | Verify domain event coverage | haiku | Periodic audit, after route additions |
 | `vertical-slice-planner` | Decompose multi-stack features into tasks | opus | Planning new features that span stacks |
+| `deploy-operator` | Deploy, verify, and roll back production releases | sonnet | Deploying code, checking prod health, rolling back |
+| `infra-engineer` | Terraform IaC, AWS resources, secrets, EC2 bootstrap | sonnet | Infrastructure changes, secret rotation, troubleshooting |
 
 ## Capabilities Matrix
 
@@ -29,6 +31,8 @@ Quick reference for which agent to dispatch for each task type in the Seam monor
 | mcp-tool-developer | Y | Y | Y | Y |
 | event-auditor | Y | N | N | Y |
 | vertical-slice-planner | Y | N | N | Y |
+| deploy-operator | Y | N | N | Y |
+| infra-engineer | Y | Y | N | Y |
 
 ## Common Workflows
 
@@ -61,6 +65,15 @@ Quick reference for which agent to dispatch for each task type in the Seam monor
 1. `event-auditor` -- domain event coverage
 2. `code-reviewer` -- general quality
 
+### Deployment
+1. `code-reviewer` -- review changes before shipping
+2. `deploy-operator` -- build, push, deploy, verify
+3. (if rollback needed) `deploy-operator` -- roll back to previous ECR image
+
+### Infrastructure Change
+1. `infra-engineer` -- modify Terraform, plan, apply
+2. `deploy-operator` -- verify production health after infra change
+
 ## Skills (complementary)
 
 Agents execute implementation. Skills orchestrate workflows. Key skills in `skills/`:
@@ -70,3 +83,6 @@ Agents execute implementation. Skills orchestrate workflows. Key skills in `skil
 - `/seam-review` -- code review with findings posted to session
 - `/seam-triage` -- investigate and triage bugs/tasks
 - `/seam-standup` -- session status summary
+- `/seam-deploy` -- guided production deployment (CI or manual)
+- `/seam-infra` -- Terraform plan/apply/status/secret/ssh management
+- `/seam-rollback` -- emergency rollback to previous ECR image
