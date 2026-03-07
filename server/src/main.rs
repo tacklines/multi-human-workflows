@@ -28,6 +28,7 @@ use rmcp::transport::streamable_http_server::{
 };
 
 mod log_buffer;
+mod model_discovery;
 
 pub struct AppState {
     pub db: sqlx::PgPool,
@@ -40,6 +41,7 @@ pub struct AppState {
     /// Public base URL (from SEAM_URL env or derived from listen address).
     /// Used for RFC 9728 OAuth Protected Resource Metadata.
     pub resource_url: String,
+    pub model_cache: model_discovery::ModelCache,
 }
 
 #[tokio::main]
@@ -110,6 +112,7 @@ async fn main() {
         issuer_url: issuer_url.clone(),
         code_index: code_index.clone(),
         resource_url: resource_url.clone(),
+        model_cache: model_discovery::ModelCache::new(),
     });
 
     let cors = CorsLayer::new()
@@ -143,9 +146,13 @@ async fn main() {
         // Org Credentials
         .route("/api/orgs/{slug}/credentials", get(routes::credentials::list_credentials).post(routes::credentials::create_credential))
         .route("/api/orgs/{slug}/credentials/{credential_id}", patch(routes::credentials::rotate_credential).delete(routes::credentials::delete_credential))
+        // Current User
+        .route("/api/me", get(routes::me::get_me))
         // User Credentials
         .route("/api/me/credentials", get(routes::user_credentials::list_user_credentials).post(routes::user_credentials::create_user_credential))
         .route("/api/me/credentials/{credential_id}", patch(routes::user_credentials::rotate_user_credential).delete(routes::user_credentials::delete_user_credential))
+        // Model Discovery
+        .route("/api/models", get(routes::model_discovery::list_models))
         // Model Preferences
         .route("/api/me/model-preferences", get(routes::model_preferences::list_user_model_preferences).put(routes::model_preferences::upsert_user_model_preferences))
         .route("/api/orgs/{slug}/model-preferences", get(routes::model_preferences::list_org_model_preferences).put(routes::model_preferences::upsert_org_model_preferences))

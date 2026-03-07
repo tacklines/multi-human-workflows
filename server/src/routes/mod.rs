@@ -1,4 +1,5 @@
 pub mod activity;
+pub mod me;
 pub mod agent;
 pub mod code_index;
 pub mod agents;
@@ -8,6 +9,7 @@ pub mod events;
 pub mod integrations;
 pub mod invocations;
 pub mod messages;
+pub mod model_discovery;
 pub mod model_preferences;
 pub mod notes;
 pub mod orgs;

@@ -84,7 +84,7 @@ class AuthStore {
   private setUser(user: User): void {
     const authUser: AuthUser = {
       id: user.profile.sub,
-      name: user.profile.preferred_username ?? user.profile.name ?? 'Unknown',
+      name: user.profile.preferred_username ?? user.profile.name ?? user.profile.sub,
       email: user.profile.email ?? '',
     };
     this.state = {
@@ -95,6 +95,28 @@ class AuthStore {
       error: null,
     };
     this.notify({ type: 'auth-success', user: authUser });
+
+    // Fetch enriched profile from server (ID token may lack claims)
+    this.fetchProfile(user.access_token);
+  }
+
+  private async fetchProfile(accessToken: string): Promise<void> {
+    try {
+      const res = await fetch('/api/me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) return;
+      const profile = await res.json();
+      const enriched: AuthUser = {
+        id: profile.id,
+        name: profile.display_name || profile.username || this.state.user?.name || 'Unknown',
+        email: profile.email ?? this.state.user?.email ?? '',
+      };
+      this.state = { ...this.state, user: enriched };
+      this.notify({ type: 'auth-success', user: enriched });
+    } catch {
+      // Non-fatal — keep using ID token claims
+    }
   }
 
   private clearUser(): void {
