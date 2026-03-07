@@ -12,6 +12,7 @@ import {
 } from "../../state/org-api.js";
 import { navigateTo } from "../../router.js";
 import { t } from "../../lib/i18n.js";
+import { formatDate } from "../../lib/date-utils.js";
 
 import "@shoelace-style/shoelace/dist/components/button/button.js";
 import "@shoelace-style/shoelace/dist/components/input/input.js";
@@ -307,14 +308,6 @@ export class UserSettings extends LitElement {
     }
   }
 
-  private _formatDate(iso: string | null): string {
-    if (!iso) return t("cred.never");
-    return new Date(iso).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
 
   render() {
     if (this._loading) {
@@ -438,20 +431,20 @@ export class UserSettings extends LitElement {
                                 >`}
                             <span
                               >${t("cred.added", {
-                                date: this._formatDate(c.created_at),
+                                date: formatDate(c.created_at),
                               })}</span
                             >
                             ${c.rotated_at
                               ? html`<span
                                   >${t("cred.rotated", {
-                                    date: this._formatDate(c.rotated_at),
+                                    date: formatDate(c.rotated_at),
                                   })}</span
                                 >`
                               : nothing}
                             ${c.expires_at
                               ? html`<span
                                   >${t("cred.expires", {
-                                    date: this._formatDate(c.expires_at),
+                                    date: formatDate(c.expires_at),
                                   })}</span
                                 >`
                               : nothing}

@@ -9,6 +9,8 @@ import {
 } from "../../state/agent-api.js";
 import { store, type SessionParticipant } from "../../state/app-state.js";
 import { t } from "../../lib/i18n.js";
+import { relativeTime } from "../../lib/date-utils.js";
+import { WS_STATUS_VARIANT } from "../../lib/participant-utils.js";
 
 import "@shoelace-style/shoelace/dist/components/icon/icon.js";
 import "@shoelace-style/shoelace/dist/components/icon-button/icon-button.js";
@@ -24,24 +26,6 @@ import "@shoelace-style/shoelace/dist/components/divider/divider.js";
 
 import "../agents/agent-activity-panel.js";
 
-const WS_STATUS_VARIANT: Record<string, string> = {
-  running: "success",
-  creating: "warning",
-  pending: "warning",
-  failed: "danger",
-  stopped: "neutral",
-  stopping: "neutral",
-};
-
-function timeAgo(dateStr: string): string {
-  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return t("time.justNow");
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return t("time.minutesAgo", { count: minutes });
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return t("time.hoursAgo", { count: hours });
-  return t("time.daysAgo", { count: Math.floor(hours / 24) });
-}
 
 @customElement("agent-console")
 export class AgentConsole extends LitElement {
@@ -889,7 +873,7 @@ export class AgentConsole extends LitElement {
                   return html`
                     <div class="message ${isSent ? "sent" : "received"}">
                       <div>${m.content}</div>
-                      <div class="message-time">${timeAgo(m.created_at)}</div>
+                      <div class="message-time">${relativeTime(m.created_at)}</div>
                     </div>
                   `;
                 })}
@@ -1033,7 +1017,7 @@ export class AgentConsole extends LitElement {
               : nothing}
             <div class="info-row">
               <span class="info-row-label">${t("agentDetail.joined")}</span>
-              <span class="info-row-value">${timeAgo(agent.joined_at)}</span>
+              <span class="info-row-value">${relativeTime(agent.joined_at)}</span>
             </div>
           </div>
         </div>
@@ -1078,7 +1062,7 @@ export class AgentConsole extends LitElement {
                               style="font-size: 0.85rem;"
                             ></sl-icon>
                             ${t("agentDetail.started", {
-                              time: timeAgo(ws.started_at),
+                              time: relativeTime(ws.started_at),
                             })}
                           </span>
                         `
@@ -1138,7 +1122,7 @@ export class AgentConsole extends LitElement {
                     (a) => html`
                       <div class="timeline-item">
                         <span class="timeline-time"
-                          >${timeAgo(a.created_at)}</span
+                          >${relativeTime(a.created_at)}</span
                         >
                         <span class="timeline-event">${a.event_type}</span>
                         <span class="timeline-summary">${a.summary}</span>
@@ -1171,7 +1155,7 @@ export class AgentConsole extends LitElement {
                             >${c.task_title}</span
                           >
                           <span class="comment-time"
-                            >${timeAgo(c.created_at)}</span
+                            >${relativeTime(c.created_at)}</span
                           >
                         </div>
                         <div class="comment-content">${c.content}</div>

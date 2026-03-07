@@ -21,6 +21,7 @@ import { authStore } from "../../state/auth-state.js";
 import { navigateTo } from "../../router.js";
 import type { RouterLocation } from "@vaadin/router";
 import { t } from "../../lib/i18n.js";
+import { formatDate, relativeTime } from "../../lib/date-utils.js";
 
 import "@shoelace-style/shoelace/dist/components/button/button.js";
 import "@shoelace-style/shoelace/dist/components/input/input.js";
@@ -727,26 +728,8 @@ export class ProjectWorkspace extends LitElement {
     }
   }
 
-  private _formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
-  }
-
   private _onlineCount(session: SessionView): number {
     return session.participants.filter((p) => p.is_online).length;
-  }
-
-  private _relativeTime(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t("time.justNow");
-    if (mins < 60) return t("time.minutesAgo", { count: mins });
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return t("time.hoursAgo", { count: hrs });
-    const days = Math.floor(hrs / 24);
-    return t("time.daysAgo", { count: days });
   }
 
   render() {
@@ -955,7 +938,7 @@ export class ProjectWorkspace extends LitElement {
       >
         <div class="card-top">
           <span class="code">${s.code}</span>
-          <span class="date">${this._formatDate(s.created_at)}</span>
+          <span class="date">${formatDate(s.created_at)}</span>
         </div>
         <div class="name">${s.name || t("workspace.untitledSession")}</div>
         <div class="participants">
@@ -1171,7 +1154,7 @@ export class ProjectWorkspace extends LitElement {
                         style="font-size: 0.75rem; color: var(--text-tertiary);"
                       >
                         ${t("workspace.started", {
-                          time: this._relativeTime(w.started_at),
+                          time: relativeTime(w.started_at),
                         })}
                       </span>
                     `

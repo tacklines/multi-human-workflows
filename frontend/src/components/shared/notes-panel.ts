@@ -4,6 +4,7 @@ import './markdown-content.js';
 import { store } from '../../state/app-state.js';
 import { fetchNotes, upsertNote, type NoteView } from '../../state/task-api.js';
 import { t } from '../../lib/i18n.js';
+import { relativeTime } from '../../lib/date-utils.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -248,7 +249,7 @@ export class NotesPanel extends LitElement {
           `}
           ${activeNote.updated_by_name ? html`
             <div class="note-meta">
-              ${t('notes.lastEditedBy', { name: activeNote.updated_by_name })} · ${this._relativeTime(activeNote.updated_at)}
+              ${t('notes.lastEditedBy', { name: activeNote.updated_by_name })} · ${relativeTime(activeNote.updated_at)}
             </div>
           ` : nothing}
         </div>
@@ -258,15 +259,6 @@ export class NotesPanel extends LitElement {
     `;
   }
 
-  private _relativeTime(dateStr: string): string {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t('time.justNow');
-    if (mins < 60) return t('time.minutesAgo', { count: mins });
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
-    return t('time.daysAgo', { count: Math.floor(hrs / 24) });
-  }
 }
 
 declare global {

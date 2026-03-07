@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { fetchRequests, createRequest, type RequestListView, type RequestStatusType } from '../../state/requirement-api.js';
 import { fetchReactions, createReaction, updateReaction, type EventReaction } from '../../state/automation-api.js';
 import { t } from '../../lib/i18n.js';
+import { relativeTime } from '../../lib/date-utils.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
@@ -199,16 +200,6 @@ export class RequestList extends LitElement {
     }
   }
 
-  private _relativeTime(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t('time.justNow');
-    if (mins < 60) return t('time.minutesAgo', { count: mins });
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
-    const days = Math.floor(hrs / 24);
-    return t('time.daysAgo', { count: days });
-  }
 
   private _selectRequest(id: string) {
     this.dispatchEvent(new CustomEvent('request-select', { detail: { requestId: id }, bubbles: true, composed: true }));
@@ -256,8 +247,8 @@ export class RequestList extends LitElement {
               ${r.requirement_count > 0 ? html`
                 <span class="request-meta">${t('requestList.requirements', { count: r.requirement_count, suffix: r.requirement_count !== 1 ? 's' : '' })}</span>
               ` : nothing}
-              <sl-tooltip content=${t('requestList.updated', { time: this._relativeTime(r.updated_at) })}>
-                <span class="request-meta">${this._relativeTime(r.updated_at)}</span>
+              <sl-tooltip content=${t('requestList.updated', { time: relativeTime(r.updated_at) })}>
+                <span class="request-meta">${relativeTime(r.updated_at)}</span>
               </sl-tooltip>
             </div>
           `)}

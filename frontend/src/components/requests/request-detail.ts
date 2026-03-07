@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchRequest, updateRequest, type RequestDetailView, type RequestStatusType } from '../../state/requirement-api.js';
 import { t } from '../../lib/i18n.js';
+import { relativeTime } from '../../lib/date-utils.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
@@ -269,16 +270,6 @@ export class RequestDetail extends LitElement {
     return this._request?.status === 'pending' || this._request?.status === 'analyzing';
   }
 
-  private _relativeTime(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t('time.justNow');
-    if (mins < 60) return t('time.minutesAgo', { count: mins });
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
-    const days = Math.floor(hrs / 24);
-    return t('time.daysAgo', { count: days });
-  }
 
   render() {
     if (this._loading) {
@@ -312,8 +303,8 @@ export class RequestDetail extends LitElement {
             <sl-badge variant=${STATUS_VARIANTS[r.status]}>${t(STATUS_LABEL_KEYS[r.status])}</sl-badge>
           </div>
           <div class="meta">
-            <span>${t('requestDetail.updated', { time: this._relativeTime(r.updated_at) })}</span>
-            <span>${t('requestDetail.created', { time: this._relativeTime(r.created_at) })}</span>
+            <span>${t('requestDetail.updated', { time: relativeTime(r.updated_at) })}</span>
+            <span>${t('requestDetail.created', { time: relativeTime(r.created_at) })}</span>
           </div>
         </div>
       </div>

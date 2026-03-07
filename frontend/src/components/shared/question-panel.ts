@@ -4,6 +4,7 @@ import './markdown-content.js';
 import { store } from '../../state/app-state.js';
 import { fetchQuestions, answerQuestion, cancelQuestion, type QuestionView } from '../../state/task-api.js';
 import { t } from '../../lib/i18n.js';
+import { relativeTime } from '../../lib/date-utils.js';
 
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
@@ -227,16 +228,6 @@ export class QuestionPanel extends LitElement {
     }
   }
 
-  private _relativeTime(dateStr: string): string {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t('time.justNow');
-    if (mins < 60) return t('time.minutesAgo', { count: mins });
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
-    return t('time.daysAgo', { count: Math.floor(hrs / 24) });
-  }
-
   get pendingCount(): number {
     return this._questions.filter(q => q.status === 'pending').length;
   }
@@ -279,7 +270,7 @@ export class QuestionPanel extends LitElement {
         <div class="question-header">
           <sl-icon name="robot" style="font-size: 0.8rem; color: var(--sl-color-primary-400);"></sl-icon>
           <span class="asker-name">${q.asked_by_name}</span>
-          <span class="question-time">${this._relativeTime(q.created_at)}</span>
+          <span class="question-time">${relativeTime(q.created_at)}</span>
         </div>
         <div class="question-text"><markdown-content .content=${q.question_text}></markdown-content></div>
 
@@ -326,7 +317,7 @@ export class QuestionPanel extends LitElement {
           <div class="answer-block">
             <div class="answer-label">
               ${t('questions.answeredBy', { name: q.answered_by_name ?? 'Unknown' })}
-              ${q.answered_at ? ` · ${this._relativeTime(q.answered_at)}` : ''}
+              ${q.answered_at ? ` · ${relativeTime(q.answered_at)}` : ''}
             </div>
             <div class="answer-text"><markdown-content .content=${q.answer_text ?? ''}></markdown-content></div>
           </div>

@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchPlans, createPlan, type PlanListView, type PlanStatusType } from '../../state/plan-api.js';
 import { t } from '../../lib/i18n.js';
+import { relativeTime } from '../../lib/date-utils.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
@@ -157,17 +158,6 @@ export class PlanList extends LitElement {
     }
   }
 
-  private _relativeTime(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t('time.justNow');
-    if (mins < 60) return t('time.minutesAgo', { count: mins });
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
-    const days = Math.floor(hrs / 24);
-    return t('time.daysAgo', { count: days });
-  }
-
   private _isTerminal(status: PlanStatusType): boolean {
     return status === 'superseded' || status === 'abandoned';
   }
@@ -206,8 +196,8 @@ export class PlanList extends LitElement {
               <sl-icon name="file-earmark-text" style="color: var(--text-tertiary); font-size: 0.9rem;"></sl-icon>
               <span class="plan-title ${this._isTerminal(p.status) ? 'terminal' : ''}">${p.title}</span>
               <sl-badge variant=${STATUS_VARIANTS[p.status]}>${t(STATUS_LABEL_KEYS[p.status])}</sl-badge>
-              <sl-tooltip content=${t('planList.updated', { time: this._relativeTime(p.updated_at) })}>
-                <span class="plan-time">${this._relativeTime(p.updated_at)}</span>
+              <sl-tooltip content=${t('planList.updated', { time: relativeTime(p.updated_at) })}>
+                <span class="plan-time">${relativeTime(p.updated_at)}</span>
               </sl-tooltip>
             </div>
           `)}

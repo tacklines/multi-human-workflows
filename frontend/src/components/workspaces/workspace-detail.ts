@@ -9,6 +9,8 @@ import {
   type WorkspaceEvent,
 } from "../../state/workspace-api.js";
 import { t } from "../../lib/i18n.js";
+import { relativeTime } from "../../lib/date-utils.js";
+import { WS_STATUS_VARIANT } from "../../lib/participant-utils.js";
 
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/button/button.js";
@@ -19,15 +21,6 @@ import "@shoelace-style/shoelace/dist/components/divider/divider.js";
 
 import "../agents/agent-activity-panel.js";
 
-const WS_STATUS_VARIANT: Record<string, string> = {
-  running: "success",
-  creating: "warning",
-  pending: "warning",
-  failed: "danger",
-  stopped: "neutral",
-  stopping: "neutral",
-  destroyed: "neutral",
-};
 
 @customElement("workspace-detail")
 export class WorkspaceDetail extends LitElement {
@@ -256,16 +249,6 @@ export class WorkspaceDetail extends LitElement {
     }
   }
 
-  private _relativeTime(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t("time.justNow");
-    if (mins < 60) return t("time.minutesAgo", { count: mins });
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return t("time.hoursAgo", { count: hrs });
-    const days = Math.floor(hrs / 24);
-    return t("time.daysAgo", { count: days });
-  }
 
   private _goBack() {
     this.dispatchEvent(
@@ -401,7 +384,7 @@ export class WorkspaceDetail extends LitElement {
               <div class="info-card">
                 <div class="info-label">${t("workspaceDetail.started")}</div>
                 <div class="info-value">
-                  ${this._relativeTime(ws.started_at)}
+                  ${relativeTime(ws.started_at)}
                 </div>
               </div>
             `
@@ -411,7 +394,7 @@ export class WorkspaceDetail extends LitElement {
               <div class="info-card">
                 <div class="info-label">${t("workspaceDetail.stopped")}</div>
                 <div class="info-value">
-                  ${this._relativeTime(ws.stopped_at)}
+                  ${relativeTime(ws.stopped_at)}
                 </div>
               </div>
             `
@@ -469,7 +452,7 @@ export class WorkspaceDetail extends LitElement {
                   (ev) => html`
                     <div class="timeline-item">
                       <span class="timeline-time">
-                        ${this._relativeTime(ev.occurred_at)}
+                        ${relativeTime(ev.occurred_at)}
                       </span>
                       <span class="timeline-event">${ev.event_type}</span>
                       <span class="timeline-payload">

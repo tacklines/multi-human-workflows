@@ -5,6 +5,8 @@ import {
   type ProjectAgentView,
 } from "../../state/agent-api.js";
 import { t } from "../../lib/i18n.js";
+import { relativeTime } from "../../lib/date-utils.js";
+import { WS_STATUS_VARIANT } from "../../lib/participant-utils.js";
 
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/icon/icon.js";
@@ -12,15 +14,6 @@ import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
 import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
 import "@shoelace-style/shoelace/dist/components/alert/alert.js";
 
-const WS_STATUS_VARIANT: Record<string, string> = {
-  running: "success",
-  creating: "warning",
-  pending: "warning",
-  failed: "danger",
-  stopped: "neutral",
-  stopping: "neutral",
-  destroyed: "neutral",
-};
 
 const TASK_STATUS_VARIANT: Record<string, string> = {
   open: "neutral",
@@ -315,17 +308,6 @@ export class AgentList extends LitElement {
     this._load();
   }
 
-  private _relativeTime(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t("time.justNow");
-    if (mins < 60) return t("time.minutesAgo", { count: mins });
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return t("time.hoursAgo", { count: hrs });
-    const days = Math.floor(hrs / 24);
-    return t("time.daysAgo", { count: days });
-  }
-
   private _selectAgent(agent: ProjectAgentView) {
     this.dispatchEvent(
       new CustomEvent("agent-select", {
@@ -442,7 +424,7 @@ export class AgentList extends LitElement {
             : nothing}
           <span class="meta-item">
             <sl-icon name="clock"></sl-icon>
-            ${this._relativeTime(agent.joined_at)}
+            ${relativeTime(agent.joined_at)}
           </span>
         </div>
 

@@ -4,6 +4,7 @@ import { fetchActivity, type ActivityEvent } from '../../state/task-api.js';
 import { store, type SessionParticipant } from '../../state/app-state.js';
 import { navigateTo } from '../../router.js';
 import { t } from '../../lib/i18n.js';
+import { relativeTime, formatTime } from '../../lib/date-utils.js';
 
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/icon-button/icon-button.js';
@@ -48,27 +49,6 @@ const EVENT_TYPE_LABEL_KEYS: Record<string, string> = {
   session_created: 'activityView.event.sessionCreated',
 };
 
-function formatTime(dateStr: string): string {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-
-  if (sameDay) {
-    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  }
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-function timeAgo(dateStr: string): string {
-  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return t('time.justNow');
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return t('time.minutesAgo', { count: minutes });
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return t('time.hoursAgo', { count: hours });
-  const days = Math.floor(hours / 24);
-  return t('time.daysAgo', { count: days });
-}
 
 @customElement('activity-view')
 export class ActivityView extends LitElement {
@@ -383,7 +363,7 @@ export class ActivityView extends LitElement {
           <sl-icon name=${icon} style="color: ${color}"></sl-icon>
           <span class="event-actor">${event.actor_name}</span>
           <span class="event-type-badge">${getEventTypeLabel(event.event_type)}</span>
-          <span class="event-time" title=${formatTime(event.created_at)}>${timeAgo(event.created_at)}</span>
+          <span class="event-time" title=${formatTime(event.created_at)}>${relativeTime(event.created_at)}</span>
         </div>
         <div class="event-summary">${event.summary}</div>
         ${event.target_id ? html`

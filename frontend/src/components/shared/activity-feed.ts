@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { fetchActivity, type ActivityEvent } from '../../state/task-api.js';
 import { store } from '../../state/app-state.js';
 import { t } from '../../lib/i18n.js';
+import { relativeTime } from '../../lib/date-utils.js';
 
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
@@ -28,19 +29,6 @@ const EVENT_COLORS: Record<string, string> = {
   session_created: 'var(--sl-color-purple-500)',
 };
 
-function timeAgo(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const seconds = Math.floor((now - then) / 1000);
-
-  if (seconds < 60) return t('time.justNow');
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return t('time.minutesAgo', { count: minutes });
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return t('time.hoursAgo', { count: hours });
-  const days = Math.floor(hours / 24);
-  return t('time.daysAgo', { count: days });
-}
 
 @customElement('activity-feed')
 export class ActivityFeed extends LitElement {
@@ -242,7 +230,7 @@ export class ActivityFeed extends LitElement {
           <div class="event-summary">
             <span class="actor">${event.actor_name}</span> ${event.summary}
           </div>
-          <div class="event-time">${timeAgo(event.created_at)}</div>
+          <div class="event-time">${relativeTime(event.created_at)}</div>
         </div>
       </div>
     `;

@@ -11,6 +11,7 @@ import {
 import type { ProjectView } from '../../state/project-api.js';
 import { navigateTo } from '../../router.js';
 import { t } from '../../lib/i18n.js';
+import { formatDate } from '../../lib/date-utils.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -208,10 +209,6 @@ export class OrgDashboard extends LitElement {
     }
   }
 
-  private _formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
   private _isAdmin(): boolean {
     return this._org?.role === 'owner' || this._org?.role === 'admin';
   }
@@ -249,7 +246,7 @@ export class OrgDashboard extends LitElement {
               <p class="name">${p.name}</p>
               <div class="meta">
                 <span class="prefix">${p.ticket_prefix}</span>
-                <span>${t('orgDashboard.created', { date: this._formatDate(p.created_at) })}</span>
+                <span>${t('orgDashboard.created', { date: formatDate(p.created_at) })}</span>
               </div>
             </div>
           `)}

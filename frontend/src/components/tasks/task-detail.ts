@@ -11,6 +11,8 @@ import {
 } from '../../state/task-types.js';
 import { store, type SessionParticipant } from '../../state/app-state.js';
 import { t } from '../../lib/i18n.js';
+import { formatDate, relativeTime } from '../../lib/date-utils.js';
+import { getParticipantName } from '../../lib/participant-utils.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/icon/icon.js';
@@ -579,31 +581,6 @@ export class TaskDetail extends LitElement {
     }
   }
 
-  private _getParticipantName(id: string | null): string {
-    if (!id) return t('taskDetail.sidebar.unassigned');
-    const p = this.participants.find(p => p.id === id);
-    return p?.display_name ?? id.slice(0, 8);
-  }
-
-  private _formatDate(iso: string): string {
-    const d = new Date(iso);
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  }
-
-  private _relativeTime(iso: string): string {
-    const now = Date.now();
-    const then = new Date(iso).getTime();
-    const diff = now - then;
-    const seconds = Math.floor(diff / 1000);
-    if (seconds < 60) return t('time.justNow');
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return t('time.minutesAgo', { count: minutes });
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return t('time.hoursAgo', { count: hours });
-    const days = Math.floor(hours / 24);
-    if (days < 7) return t('time.daysAgo', { count: days });
-    return this._formatDate(iso);
-  }
 
 
   private async _updateField(fields: Record<string, unknown>) {
@@ -1056,9 +1033,9 @@ export class TaskDetail extends LitElement {
               ? html`
                 <div class="comment">
                   <div class="comment-header">
-                    <span class="comment-author">${this._getParticipantName(item.data.author_id)}</span>
-                    <sl-tooltip content=${this._formatDate(item.created_at)}>
-                      <span class="comment-time">${this._relativeTime(item.created_at)}</span>
+                    <span class="comment-author">${getParticipantName(item.data.author_id, this.participants)}</span>
+                    <sl-tooltip content=${formatDate(item.created_at)}>
+                      <span class="comment-time">${relativeTime(item.created_at)}</span>
                     </sl-tooltip>
                   </div>
                   <div class="comment-content"><markdown-content .content=${item.data.content}></markdown-content></div>
@@ -1070,8 +1047,8 @@ export class TaskDetail extends LitElement {
                     <span class="activity-actor">${item.data.actor_name}</span>
                     ${item.data.summary}
                   </span>
-                  <sl-tooltip content=${this._formatDate(item.created_at)}>
-                    <span class="activity-time">${this._relativeTime(item.created_at)}</span>
+                  <sl-tooltip content=${formatDate(item.created_at)}>
+                    <span class="activity-time">${relativeTime(item.created_at)}</span>
                   </sl-tooltip>
                 </div>`
             )}
@@ -1275,7 +1252,7 @@ export class TaskDetail extends LitElement {
               <span class="meta-label">${t('taskDetail.sidebar.assignee')}</span>
               <span class="meta-value">
                 ${task.assigned_to
-                  ? html`<sl-icon name=${this.participants.find(p => p.id === task.assigned_to)?.participant_type === 'agent' ? 'robot' : 'person-fill'} style="font-size: 0.8rem;"></sl-icon> ${this._getParticipantName(task.assigned_to)}`
+                  ? html`<sl-icon name=${this.participants.find(p => p.id === task.assigned_to)?.participant_type === 'agent' ? 'robot' : 'person-fill'} style="font-size: 0.8rem;"></sl-icon> ${getParticipantName(task.assigned_to, this.participants)}`
                   : html`<span style="color: var(--text-tertiary);">${t('taskDetail.sidebar.unassigned')}</span>`
                 }
                 <sl-icon class="edit-pencil" name="pencil"></sl-icon>
@@ -1289,15 +1266,15 @@ export class TaskDetail extends LitElement {
         <!-- Creator (read-only) -->
         <div class="meta-row">
           <span class="meta-label">${t('taskDetail.sidebar.creator')}</span>
-          <span class="meta-value">${this._getParticipantName(task.created_by)}</span>
+          <span class="meta-value">${getParticipantName(task.created_by, this.participants)}</span>
         </div>
 
         <!-- Created -->
         <div class="meta-row">
           <span class="meta-label">${t('taskDetail.sidebar.created')}</span>
           <span class="meta-value">
-            <sl-tooltip content=${this._formatDate(task.created_at)}>
-              <span>${this._relativeTime(task.created_at)}</span>
+            <sl-tooltip content=${formatDate(task.created_at)}>
+              <span>${relativeTime(task.created_at)}</span>
             </sl-tooltip>
           </span>
         </div>
@@ -1307,8 +1284,8 @@ export class TaskDetail extends LitElement {
           <div class="meta-row">
             <span class="meta-label">${t('taskDetail.sidebar.updated')}</span>
             <span class="meta-value">
-              <sl-tooltip content=${this._formatDate(task.updated_at)}>
-                <span>${this._relativeTime(task.updated_at)}</span>
+              <sl-tooltip content=${formatDate(task.updated_at)}>
+                <span>${relativeTime(task.updated_at)}</span>
               </sl-tooltip>
             </span>
           </div>
@@ -1319,8 +1296,8 @@ export class TaskDetail extends LitElement {
           <div class="meta-row">
             <span class="meta-label">${t('taskDetail.sidebar.closed')}</span>
             <span class="meta-value">
-              <sl-tooltip content=${this._formatDate(task.closed_at)}>
-                <span>${this._relativeTime(task.closed_at)}</span>
+              <sl-tooltip content=${formatDate(task.closed_at)}>
+                <span>${relativeTime(task.closed_at)}</span>
               </sl-tooltip>
             </span>
           </div>

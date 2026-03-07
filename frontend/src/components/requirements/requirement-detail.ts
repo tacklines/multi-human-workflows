@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fetchRequirement, updateRequirement, type RequirementDetailView, type RequirementStatusType, type RequirementPriority } from '../../state/requirement-api.js';
 import { t } from '../../lib/i18n.js';
+import { relativeTime } from '../../lib/date-utils.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/badge/badge.js';
@@ -312,16 +313,6 @@ export class RequirementDetail extends LitElement {
     return this._req?.status === 'draft' || this._req?.status === 'active';
   }
 
-  private _relativeTime(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t('time.justNow');
-    if (mins < 60) return t('time.minutesAgo', { count: mins });
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return t('time.hoursAgo', { count: hrs });
-    const days = Math.floor(hrs / 24);
-    return t('time.daysAgo', { count: days });
-  }
 
   render() {
     if (this._loading) {
@@ -356,8 +347,8 @@ export class RequirementDetail extends LitElement {
             <sl-badge variant=${PRIORITY_VARIANTS[r.priority]}>${t(PRIORITY_LABEL_KEYS[r.priority])}</sl-badge>
           </div>
           <div class="meta">
-            <span>${t('requirementDetail.updated', { time: this._relativeTime(r.updated_at) })}</span>
-            <span>${t('requirementDetail.created', { time: this._relativeTime(r.created_at) })}</span>
+            <span>${t('requirementDetail.updated', { time: relativeTime(r.updated_at) })}</span>
+            <span>${t('requirementDetail.created', { time: relativeTime(r.created_at) })}</span>
           </div>
         </div>
       </div>

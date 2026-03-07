@@ -7,6 +7,8 @@ import {
   type WorkspaceView,
 } from "../../state/workspace-api.js";
 import { t } from "../../lib/i18n.js";
+import { relativeTime } from "../../lib/date-utils.js";
+import { WS_STATUS_VARIANT } from "../../lib/participant-utils.js";
 
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/button/button.js";
@@ -15,16 +17,6 @@ import "@shoelace-style/shoelace/dist/components/icon-button/icon-button.js";
 import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
 import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
 import "@shoelace-style/shoelace/dist/components/alert/alert.js";
-
-const WS_STATUS_VARIANT: Record<string, string> = {
-  running: "success",
-  creating: "warning",
-  pending: "warning",
-  failed: "danger",
-  stopped: "neutral",
-  stopping: "neutral",
-  destroyed: "neutral",
-};
 
 @customElement("workspace-list")
 export class WorkspaceList extends LitElement {
@@ -202,17 +194,6 @@ export class WorkspaceList extends LitElement {
     }
   }
 
-  private _relativeTime(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t("time.justNow");
-    if (mins < 60) return t("time.minutesAgo", { count: mins });
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return t("time.hoursAgo", { count: hrs });
-    const days = Math.floor(hrs / 24);
-    return t("time.daysAgo", { count: days });
-  }
-
   private _selectWorkspace(workspaceId: string) {
     this.dispatchEvent(
       new CustomEvent("workspace-select", {
@@ -305,7 +286,7 @@ export class WorkspaceList extends LitElement {
         <span class="spacer"></span>
         ${w.started_at
           ? html`<span class="ws-time"
-              >${this._relativeTime(w.started_at)}</span
+              >${relativeTime(w.started_at)}</span
             >`
           : nothing}
         <div class="ws-actions">

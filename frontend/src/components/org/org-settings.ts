@@ -19,6 +19,7 @@ import {
 } from '../../state/org-api.js';
 import { navigateTo } from '../../router.js';
 import { t } from '../../lib/i18n.js';
+import { formatDate } from '../../lib/date-utils.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -362,11 +363,6 @@ export class OrgSettings extends LitElement {
     }
   }
 
-  private _formatDate(iso: string | null): string {
-    if (!iso) return t('cred.never');
-    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
   // --- Render ---
 
   private _renderMembersTab() {
@@ -426,9 +422,9 @@ export class OrgSettings extends LitElement {
                   <div class="cred-meta">
                     <span class="cred-type-badge">${t(CREDENTIAL_TYPE_KEYS[c.credential_type] ?? c.credential_type)}</span>
                     ${c.env_var_name ? html`<span>${c.env_var_name}</span>` : html`<span>${CREDENTIAL_TYPE_ENV[c.credential_type] ?? ''}</span>`}
-                    <span>${t('cred.added', { date: this._formatDate(c.created_at) })}</span>
-                    ${c.rotated_at ? html`<span>${t('cred.rotated', { date: this._formatDate(c.rotated_at) })}</span>` : nothing}
-                    ${c.expires_at ? html`<span>${t('cred.expires', { date: this._formatDate(c.expires_at) })}</span>` : nothing}
+                    <span>${t('cred.added', { date: formatDate(c.created_at) })}</span>
+                    ${c.rotated_at ? html`<span>${t('cred.rotated', { date: formatDate(c.rotated_at) })}</span>` : nothing}
+                    ${c.expires_at ? html`<span>${t('cred.expires', { date: formatDate(c.expires_at) })}</span>` : nothing}
                   </div>
                 </div>
                 <div class="cred-actions">

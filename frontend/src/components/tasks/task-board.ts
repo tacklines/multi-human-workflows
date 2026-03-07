@@ -4,6 +4,7 @@ import { store } from '../../state/app-state.js';
 import { fetchTasks, fetchProjectTasks, createTask, updateTask, deleteTask, addTasksToSession, removeTaskFromSession } from '../../state/task-api.js';
 import { navigateTo } from '../../router.js';
 import { t } from '../../lib/i18n.js';
+import { getParticipantName } from '../../lib/participant-utils.js';
 import {
   type TaskView, type TaskType, type TaskStatus, type TaskPriority, type TaskComplexity,
   TASK_TYPE_LABELS, TASK_TYPE_ICONS, TASK_TYPE_COLORS,
@@ -855,11 +856,6 @@ export class TaskBoard extends LitElement {
     setTimeout(() => { this._toastMessage = ''; }, 2500);
   }
 
-  private _getParticipantName(id: string | null): string {
-    if (!id) return '';
-    const p = this.participants.find(p => p.id === id);
-    return p?.display_name ?? id.slice(0, 8);
-  }
 
   private async _handleStatusChange(task: TaskView, newStatus: TaskStatus) {
     try {
@@ -1254,7 +1250,7 @@ export class TaskBoard extends LitElement {
 
   private _renderTaskCard(task: TaskView, isChild: boolean, hasChildren = false, isCollapsed = false) {
     const typeColor = TASK_TYPE_COLORS[task.task_type];
-    const assignee = this._getParticipantName(task.assigned_to);
+    const assignee = task.assigned_to ? getParticipantName(task.assigned_to, this.participants) : '';
     const isSelected = this._selectedIds.has(task.id);
     const [done, total] = hasChildren ? this._childProgress(task.id) : [0, 0];
 
@@ -1399,7 +1395,7 @@ export class TaskBoard extends LitElement {
 
   private _renderKanbanCard(task: TaskView) {
     const typeColor = TASK_TYPE_COLORS[task.task_type];
-    const assignee = this._getParticipantName(task.assigned_to);
+    const assignee = task.assigned_to ? getParticipantName(task.assigned_to, this.participants) : '';
     const [done, total] = task.child_count > 0 ? this._childProgress(task.id) : [0, 0];
     const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
 

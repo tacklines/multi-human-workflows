@@ -3,6 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { fetchProjects, createProject, type ProjectView } from '../../state/project-api.js';
 import { navigateTo } from '../../router.js';
 import { t } from '../../lib/i18n.js';
+import { formatDate } from '../../lib/date-utils.js';
 
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/input/input.js';
@@ -183,10 +184,6 @@ export class ProjectList extends LitElement {
     }
   }
 
-  private _formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
   render() {
     return html`
       <div class="container">
@@ -210,7 +207,7 @@ export class ProjectList extends LitElement {
                 <p class="name">${p.name}</p>
                 <div class="meta">
                   <span class="prefix">${p.ticket_prefix}</span>
-                  <span>${t('projectList.created', { date: this._formatDate(p.created_at) })}</span>
+                  <span>${t('projectList.created', { date: formatDate(p.created_at) })}</span>
                 </div>
               </div>
             `)}
