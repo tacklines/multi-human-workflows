@@ -52,6 +52,8 @@ export class InvokeDialog extends LitElement {
   @state() private _submitting = false;
   @state() private _error = "";
   @state() private _resumeSessionId = "";
+  @state() private _modelHint = "";
+  @state() private _budgetTier = "";
 
   show() {
     this._open = true;
@@ -89,6 +91,8 @@ export class InvokeDialog extends LitElement {
         branch: this._branch.trim() || undefined,
         system_prompt_append: this._systemPrompt.trim() || undefined,
         resume_session_id: this._resumeSessionId || undefined,
+        model_hint: this._modelHint.trim() || undefined,
+        budget_tier: this._budgetTier || undefined,
       });
 
       this._open = false;
@@ -96,6 +100,8 @@ export class InvokeDialog extends LitElement {
       this._systemPrompt = "";
       this._branch = "";
       this._resumeSessionId = "";
+      this._modelHint = "";
+      this._budgetTier = "";
 
       this.dispatchEvent(
         new CustomEvent("invocation-created", {
@@ -172,6 +178,32 @@ export class InvokeDialog extends LitElement {
             @sl-input=${(e: Event) =>
               (this._systemPrompt = (e.target as HTMLInputElement).value)}
           ></sl-textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Model (optional)</label>
+          <sl-input
+            placeholder="e.g. qwen3.5, opus, deepseek (uses your default if empty)"
+            value=${this._modelHint}
+            @sl-input=${(e: Event) =>
+              (this._modelHint = (e.target as HTMLInputElement).value)}
+          ></sl-input>
+        </div>
+
+        <div class="form-group">
+          <label>Budget Tier (optional)</label>
+          <sl-select
+            placeholder="Use default"
+            value=${this._budgetTier}
+            clearable
+            @sl-change=${(e: Event) =>
+              (this._budgetTier = (e.target as HTMLInputElement).value)}
+          >
+            <sl-option value="free">Free</sl-option>
+            <sl-option value="economy">Economy</sl-option>
+            <sl-option value="moderate">Moderate</sl-option>
+            <sl-option value="unlimited">Unlimited</sl-option>
+          </sl-select>
         </div>
 
         ${this._error

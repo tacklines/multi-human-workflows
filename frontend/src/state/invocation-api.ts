@@ -38,6 +38,9 @@ export interface InvocationView {
   updated_at: string;
   claude_session_id: string | null;
   resume_session_id: string | null;
+  model_hint: string | null;
+  budget_tier: string | null;
+  provider: string | null;
 }
 
 export interface InvocationDetailView extends InvocationView {
@@ -60,6 +63,9 @@ export interface CreateInvocationRequest {
   session_id?: string;
   branch?: string;
   resume_session_id?: string;
+  model_hint?: string;
+  budget_tier?: string;
+  provider?: string;
 }
 
 export async function fetchInvocations(

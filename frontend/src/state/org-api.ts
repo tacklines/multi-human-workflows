@@ -1,18 +1,18 @@
-import { authStore } from './auth-state.js';
+import { authStore } from "./auth-state.js";
 
-const API_BASE = '';
+const API_BASE = "";
 
 function authHeaders(): Record<string, string> {
   const token = authStore.getAccessToken();
   return {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
     ...(token && { Authorization: `Bearer ${token}` }),
   };
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
+    const text = await res.text().catch(() => "");
     throw new Error(text || `HTTP ${res.status}`);
   }
   return res.json();
@@ -56,22 +56,27 @@ export async function fetchOrgs(): Promise<OrgView[]> {
 }
 
 export async function fetchOrg(slug: string): Promise<OrgView> {
-  const res = await fetch(`${API_BASE}/api/orgs/${slug}`, { headers: authHeaders() });
+  const res = await fetch(`${API_BASE}/api/orgs/${slug}`, {
+    headers: authHeaders(),
+  });
   return handleResponse(res);
 }
 
 export async function createOrg(name: string): Promise<OrgView> {
   const res = await fetch(`${API_BASE}/api/orgs`, {
-    method: 'POST',
+    method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({ name }),
   });
   return handleResponse(res);
 }
 
-export async function updateOrg(slug: string, updates: { name?: string }): Promise<OrgView> {
+export async function updateOrg(
+  slug: string,
+  updates: { name?: string },
+): Promise<OrgView> {
   const res = await fetch(`${API_BASE}/api/orgs/${slug}`, {
-    method: 'PATCH',
+    method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify(updates),
   });
@@ -81,90 +86,140 @@ export async function updateOrg(slug: string, updates: { name?: string }): Promi
 // --- Members ---
 
 export async function fetchMembers(slug: string): Promise<OrgMemberView[]> {
-  const res = await fetch(`${API_BASE}/api/orgs/${slug}/members`, { headers: authHeaders() });
+  const res = await fetch(`${API_BASE}/api/orgs/${slug}/members`, {
+    headers: authHeaders(),
+  });
   return handleResponse(res);
 }
 
-export async function inviteMember(slug: string, username: string, role: string): Promise<OrgMemberView> {
+export async function inviteMember(
+  slug: string,
+  username: string,
+  role: string,
+): Promise<OrgMemberView> {
   const res = await fetch(`${API_BASE}/api/orgs/${slug}/members`, {
-    method: 'POST',
+    method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({ username, role }),
   });
   return handleResponse(res);
 }
 
-export async function updateMemberRole(slug: string, userId: string, role: string): Promise<OrgMemberView> {
+export async function updateMemberRole(
+  slug: string,
+  userId: string,
+  role: string,
+): Promise<OrgMemberView> {
   const res = await fetch(`${API_BASE}/api/orgs/${slug}/members/${userId}`, {
-    method: 'PATCH',
+    method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify({ role }),
   });
   return handleResponse(res);
 }
 
-export async function removeMember(slug: string, userId: string): Promise<void> {
+export async function removeMember(
+  slug: string,
+  userId: string,
+): Promise<void> {
   const res = await fetch(`${API_BASE}/api/orgs/${slug}/members/${userId}`, {
-    method: 'DELETE',
+    method: "DELETE",
     headers: authHeaders(),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
+    const text = await res.text().catch(() => "");
     throw new Error(text || `HTTP ${res.status}`);
   }
 }
 
 // --- Org-scoped projects ---
 
-export async function fetchOrgProjects(slug: string): Promise<import('./project-api.js').ProjectView[]> {
-  const res = await fetch(`${API_BASE}/api/orgs/${slug}/projects`, { headers: authHeaders() });
+export async function fetchOrgProjects(
+  slug: string,
+): Promise<import("./project-api.js").ProjectView[]> {
+  const res = await fetch(`${API_BASE}/api/orgs/${slug}/projects`, {
+    headers: authHeaders(),
+  });
   return handleResponse(res);
 }
 
-export async function createOrgProject(slug: string, name: string, ticketPrefix?: string, repoUrl?: string): Promise<import('./project-api.js').ProjectView> {
+export async function createOrgProject(
+  slug: string,
+  name: string,
+  ticketPrefix?: string,
+  repoUrl?: string,
+): Promise<import("./project-api.js").ProjectView> {
   const res = await fetch(`${API_BASE}/api/orgs/${slug}/projects`, {
-    method: 'POST',
+    method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ name, ticket_prefix: ticketPrefix, repo_url: repoUrl }),
+    body: JSON.stringify({
+      name,
+      ticket_prefix: ticketPrefix,
+      repo_url: repoUrl,
+    }),
   });
   return handleResponse(res);
 }
 
 // --- Credentials ---
 
-export async function fetchCredentials(slug: string): Promise<CredentialView[]> {
-  const res = await fetch(`${API_BASE}/api/orgs/${slug}/credentials`, { headers: authHeaders() });
+export async function fetchCredentials(
+  slug: string,
+): Promise<CredentialView[]> {
+  const res = await fetch(`${API_BASE}/api/orgs/${slug}/credentials`, {
+    headers: authHeaders(),
+  });
   return handleResponse(res);
 }
 
 export async function createCredential(
   slug: string,
-  data: { name: string; credential_type: string; value: string; env_var_name?: string; expires_at?: string },
+  data: {
+    name: string;
+    credential_type: string;
+    value: string;
+    env_var_name?: string;
+    expires_at?: string;
+  },
 ): Promise<CredentialView> {
   const res = await fetch(`${API_BASE}/api/orgs/${slug}/credentials`, {
-    method: 'POST',
+    method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(data),
   });
   return handleResponse(res);
 }
 
-export async function rotateCredential(slug: string, credentialId: string, value: string, expiresAt?: string): Promise<CredentialView> {
-  const res = await fetch(`${API_BASE}/api/orgs/${slug}/credentials/${credentialId}`, {
-    method: 'PATCH',
-    headers: authHeaders(),
-    body: JSON.stringify({ value, expires_at: expiresAt }),
-  });
+export async function rotateCredential(
+  slug: string,
+  credentialId: string,
+  value: string,
+  expiresAt?: string,
+): Promise<CredentialView> {
+  const res = await fetch(
+    `${API_BASE}/api/orgs/${slug}/credentials/${credentialId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(),
+      body: JSON.stringify({ value, expires_at: expiresAt }),
+    },
+  );
   return handleResponse(res);
 }
 
-export async function deleteCredential(slug: string, credentialId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/orgs/${slug}/credentials/${credentialId}`, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  });
+export async function deleteCredential(
+  slug: string,
+  credentialId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/api/orgs/${slug}/credentials/${credentialId}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(),
+    },
+  );
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
+    const text = await res.text().catch(() => "");
     throw new Error(text || `HTTP ${res.status}`);
   }
 }
@@ -182,39 +237,100 @@ export interface UserCredentialView {
 }
 
 export async function fetchUserCredentials(): Promise<UserCredentialView[]> {
-  const res = await fetch(`${API_BASE}/api/me/credentials`, { headers: authHeaders() });
+  const res = await fetch(`${API_BASE}/api/me/credentials`, {
+    headers: authHeaders(),
+  });
   return handleResponse(res);
 }
 
-export async function createUserCredential(
-  data: { name: string; credential_type: string; value: string; env_var_name?: string; expires_at?: string },
-): Promise<UserCredentialView> {
+export async function createUserCredential(data: {
+  name: string;
+  credential_type: string;
+  value: string;
+  env_var_name?: string;
+  expires_at?: string;
+}): Promise<UserCredentialView> {
   const res = await fetch(`${API_BASE}/api/me/credentials`, {
-    method: 'POST',
+    method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(data),
   });
   return handleResponse(res);
 }
 
-export async function rotateUserCredential(credentialId: string, value: string, expiresAt?: string): Promise<UserCredentialView> {
+export async function rotateUserCredential(
+  credentialId: string,
+  value: string,
+  expiresAt?: string,
+): Promise<UserCredentialView> {
   const res = await fetch(`${API_BASE}/api/me/credentials/${credentialId}`, {
-    method: 'PATCH',
+    method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify({ value, expires_at: expiresAt }),
   });
   return handleResponse(res);
 }
 
-export async function deleteUserCredential(credentialId: string): Promise<void> {
+export async function deleteUserCredential(
+  credentialId: string,
+): Promise<void> {
   const res = await fetch(`${API_BASE}/api/me/credentials/${credentialId}`, {
-    method: 'DELETE',
+    method: "DELETE",
     headers: authHeaders(),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
+    const text = await res.text().catch(() => "");
     throw new Error(text || `HTTP ${res.status}`);
   }
+}
+
+// --- Model Preferences ---
+
+export interface ModelPreferenceView {
+  key: string;
+  value: unknown;
+  updated_at: string;
+}
+
+export async function fetchUserModelPreferences(): Promise<
+  ModelPreferenceView[]
+> {
+  const res = await fetch(`${API_BASE}/api/me/model-preferences`, {
+    headers: authHeaders(),
+  });
+  return handleResponse(res);
+}
+
+export async function upsertUserModelPreferences(
+  preferences: Array<{ key: string; value: unknown }>,
+): Promise<ModelPreferenceView[]> {
+  const res = await fetch(`${API_BASE}/api/me/model-preferences`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ preferences }),
+  });
+  return handleResponse(res);
+}
+
+export async function fetchOrgModelPreferences(
+  slug: string,
+): Promise<ModelPreferenceView[]> {
+  const res = await fetch(`${API_BASE}/api/orgs/${slug}/model-preferences`, {
+    headers: authHeaders(),
+  });
+  return handleResponse(res);
+}
+
+export async function upsertOrgModelPreferences(
+  slug: string,
+  preferences: Array<{ key: string; value: unknown }>,
+): Promise<ModelPreferenceView[]> {
+  const res = await fetch(`${API_BASE}/api/orgs/${slug}/model-preferences`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ preferences }),
+  });
+  return handleResponse(res);
 }
 
 // --- Org state (simple reactive store) ---
@@ -251,8 +367,8 @@ export async function loadAndSelectOrg(slug?: string): Promise<OrgView> {
   }
   const target = slug
     ? _orgs.find((o) => o.slug === slug)
-    : _orgs.find((o) => !o.personal) ?? _orgs[0];
-  if (!target) throw new Error('No organizations found');
+    : (_orgs.find((o) => !o.personal) ?? _orgs[0]);
+  if (!target) throw new Error("No organizations found");
   setCurrentOrg(target);
   return target;
 }
