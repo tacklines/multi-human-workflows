@@ -140,12 +140,24 @@ async fn handle_event(
     Ok(matched)
 }
 
-/// Simple filter: check that all top-level keys in filter exist in payload with matching values.
-/// Empty filter matches everything.
+/// Filter matching with operator support.
+///
+/// Filter format supports two modes:
+///
+/// **Simple (backward-compatible)**: `{"key": "value"}` — top-level equality check.
+///
+/// **Operator mode**: `{"key": {"$op": "value"}}` where `$op` is one of:
+/// - `$eq` — equals (same as simple mode)
+/// - `$ne` — not equals
+/// - `$exists` — key exists in payload (value should be `true` or `false`)
+/// - `$in` — value is one of the provided array items
+/// - `$contains` — string contains substring
+///
+/// All conditions are AND'd together. Empty filter matches everything.
 fn matches_filter(payload: &serde_json::Value, filter: &serde_json::Value) -> bool {
     let filter_obj = match filter.as_object() {
         Some(obj) if !obj.is_empty() => obj,
-        _ => return true, // empty or non-object filter matches all
+        _ => return true,
     };
 
     let payload_obj = match payload.as_object() {
@@ -153,8 +165,44 @@ fn matches_filter(payload: &serde_json::Value, filter: &serde_json::Value) -> bo
         None => return false,
     };
 
-    filter_obj.iter().all(|(key, expected)| {
-        payload_obj.get(key).map_or(false, |actual| actual == expected)
+    filter_obj.iter().all(|(key, condition)| {
+        match condition.as_object() {
+            Some(ops) if ops.keys().any(|k| k.starts_with('$')) => {
+                // Operator mode
+                ops.iter().all(|(op, expected)| {
+                    let actual = payload_obj.get(key);
+                    match op.as_str() {
+                        "$eq" => actual.map_or(false, |a| a == expected),
+                        "$ne" => actual.map_or(true, |a| a != expected),
+                        "$exists" => {
+                            let should_exist = expected.as_bool().unwrap_or(true);
+                            actual.is_some() == should_exist
+                        }
+                        "$in" => {
+                            if let Some(arr) = expected.as_array() {
+                                actual.map_or(false, |a| arr.contains(a))
+                            } else {
+                                false
+                            }
+                        }
+                        "$contains" => {
+                            if let (Some(haystack), Some(needle)) =
+                                (actual.and_then(|a| a.as_str()), expected.as_str())
+                            {
+                                haystack.contains(needle)
+                            } else {
+                                false
+                            }
+                        }
+                        _ => true, // unknown operators pass (permissive)
+                    }
+                })
+            }
+            _ => {
+                // Simple equality (backward-compatible)
+                payload_obj.get(key).map_or(false, |actual| actual == condition)
+            }
+        }
     })
 }
 
@@ -201,5 +249,80 @@ mod tests {
         let payload = serde_json::json!({"type": "bug"});
         let filter = serde_json::json!({"status": "open"});
         assert!(!matches_filter(&payload, &filter));
+    }
+
+    #[test]
+    fn test_filter_eq_operator() {
+        let payload = serde_json::json!({"status": "open"});
+        let filter = serde_json::json!({"status": {"$eq": "open"}});
+        assert!(matches_filter(&payload, &filter));
+
+        let filter_ne = serde_json::json!({"status": {"$eq": "closed"}});
+        assert!(!matches_filter(&payload, &filter_ne));
+    }
+
+    #[test]
+    fn test_filter_ne_operator() {
+        let payload = serde_json::json!({"status": "open"});
+        let filter = serde_json::json!({"status": {"$ne": "closed"}});
+        assert!(matches_filter(&payload, &filter));
+
+        let filter_fail = serde_json::json!({"status": {"$ne": "open"}});
+        assert!(!matches_filter(&payload, &filter_fail));
+    }
+
+    #[test]
+    fn test_filter_exists_operator() {
+        let payload = serde_json::json!({"status": "open", "type": "bug"});
+
+        let filter_exists = serde_json::json!({"status": {"$exists": true}});
+        assert!(matches_filter(&payload, &filter_exists));
+
+        let filter_not_exists = serde_json::json!({"description": {"$exists": false}});
+        assert!(matches_filter(&payload, &filter_not_exists));
+
+        let filter_missing = serde_json::json!({"description": {"$exists": true}});
+        assert!(!matches_filter(&payload, &filter_missing));
+    }
+
+    #[test]
+    fn test_filter_in_operator() {
+        let payload = serde_json::json!({"priority": "p1"});
+        let filter = serde_json::json!({"priority": {"$in": ["p0", "p1", "p2"]}});
+        assert!(matches_filter(&payload, &filter));
+
+        let filter_miss = serde_json::json!({"priority": {"$in": ["p3", "p4"]}});
+        assert!(!matches_filter(&payload, &filter_miss));
+    }
+
+    #[test]
+    fn test_filter_contains_operator() {
+        let payload = serde_json::json!({"title": "Fix login page bug"});
+        let filter = serde_json::json!({"title": {"$contains": "login"}});
+        assert!(matches_filter(&payload, &filter));
+
+        let filter_miss = serde_json::json!({"title": {"$contains": "dashboard"}});
+        assert!(!matches_filter(&payload, &filter_miss));
+    }
+
+    #[test]
+    fn test_filter_combined_operators() {
+        let payload = serde_json::json!({"status": "open", "priority": "p1", "type": "bug"});
+        let filter = serde_json::json!({
+            "status": {"$eq": "open"},
+            "priority": {"$in": ["p0", "p1"]},
+            "description": {"$exists": false}
+        });
+        assert!(matches_filter(&payload, &filter));
+    }
+
+    #[test]
+    fn test_filter_mixed_simple_and_operators() {
+        let payload = serde_json::json!({"status": "open", "type": "bug"});
+        let filter = serde_json::json!({
+            "status": "open",
+            "type": {"$ne": "feature"}
+        });
+        assert!(matches_filter(&payload, &filter));
     }
 }
