@@ -198,10 +198,10 @@ export class AuthRegistrationPage extends LitElement {
       const csrfToken = csrfNode?.attributes.value ?? "";
 
       // Step 1: Submit traits with method=profile
-      const step1Body = {
+      // Kratos JSON API requires nested objects, not dot-notation
+      const step1Body: Record<string, unknown> = {
         method: "profile",
-        "traits.email": email,
-        "traits.name": name,
+        traits: { email, name },
         csrf_token: csrfToken,
       };
 
@@ -249,16 +249,25 @@ export class AuthRegistrationPage extends LitElement {
       }
 
       // Step 2: Submit password + all hidden fields from the updated flow
+      // Convert dot-notation keys (traits.email) to nested objects for JSON API
       const step2Flow = step1Data as KratosFlow;
-      const step2Body: Record<string, string> = {
+      const step2Body: Record<string, unknown> = {
         method: "password",
         password: password,
       };
-      // Include all hidden fields (csrf_token, traits.email, traits.name, etc.)
+      const traits: Record<string, string> = {};
       for (const node of step2Flow.ui.nodes) {
         if (node.attributes.type === "hidden" && node.attributes.value != null) {
-          step2Body[node.attributes.name] = node.attributes.value;
+          const name = node.attributes.name;
+          if (name.startsWith("traits.")) {
+            traits[name.slice(7)] = node.attributes.value;
+          } else {
+            step2Body[name] = node.attributes.value;
+          }
         }
+      }
+      if (Object.keys(traits).length > 0) {
+        step2Body.traits = traits;
       }
 
       const step2Res = await fetch(step2Flow.ui.action, {
