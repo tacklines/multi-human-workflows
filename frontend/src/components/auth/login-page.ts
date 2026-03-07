@@ -175,7 +175,8 @@ export class AuthLoginPage extends LitElement {
       if (flowId) {
         url = `/kratos/self-service/login/flows?id=${encodeURIComponent(flowId)}`;
       } else {
-        url = "/kratos/self-service/login/browser";
+        // Use refresh=true to allow login even with existing session
+        url = "/kratos/self-service/login/browser?refresh=true";
       }
 
       const res = await fetch(url, {
@@ -184,7 +185,16 @@ export class AuthLoginPage extends LitElement {
       });
 
       if (!res.ok) {
-        throw new Error(`Failed to initialize login flow: ${res.status}`);
+        const body = await res.json().catch(() => null);
+        const errorId = body?.error?.id;
+
+        // If there's already a session, use it to accept the Hydra challenge
+        if (errorId === "session_already_available" && this._loginChallenge) {
+          await this._useExistingSession();
+          return;
+        }
+
+        throw new Error(`Failed to initialize login flow: ${res.status} ${JSON.stringify(body)}`);
       }
 
       const flow: KratosFlow = await res.json();
@@ -193,6 +203,24 @@ export class AuthLoginPage extends LitElement {
       this._error =
         err instanceof Error ? err.message : t("auth.login.errorLoad");
     } finally {
+      this._loading = false;
+    }
+  }
+
+  private async _useExistingSession() {
+    try {
+      const res = await fetch("/kratos/sessions/whoami", {
+        headers: { Accept: "application/json" },
+        credentials: "include",
+      });
+      if (!res.ok) {
+        throw new Error("No active session");
+      }
+      const session: KratosSession = await res.json();
+      await this._acceptLoginChallenge(session);
+    } catch (err) {
+      this._error =
+        err instanceof Error ? err.message : t("auth.login.errorLoad");
       this._loading = false;
     }
   }
