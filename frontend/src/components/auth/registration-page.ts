@@ -163,60 +163,128 @@ export class AuthRegistrationPage extends LitElement {
     }
   }
 
-  private _getSubmitMethod(): string {
-    if (!this._flow) return "password";
-    // Find available submit buttons to determine which step we're on
-    const submitNodes = this._flow.ui.nodes.filter(
-      (n) => n.attributes.type === "submit" && n.attributes.name === "method",
-    );
-    // If there's a password submit, use it; otherwise use profile (first step)
-    const hasPassword = submitNodes.some(
-      (n) => n.attributes.value === "password",
-    );
-    return hasPassword ? "password" : "profile";
-  }
-
+  /**
+   * Single-form registration that handles Kratos v1.3's two-step flow
+   * transparently. Collects email, name, and password in one form, then:
+   * 1. POST traits with method=profile (step 1)
+   * 2. POST password with method=password (step 2)
+   */
   private async _handleSubmit(e: Event) {
     e.preventDefault();
     if (!this._flow || this._submitting) return;
-
-    const form = e.target as HTMLFormElement;
-    const formData = new FormData(form);
-    const method = this._getSubmitMethod();
-    const body: Record<string, string> = { method };
-    for (const [key, value] of formData.entries()) {
-      body[key] = value as string;
-    }
 
     this._submitting = true;
     this._error = null;
 
     try {
-      const res = await fetch(this._flow.ui.action, {
-        method: this._flow.ui.method.toUpperCase(),
+      const emailInput = this.shadowRoot!.querySelector(
+        'sl-input[name="traits.email"]',
+      ) as HTMLInputElement | null;
+      const nameInput = this.shadowRoot!.querySelector(
+        'sl-input[name="traits.name"]',
+      ) as HTMLInputElement | null;
+      const passwordInput = this.shadowRoot!.querySelector(
+        'sl-input[name="password"]',
+      ) as HTMLInputElement | null;
+
+      const email = emailInput?.value ?? "";
+      const name = nameInput?.value ?? "";
+      const password = passwordInput?.value ?? "";
+
+      // Find csrf_token from the flow
+      const csrfNode = this._flow.ui.nodes.find(
+        (n) => n.attributes.name === "csrf_token",
+      );
+      const csrfToken = csrfNode?.attributes.value ?? "";
+
+      // Step 1: Submit traits with method=profile
+      const step1Body = {
+        method: "profile",
+        "traits.email": email,
+        "traits.name": name,
+        csrf_token: csrfToken,
+      };
+
+      const step1Res = await fetch(this._flow.ui.action, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
         credentials: "include",
-        body: JSON.stringify(body),
+        body: JSON.stringify(step1Body),
       });
 
-      const data = await res.json();
+      const step1Data = await step1Res.json();
 
-      if (res.ok && data.session) {
-        // Registration successful — check for pending login challenge
-        await this._handlePostRegistration(data.session as KratosSession);
-      } else if (data.ui) {
-        // Flow continues (two-step) or validation errors — re-render
-        this._flow = data as KratosFlow;
-        this._error = null;
-        const msgs = data.ui?.messages;
-        if (msgs?.length) {
-          const errors = msgs.filter((m: { type: string }) => m.type === "error");
-          if (errors.length) {
-            this._error = errors.map((m: { text: string }) => m.text).join(" ");
-          }
+      // If step 1 returned a session directly (unlikely but handle it)
+      if (step1Res.ok && step1Data.session) {
+        await this._handlePostRegistration(step1Data.session as KratosSession);
+        return;
+      }
+
+      // Check for validation errors on step 1
+      if (step1Data.ui?.messages?.some((m: { type: string }) => m.type === "error")) {
+        this._flow = step1Data as KratosFlow;
+        this._error = step1Data.ui.messages
+          .filter((m: { type: string }) => m.type === "error")
+          .map((m: { text: string }) => m.text)
+          .join(" ");
+        return;
+      }
+
+      // Check for field-level errors on step 1
+      const fieldErrors = step1Data.ui?.nodes
+        ?.flatMap((n: KratosUiNode) => n.messages ?? [])
+        .filter((m: { type: string }) => m.type === "error");
+      if (fieldErrors?.length) {
+        this._flow = step1Data as KratosFlow;
+        this._error = fieldErrors.map((m: { text: string }) => m.text).join(" ");
+        return;
+      }
+
+      if (!step1Data.ui) {
+        this._error = t("auth.register.errorGeneric");
+        return;
+      }
+
+      // Step 2: Submit password using the updated flow action and csrf token
+      const step2Flow = step1Data as KratosFlow;
+      const step2Csrf = step2Flow.ui.nodes.find(
+        (n) => n.attributes.name === "csrf_token",
+      );
+
+      const step2Body = {
+        method: "password",
+        password: password,
+        csrf_token: step2Csrf?.attributes.value ?? csrfToken,
+      };
+
+      const step2Res = await fetch(step2Flow.ui.action, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(step2Body),
+      });
+
+      const step2Data = await step2Res.json();
+
+      if (step2Res.ok && step2Data.session) {
+        await this._handlePostRegistration(step2Data.session as KratosSession);
+      } else if (step2Data.ui) {
+        // Password validation error (too short, etc.)
+        this._flow = step2Data as KratosFlow;
+        const msgs = [
+          ...(step2Data.ui.messages ?? []),
+          ...(step2Data.ui.nodes?.flatMap((n: KratosUiNode) => n.messages ?? []) ?? []),
+        ].filter((m: { type: string }) => m.type === "error");
+        if (msgs.length) {
+          this._error = msgs.map((m: { text: string }) => m.text).join(" ");
+        } else {
+          this._error = t("auth.register.errorGeneric");
         }
       } else {
         this._error = t("auth.register.errorGeneric");
@@ -260,46 +328,6 @@ export class AuthRegistrationPage extends LitElement {
     navigateTo("/");
   }
 
-  private _renderFlowMessages() {
-    const msgs = this._flow?.ui.messages;
-    if (!msgs?.length) return nothing;
-    return html`
-      <sl-alert variant="danger" open>
-        <sl-icon slot="icon" name="exclamation-triangle"></sl-icon>
-        ${msgs.map((m) => html`<div>${m.text}</div>`)}
-      </sl-alert>
-    `;
-  }
-
-  private _renderNode(node: KratosUiNode) {
-    const attrs = node.attributes;
-    if (attrs.type === "hidden") {
-      return html`<input
-        type="hidden"
-        name="${attrs.name}"
-        value="${attrs.value ?? ""}"
-      />`;
-    }
-    if (attrs.type === "submit") {
-      return nothing;
-    }
-
-    const label = node.meta?.label?.text ?? attrs.name;
-    const nodeErrors = node.messages?.filter((m) => m.type === "error") ?? [];
-
-    return html`
-      <sl-input
-        name="${attrs.name}"
-        type="${attrs.type ?? "text"}"
-        label="${label}"
-        value="${attrs.value ?? ""}"
-        ?required="${attrs.required}"
-        ?disabled="${attrs.disabled || this._submitting}"
-        help-text="${nodeErrors.map((e) => e.text).join(" ")}"
-      ></sl-input>
-    `;
-  }
-
   render() {
     return html`
       <div class="card">
@@ -322,16 +350,30 @@ export class AuthRegistrationPage extends LitElement {
         ${this._flow && !this._loading
           ? html`
               <form @submit=${this._handleSubmit}>
-                ${this._renderFlowMessages()}
                 <div class="form-fields">
-                  ${this._flow.ui.nodes
-                    .filter(
-                      (n) =>
-                        n.group === "default" ||
-                        n.group === "password" ||
-                        n.group === "profile",
-                    )
-                    .map((n) => this._renderNode(n))}
+                  <sl-input
+                    name="traits.email"
+                    type="email"
+                    label="Email"
+                    required
+                    ?disabled="${this._submitting}"
+                    autocomplete="email"
+                  ></sl-input>
+                  <sl-input
+                    name="traits.name"
+                    type="text"
+                    label="Display Name"
+                    ?disabled="${this._submitting}"
+                  ></sl-input>
+                  <sl-input
+                    name="password"
+                    type="password"
+                    label="Password"
+                    required
+                    ?disabled="${this._submitting}"
+                    autocomplete="new-password"
+                    minlength="8"
+                  ></sl-input>
                 </div>
                 <sl-button
                   class="submit-btn"
