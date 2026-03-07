@@ -340,7 +340,7 @@ export class AuthConsentPage extends LitElement {
           <sl-button
             variant="primary"
             ?loading="${this._processing}"
-            ?disabled="${this._processing || this._selectedScopes.size === 0}"
+            ?disabled="${this._processing}"
             @click="${() => this._accept()}"
           >
             ${t("auth.consent.approve")}
