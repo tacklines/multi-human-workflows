@@ -48,8 +48,14 @@ impl JwksCache {
 
     pub async fn validate_token(&self, token: &str) -> Result<Claims, AuthError> {
         let header = jsonwebtoken::decode_header(token)
-            .map_err(|_| AuthError::InvalidToken)?;
-        let kid = header.kid.ok_or(AuthError::InvalidToken)?;
+            .map_err(|e| {
+                tracing::warn!("Failed to decode JWT header (token may be opaque): {e}");
+                AuthError::InvalidToken
+            })?;
+        let kid = header.kid.ok_or_else(|| {
+            tracing::warn!("JWT has no 'kid' in header");
+            AuthError::InvalidToken
+        })?;
 
         // Try cached keys first
         if let Some(claims) = self.try_validate_with_cached(&kid, token).await {
@@ -71,9 +77,13 @@ impl JwksCache {
         let mut validation = Validation::new(Algorithm::RS256);
         validation.validate_aud = false;
 
-        decode::<Claims>(token, &decoding_key, &validation)
-            .ok()
-            .map(|data| data.claims)
+        match decode::<Claims>(token, &decoding_key, &validation) {
+            Ok(data) => Some(data.claims),
+            Err(e) => {
+                tracing::warn!("JWT decode failed for kid={kid}: {e}");
+                None
+            }
+        }
     }
 
     async fn refresh_keys(&self) -> Result<(), AuthError> {
