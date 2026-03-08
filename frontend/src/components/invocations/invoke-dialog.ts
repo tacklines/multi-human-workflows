@@ -58,12 +58,18 @@ export class InvokeDialog extends LitElement {
   @state() private _resumeSessionId = "";
   @state() private _modelHint = "";
   @state() private _budgetTier = "";
+  @state() private _coderStatus: CoderStatus | null = null;
+
+  private _checkCoder() {
+    checkCoderStatus().then((s) => (this._coderStatus = s));
+  }
 
   show() {
     this._open = true;
     this._error = "";
     this._submitting = false;
     this._resumeSessionId = "";
+    this._checkCoder();
   }
 
   showWithPrompt(prompt: string) {
@@ -72,6 +78,7 @@ export class InvokeDialog extends LitElement {
     this._submitting = false;
     this._resumeSessionId = "";
     this._prompt = prompt;
+    this._checkCoder();
   }
 
   showWithPerspective(perspective: string, prompt: string) {
@@ -81,6 +88,7 @@ export class InvokeDialog extends LitElement {
     this._resumeSessionId = "";
     this._perspective = perspective;
     this._prompt = prompt;
+    this._checkCoder();
   }
 
   showContinue(opts: { claude_session_id: string; agent_perspective: string }) {
@@ -90,6 +98,7 @@ export class InvokeDialog extends LitElement {
     this._perspective = opts.agent_perspective;
     this._resumeSessionId = opts.claude_session_id;
     this._prompt = "";
+    this._checkCoder();
   }
 
   hide() {
@@ -149,6 +158,19 @@ export class InvokeDialog extends LitElement {
         ?open=${this._open}
         @sl-after-hide=${() => (this._open = false)}
       >
+        ${this._coderStatus && !this._coderStatus.enabled
+          ? html`<sl-alert variant="warning" open>
+              <sl-icon name="exclamation-triangle" slot="icon"></sl-icon>
+              Coder is not configured. Agent dispatch requires a running Coder
+              instance with the seam-agent template.
+            </sl-alert>`
+          : this._coderStatus && !this._coderStatus.connected
+            ? html`<sl-alert variant="warning" open>
+                <sl-icon name="exclamation-triangle" slot="icon"></sl-icon>
+                Coder connection issue:
+                ${this._coderStatus.error || "unknown error"}
+              </sl-alert>`
+            : nothing}
         ${this._resumeSessionId
           ? html`
               <sl-alert variant="primary" open>
@@ -247,6 +269,8 @@ export class InvokeDialog extends LitElement {
           <sl-button
             variant="primary"
             ?loading=${this._submitting}
+            ?disabled=${this._coderStatus != null &&
+            (!this._coderStatus.enabled || !this._coderStatus.connected)}
             @click=${() => this._submit()}
           >
             Launch
