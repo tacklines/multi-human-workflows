@@ -1,7 +1,7 @@
 use crate::knowledge;
 use crate::mcp_auth::McpIdentity;
 use crate::models::{AgentJoinCode, Participant, Session, User};
-use crate::models::{Task, TaskComment, TaskStatus};
+use crate::models::{Plan, Task, TaskComment, TaskStatus};
 use chrono::Utc;
 use rmcp::{
     handler::server::tool::{ToolCallContext, ToolRouter},
@@ -353,6 +353,46 @@ struct UnlinkRequestRequirementParams {
     requirement_id: String,
 }
 
+// --- Invocation params ---
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ListInvocationsParams {
+    /// Filter by status: pending, running, completed, failed
+    status: Option<String>,
+    /// Filter by workspace ID (UUID)
+    workspace_id: Option<String>,
+    /// Maximum number of results to return (default 20)
+    limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetInvocationParams {
+    /// Invocation ID (UUID)
+    id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct CreateInvocationParams {
+    /// The prompt or task description for the agent
+    prompt: String,
+    /// Agent perspective to use: coder (default), reviewer, planner, tester, researcher
+    agent_perspective: Option<String>,
+    /// Git branch to work on (auto-generated from task if not specified)
+    branch: Option<String>,
+    /// Additional system prompt context to append
+    system_prompt_append: Option<String>,
+    /// Task ID to associate with this invocation (UUID)
+    task_id: Option<String>,
+    /// Claude session ID to resume (from a prior completed invocation)
+    resume_session_id: Option<String>,
+    /// Model preference (e.g. "claude-opus-4-5", "claude-sonnet-4-5")
+    model_hint: Option<String>,
+    /// Budget tier: free, economy, moderate, unlimited
+    budget_tier: Option<String>,
+    /// Provider preference: anthropic, openrouter, ollama
+    provider: Option<String>,
+}
+
 // --- Knowledge params ---
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -385,6 +425,38 @@ struct SearchCodeParams {
     limit: Option<i64>,
 }
 
+// --- Plan params ---
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ListPlansParams {
+    /// Maximum number of plans to return (default 20)
+    limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetPlanParams {
+    /// Plan ID (UUID)
+    id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct CreatePlanParams {
+    /// Plan title
+    title: String,
+    /// Plan content (markdown)
+    content: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct UpdatePlanParams {
+    /// Plan ID (UUID)
+    id: String,
+    /// New title (optional)
+    title: Option<String>,
+    /// New content (markdown, optional)
+    content: Option<String>,
+}
+
 // --- MCP Server ---
 
 #[derive(Default)]
@@ -402,6 +474,7 @@ pub struct SeamMcp {
     pub(crate) state: Mutex<SessionState>,
     pub(crate) code_index: Option<Arc<crate::code_search::CodeIndex>>,
     pub(crate) connections: Option<Arc<crate::ws::ConnectionManager>>,
+    pub(crate) log_buffer: Option<Arc<crate::log_buffer::LogBuffer>>,
     /// Whether MCP auth is enabled. When true, tool calls without a valid
     /// McpIdentity in the request context return an authentication error
     /// instead of a misleading "Session not found" from downstream handlers.
@@ -415,6 +488,7 @@ impl SeamMcp {
         db: PgPool,
         code_index: Option<Arc<crate::code_search::CodeIndex>>,
         connections: Arc<crate::ws::ConnectionManager>,
+        log_buffer: Arc<crate::log_buffer::LogBuffer>,
         auth_enabled: bool,
     ) -> Self {
         Self {
@@ -422,6 +496,7 @@ impl SeamMcp {
             state: Mutex::new(SessionState::default()),
             code_index,
             connections: Some(connections),
+            log_buffer: Some(log_buffer),
             auth_enabled,
             tool_router: Self::tool_router(),
         }
@@ -3766,6 +3841,648 @@ impl SeamMcp {
             .join("\n\n");
 
         Ok(CallToolResult::success(vec![Content::text(output)]))
+    }
+
+    #[tool(description = "List design plans/documents for the current project.")]
+    async fn list_plans(
+        &self,
+        Parameters(params): Parameters<ListPlansParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let limit = params.limit.unwrap_or(20).min(100);
+
+        let plans: Vec<Plan> = sqlx::query_as(
+            "SELECT * FROM plans WHERE project_id = $1 ORDER BY updated_at DESC LIMIT $2",
+        )
+        .bind(project_id)
+        .bind(limit)
+        .fetch_all(&self.db)
+        .await
+        .map_err(|e| McpError::internal_error(format!("Failed to list plans: {e}"), None))?;
+
+        let result: Vec<serde_json::Value> = plans
+            .into_iter()
+            .map(|p| {
+                serde_json::json!({
+                    "id": p.id,
+                    "title": p.title,
+                    "slug": p.slug,
+                    "status": p.status,
+                    "content_length": p.body.len(),
+                    "updated_at": p.updated_at,
+                    "created_at": p.created_at,
+                })
+            })
+            .collect();
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(description = "Get full details of a design plan including its content.")]
+    async fn get_plan(
+        &self,
+        Parameters(params): Parameters<GetPlanParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let plan_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid plan ID UUID",
+                )]))
+            }
+        };
+
+        let plan: Option<Plan> =
+            sqlx::query_as("SELECT * FROM plans WHERE id = $1 AND project_id = $2")
+                .bind(plan_id)
+                .bind(project_id)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| McpError::internal_error(format!("Failed to get plan: {e}"), None))?;
+
+        match plan {
+            None => Ok(CallToolResult::error(vec![Content::text(
+                "Plan not found or does not belong to the current project",
+            )])),
+            Some(p) => {
+                let result = serde_json::json!({
+                    "id": p.id,
+                    "project_id": p.project_id,
+                    "title": p.title,
+                    "slug": p.slug,
+                    "content": p.body,
+                    "status": p.status,
+                    "parent_id": p.parent_id,
+                    "created_at": p.created_at,
+                    "updated_at": p.updated_at,
+                });
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result).unwrap(),
+                )]))
+            }
+        }
+    }
+
+    #[tool(description = "Create a new design plan/document for the project.")]
+    async fn create_plan(
+        &self,
+        Parameters(params): Parameters<CreatePlanParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        if params.title.trim().is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Title cannot be empty",
+            )]));
+        }
+
+        // Generate slug from title
+        let slug = params
+            .title
+            .to_lowercase()
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+            .collect::<String>()
+            .split('-')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("-");
+
+        let plan: Plan = sqlx::query_as(
+            "INSERT INTO plans (project_id, author_id, title, slug, body)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING *",
+        )
+        .bind(project_id)
+        .bind(participant_id)
+        .bind(&params.title)
+        .bind(&slug)
+        .bind(&params.content)
+        .fetch_one(&self.db)
+        .await
+        .map_err(|e| McpError::internal_error(format!("Failed to create plan: {e}"), None))?;
+
+        // Emit domain event
+        let event = crate::events::DomainEvent::new(
+            "plan.created",
+            "plan",
+            plan.id,
+            Some(participant_id),
+            serde_json::json!({
+                "project_id": project_id,
+                "title": plan.title,
+                "slug": plan.slug,
+            }),
+        );
+        if let Err(e) = crate::events::emit(&self.db, &event).await {
+            tracing::warn!("Failed to emit plan_created domain event: {e}");
+        }
+
+        let result = serde_json::json!({
+            "id": plan.id,
+            "title": plan.title,
+            "slug": plan.slug,
+            "status": plan.status,
+            "created_at": plan.created_at,
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(description = "Update an existing design plan's title or content.")]
+    async fn update_plan(
+        &self,
+        Parameters(params): Parameters<UpdatePlanParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+        let participant_id = match self.require_participant() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let plan_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid plan ID UUID",
+                )]))
+            }
+        };
+
+        // Verify plan belongs to this project
+        let current: Option<Plan> =
+            sqlx::query_as("SELECT * FROM plans WHERE id = $1 AND project_id = $2")
+                .bind(plan_id)
+                .bind(project_id)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| {
+                    McpError::internal_error(format!("Failed to fetch plan: {e}"), None)
+                })?;
+
+        let current = match current {
+            Some(p) => p,
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Plan not found or does not belong to the current project",
+                )]))
+            }
+        };
+
+        let has_updates = params.title.is_some() || params.content.is_some();
+        let plan = if has_updates {
+            let mut set_clauses = vec!["updated_at = NOW()".to_string()];
+            let mut bind_idx = 3u32; // $1 = plan_id, $2 = project_id
+
+            if params.title.is_some() {
+                set_clauses.push(format!("title = ${bind_idx}"));
+                bind_idx += 1;
+            }
+            if params.content.is_some() {
+                set_clauses.push(format!("body = ${bind_idx}"));
+            }
+
+            let sql = format!(
+                "UPDATE plans SET {} WHERE id = $1 AND project_id = $2 RETURNING *",
+                set_clauses.join(", ")
+            );
+
+            let mut q = sqlx::query_as::<_, Plan>(&sql)
+                .bind(plan_id)
+                .bind(project_id);
+
+            if let Some(ref title) = params.title {
+                q = q.bind(title);
+            }
+            if let Some(ref content) = params.content {
+                q = q.bind(content);
+            }
+
+            q.fetch_one(&self.db).await.map_err(|e| {
+                McpError::internal_error(format!("Failed to update plan: {e}"), None)
+            })?
+        } else {
+            current
+        };
+
+        // Emit domain event
+        let event = crate::events::DomainEvent::new(
+            "plan.updated",
+            "plan",
+            plan.id,
+            Some(participant_id),
+            serde_json::json!({
+                "project_id": project_id,
+                "title": plan.title,
+                "slug": plan.slug,
+            }),
+        );
+        if let Err(e) = crate::events::emit(&self.db, &event).await {
+            tracing::warn!("Failed to emit plan_updated domain event: {e}");
+        }
+
+        let result = serde_json::json!({
+            "id": plan.id,
+            "title": plan.title,
+            "slug": plan.slug,
+            "content": plan.body,
+            "status": plan.status,
+            "updated_at": plan.updated_at,
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(
+        description = "List invocations (claude -p agent runs) for the current project, optionally filtered by status or workspace."
+    )]
+    async fn list_invocations(
+        &self,
+        Parameters(params): Parameters<ListInvocationsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let limit = params.limit.unwrap_or(20).min(100);
+
+        let workspace_id = match params.workspace_id {
+            Some(ref s) => match Uuid::parse_str(s) {
+                Ok(id) => Some(id),
+                Err(_) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        "Invalid workspace_id: must be a UUID",
+                    )]))
+                }
+            },
+            None => None,
+        };
+
+        let invocations: Vec<crate::models::Invocation> = sqlx::query_as(
+            "SELECT * FROM invocations
+             WHERE project_id = $1
+               AND ($2::text IS NULL OR status = $2)
+               AND ($3::uuid IS NULL OR workspace_id = $3)
+             ORDER BY created_at DESC
+             LIMIT $4",
+        )
+        .bind(project_id)
+        .bind(&params.status)
+        .bind(workspace_id)
+        .bind(limit)
+        .fetch_all(&self.db)
+        .await
+        .map_err(|e| McpError::internal_error(format!("Failed to list invocations: {e}"), None))?;
+
+        let items: Vec<serde_json::Value> = invocations
+            .into_iter()
+            .map(|inv| {
+                let prompt_preview = if inv.prompt.len() > 100 {
+                    format!("{}...", &inv.prompt[..100])
+                } else {
+                    inv.prompt.clone()
+                };
+                serde_json::json!({
+                    "id": inv.id,
+                    "status": inv.status,
+                    "agent_perspective": inv.agent_perspective,
+                    "prompt": prompt_preview,
+                    "workspace_id": inv.workspace_id,
+                    "task_id": inv.task_id,
+                    "created_at": inv.created_at,
+                    "completed_at": inv.completed_at,
+                    "error_category": inv.error_category,
+                    "model_used": inv.model_used,
+                    "cost_usd": inv.cost_usd,
+                })
+            })
+            .collect();
+
+        let result = serde_json::json!({
+            "count": items.len(),
+            "invocations": items,
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(
+        description = "Get full details of a specific invocation including its output and result JSON."
+    )]
+    async fn get_invocation(
+        &self,
+        Parameters(params): Parameters<GetInvocationParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let invocation_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid invocation ID: must be a UUID",
+                )]))
+            }
+        };
+
+        let inv: Option<crate::models::Invocation> =
+            sqlx::query_as("SELECT * FROM invocations WHERE id = $1 AND project_id = $2")
+                .bind(invocation_id)
+                .bind(project_id)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| {
+                    McpError::internal_error(format!("Failed to fetch invocation: {e}"), None)
+                })?;
+
+        let inv = match inv {
+            Some(i) => i,
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invocation not found or does not belong to this project",
+                )]))
+            }
+        };
+
+        let result = serde_json::json!({
+            "id": inv.id,
+            "workspace_id": inv.workspace_id,
+            "project_id": inv.project_id,
+            "session_id": inv.session_id,
+            "task_id": inv.task_id,
+            "participant_id": inv.participant_id,
+            "agent_perspective": inv.agent_perspective,
+            "prompt": inv.prompt,
+            "system_prompt_append": inv.system_prompt_append,
+            "status": inv.status,
+            "exit_code": inv.exit_code,
+            "error_message": inv.error_message,
+            "error_category": inv.error_category,
+            "triggered_by": inv.triggered_by,
+            "started_at": inv.started_at,
+            "completed_at": inv.completed_at,
+            "created_at": inv.created_at,
+            "claude_session_id": inv.claude_session_id,
+            "resume_session_id": inv.resume_session_id,
+            "model_hint": inv.model_hint,
+            "budget_tier": inv.budget_tier,
+            "provider": inv.provider,
+            "model_used": inv.model_used,
+            "input_tokens": inv.input_tokens,
+            "output_tokens": inv.output_tokens,
+            "cost_usd": inv.cost_usd,
+            "result_json": inv.result_json,
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(
+        description = "Create and dispatch a new agent invocation (claude -p) in the project. The agent runs asynchronously in a Coder workspace."
+    )]
+    async fn create_invocation(
+        &self,
+        Parameters(params): Parameters<CreateInvocationParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        if params.prompt.trim().is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Prompt cannot be empty",
+            )]));
+        }
+
+        let agent_perspective = params
+            .agent_perspective
+            .unwrap_or_else(|| "coder".to_string());
+
+        let task_id = match params.task_id {
+            Some(ref s) => match Uuid::parse_str(s) {
+                Ok(id) => Some(id),
+                Err(_) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        "Invalid task_id: must be a UUID",
+                    )]))
+                }
+            },
+            None => None,
+        };
+
+        // Auto-generate branch name from task when no branch specified
+        let effective_branch = match &params.branch {
+            Some(b) if !b.is_empty() => Some(b.clone()),
+            _ => {
+                if let Some(tid) = task_id {
+                    // Generate branch from task
+                    let row: Option<(String, String)> =
+                        sqlx::query_as("SELECT ticket_id, title FROM tasks WHERE id = $1")
+                            .bind(tid)
+                            .fetch_optional(&self.db)
+                            .await
+                            .ok()
+                            .flatten();
+                    if let Some((ticket_id, title)) = row {
+                        let raw_slug: String = title
+                            .to_lowercase()
+                            .chars()
+                            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+                            .collect();
+                        let slug = raw_slug
+                            .split('-')
+                            .filter(|s| !s.is_empty())
+                            .collect::<Vec<_>>()
+                            .join("-");
+                        let slug = if slug.len() > 40 {
+                            slug[..40].trim_end_matches('-').to_string()
+                        } else {
+                            slug
+                        };
+                        Some(format!("agent/{}-{}", ticket_id, slug))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        };
+
+        // Resolve workspace from pool
+        let workspace_id = match crate::dispatch::resolve_workspace(
+            &self.db,
+            project_id,
+            effective_branch.as_deref(),
+            // Agent creates invocations without a user context; use a sentinel approach:
+            // look up the sponsor user from the participant
+            {
+                // Try to get the sponsor user id from the participant record
+                let participant_id = self.state.lock().ok().and_then(|s| s.participant_id);
+                match participant_id {
+                    Some(pid) => {
+                        let row: Option<(Uuid,)> =
+                            sqlx::query_as("SELECT user_id FROM participants WHERE id = $1")
+                                .bind(pid)
+                                .fetch_optional(&self.db)
+                                .await
+                                .ok()
+                                .flatten();
+                        row.map(|(uid,)| uid).unwrap_or_else(Uuid::new_v4)
+                    }
+                    None => Uuid::new_v4(),
+                }
+            },
+        )
+        .await
+        {
+            Ok(ws_id) => ws_id,
+            Err(e) => {
+                return Ok(CallToolResult::error(vec![Content::text(format!(
+                    "Failed to resolve workspace: {e}"
+                ))]))
+            }
+        };
+
+        // Resolve model config
+        let (effective_model_hint, effective_budget_tier, effective_provider) =
+            crate::dispatch::resolve_model_config(
+                &self.db,
+                project_id,
+                None,
+                task_id,
+                params.model_hint.as_deref(),
+                params.budget_tier.as_deref(),
+                params.provider.as_deref(),
+            )
+            .await;
+
+        // Append push instructions when a branch is specified
+        let effective_prompt = if let Some(branch) = &effective_branch {
+            format!(
+                "{}\n\nWhen you are done with your changes, commit, push, and create a pull request:\n\
+                 ```\n\
+                 git add -A\n\
+                 git commit -m \"<descriptive message>\"\n\
+                 git push -u origin {branch}\n\
+                 gh pr create --title \"<PR title>\" --body \"<summary of changes>\" --base main\n\
+                 ```\n\
+                 If `gh` is not available or PR creation fails, that's OK — the push is what matters.",
+                params.prompt
+            )
+        } else {
+            params.prompt.clone()
+        };
+
+        let session_id = self.get_session_id();
+
+        let inv: crate::models::Invocation = sqlx::query_as(
+            "INSERT INTO invocations
+                (workspace_id, project_id, session_id, task_id,
+                 agent_perspective, prompt, system_prompt_append, triggered_by,
+                 resume_session_id, model_hint, budget_tier, provider)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'agent', $8, $9, $10, $11)
+             RETURNING *",
+        )
+        .bind(workspace_id)
+        .bind(project_id)
+        .bind(session_id)
+        .bind(task_id)
+        .bind(&agent_perspective)
+        .bind(&effective_prompt)
+        .bind(&params.system_prompt_append)
+        .bind(&params.resume_session_id)
+        .bind(&effective_model_hint)
+        .bind(&effective_budget_tier)
+        .bind(&effective_provider)
+        .fetch_one(&self.db)
+        .await
+        .map_err(|e| McpError::internal_error(format!("Failed to create invocation: {e}"), None))?;
+
+        tracing::info!(
+            invocation_id = %inv.id,
+            workspace_id = %workspace_id,
+            perspective = %inv.agent_perspective,
+            task_id = ?inv.task_id,
+            "MCP: Invocation created by agent"
+        );
+
+        // Dispatch asynchronously
+        let dispatch_db = self.db.clone();
+        let dispatch_connections = self.connections.clone();
+        let dispatch_log_buffer = self.log_buffer.clone();
+        let invocation_id = inv.id;
+
+        tokio::spawn(async move {
+            if let (Some(connections), Some(log_buffer)) =
+                (dispatch_connections, dispatch_log_buffer)
+            {
+                if let Err(e) = crate::dispatch::dispatch_invocation(
+                    &dispatch_db,
+                    &log_buffer,
+                    &connections,
+                    invocation_id,
+                )
+                .await
+                {
+                    tracing::error!(invocation_id = %invocation_id, "Dispatch failed: {e}");
+                }
+            } else {
+                tracing::warn!(
+                    invocation_id = %invocation_id,
+                    "Dispatch skipped: connections or log_buffer not available"
+                );
+            }
+        });
+
+        let result = serde_json::json!({
+            "id": inv.id,
+            "workspace_id": inv.workspace_id,
+            "project_id": inv.project_id,
+            "session_id": inv.session_id,
+            "task_id": inv.task_id,
+            "agent_perspective": inv.agent_perspective,
+            "prompt": inv.prompt,
+            "status": inv.status,
+            "created_at": inv.created_at,
+            "model_hint": inv.model_hint,
+            "budget_tier": inv.budget_tier,
+            "provider": inv.provider,
+            "resume_session_id": inv.resume_session_id,
+            "message": "Invocation created and dispatched",
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
     }
 }
 
