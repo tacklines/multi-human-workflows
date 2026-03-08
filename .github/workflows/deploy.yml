@@ -104,11 +104,12 @@ jobs:
               'aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin \$ECR_REGISTRY',
               'docker pull ${ECR_URL}:latest',
               'docker create --name seam-extract ${ECR_URL}:latest true 2>/dev/null; docker cp seam-extract:/app/static/. /opt/seam/static/; docker rm seam-extract; chown -R caddy:caddy /opt/seam/static',
-              'cd /opt/seam/repo && git pull --ff-only',
+              'git config --global --add safe.directory /opt/seam/repo',
+              'cd /opt/seam/repo && sudo -u ec2-user git pull --ff-only',
               'sed -i \"s|^SEAM_IMAGE=.*|SEAM_IMAGE=${ECR_URL}:latest|\" /opt/seam/.env',
-              'cp /opt/seam/.env .env',
+              'cd /opt/seam/repo && cp /opt/seam/.env .env',
               '/usr/local/bin/docker-compose -f docker-compose.prod.yml up -d --no-deps seam-server seam-worker',
-              'cd /opt/seam/repo && bash infra/deploy/update-caddy.sh'
+              'bash infra/deploy/update-caddy.sh'
             ]" \
             --query "Command.CommandId" \
             --output text)
