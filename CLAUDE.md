@@ -46,7 +46,7 @@ just token                # Get test JWT from Hydra
 - **Backend**: `server/` — Rust (Axum) with PostgreSQL
 - **Auth**: Ory Hydra (OAuth2/OIDC) + Ory Kratos (identity)
 - **Sandboxes**: Coder workspaces for agent task execution (optional)
-- **Worker**: `server/src/bin/worker.rs` — seam-worker binary (event bridge + reactions + scheduler)
+- **Worker**: `server/src/bin/worker.rs` — seam-worker binary (event bridge + reactions + scheduler + metrics + cleanup)
 - **Message Queue**: RabbitMQ (topic exchange `seam.events`, queue `seam.reactions`)
 - **Infra**: Docker Compose (Hydra + Kratos + Postgres + RabbitMQ; Coder via `--profile coder`)
 
@@ -101,6 +101,27 @@ Agents connect via Streamable HTTP at `/mcp`. Auth via Hydra JWT:
 For local dev, set `MCP_AUTH_DISABLED=true` (or use `just dev-noauth`) to skip auth on `/mcp`.
 
 After connecting, agents call `join_session` with their agent code (plus optional `client_name`, `client_version`, `model`) to enter a session. Each join creates a new participant record with composition metadata — agents have no persistent identity table.
+
+### MCP Tool Categories
+
+| Category | Tools |
+|---|---|
+| Session | `join_session`, `get_session`, `list_activity` |
+| Tasks | `create_task`, `get_task`, `list_tasks`, `update_task`, `close_task`, `delete_task`, `claim_task`, `unclaim_task`, `task_summary` |
+| Dependencies | `add_dependency`, `remove_dependency` |
+| Comments | `add_comment` |
+| Questions | `ask_question`, `cancel_question`, `check_answer`, `list_questions` |
+| Messaging | `send_message_to`, `check_messages` |
+| Plans | `list_plans`, `get_plan`, `create_plan`, `update_plan` |
+| Invocations | `list_invocations`, `get_invocation`, `create_invocation` |
+| Workspaces | `list_workspaces`, `get_workspace`, `stop_workspace` |
+| Knowledge | `search_knowledge`, `get_knowledge_detail`, `search_code` |
+| Notes | `list_notes`, `get_note`, `update_note` |
+| Requests | `create_request`, `get_request`, `list_requests`, `update_request` |
+| Requirements | `create_requirement`, `get_requirement`, `list_requirements`, `update_requirement` |
+| Linking | `link_request_requirement`, `unlink_request_requirement`, `link_requirement_task`, `unlink_requirement_task` |
+| Identity | `my_info` |
+| Composition | `update_composition` |
 
 ## Frontend Routing
 
@@ -168,6 +189,13 @@ Persistent agents are chains of resumed invocations — ephemeral processes with
 - `POST /api/projects/:id/invocations` — create and dispatch
 - `GET /api/projects/:id/invocations` — list (filterable by status, workspace, task)
 - `GET /api/invocations/:id` — detail with output from log buffer
+
+## Reliability
+
+- **Invocation timeout**: 2-hour timeout on `claude -p` execution; auto-fails stuck invocations
+- **Stuck resource cleanup**: Worker task every 5 minutes detects workspaces stuck in 'creating'/'stopping' >10min and invocations stuck in 'running' >3h
+- **Coder API retry**: Exponential backoff (3 attempts, 100ms–400ms delay) on transient Coder API failures (5xx, timeouts, connection errors)
+- **Error logging**: Critical dispatch errors logged via `tracing` instead of silently swallowed
 
 ## Agent Observability
 
@@ -260,7 +288,9 @@ Event-driven reactions and scheduled jobs, powered by RabbitMQ.
 - **Event Bridge** (`worker/bridge.rs`): Polls `domain_events` table with cursor, publishes to RabbitMQ `seam.events` topic exchange. Routing keys: `{aggregate_type}.{event_type}`.
 - **Reaction Engine** (`worker/reactions.rs`): Consumes from `seam.reactions` queue, matches against `event_reactions` table, dispatches actions.
 - **Cron Scheduler** (`worker/scheduler.rs`): Polls `scheduled_jobs` table every 30s, dispatches due jobs.
-- All three run as concurrent tokio tasks in the `seam-worker` binary.
+- **Metrics Aggregation** (`worker/metrics.rs`): Hourly/daily rollups of invocation metrics.
+- **Stuck Resource Cleanup** (`worker/cleanup.rs`): Every 5 minutes, detects and cleans up workspaces stuck in 'creating'/'stopping' >10min and invocations stuck in 'running' >3h.
+- All five run as concurrent tokio tasks in the `seam-worker` binary.
 
 ### Tables
 
