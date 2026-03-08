@@ -364,9 +364,44 @@ pub async fn create_invocation(
             .await
             .map_err(|e| {
                 tracing::error!("Failed to resolve workspace from pool: {e}");
+                use crate::dispatch::DispatchError;
+                let (status, details) = match &e {
+                    DispatchError::CoderNotConfigured => (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "Coder integration not configured. Set CODER_URL and CODER_TOKEN environment variables.".to_string(),
+                    ),
+                    DispatchError::CoderApi(msg) => (
+                        StatusCode::BAD_GATEWAY,
+                        msg.clone(),
+                    ),
+                    DispatchError::NoWorkspaceAvailable => (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "No workspace available and Coder not configured to create one".to_string(),
+                    ),
+                    DispatchError::WorkspaceNotReady => (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "Workspace exists but is not running".to_string(),
+                    ),
+                    DispatchError::Db(_) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Database error while resolving workspace".to_string(),
+                    ),
+                    DispatchError::CoderCliMissing => (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "Coder CLI not installed on server".to_string(),
+                    ),
+                    DispatchError::Exec(_) => (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "Failed to execute workspace command".to_string(),
+                    ),
+                    DispatchError::NotFound => (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "Workspace not found".to_string(),
+                    ),
+                };
                 (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    Json(serde_json::json!({"error": "workspace unavailable"})),
+                    status,
+                    Json(serde_json::json!({"error": "workspace unavailable", "details": details})),
                 )
             })?
         }
