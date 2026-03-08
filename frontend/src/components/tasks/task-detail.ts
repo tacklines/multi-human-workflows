@@ -1,9 +1,11 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, state, property } from "lit/decorators.js";
+import { customElement, state, property, query } from "lit/decorators.js";
 import "./task-description.js";
 import "./task-comment-thread.js";
 import "./task-metadata-panel.js";
 import "./task-dependencies.js";
+import "../invocations/invoke-dialog.js";
+import type { InvokeDialog } from "../invocations/invoke-dialog.js";
 import {
   fetchTask,
   fetchProjectTask,
@@ -28,6 +30,7 @@ import { store, type SessionParticipant } from "../../state/app-state.js";
 import { t } from "../../lib/i18n.js";
 
 import "@shoelace-style/shoelace/dist/components/alert/alert.js";
+import "@shoelace-style/shoelace/dist/components/button-group/button-group.js";
 import "@shoelace-style/shoelace/dist/components/tag/tag.js";
 import "@shoelace-style/shoelace/dist/components/details/details.js";
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
@@ -276,6 +279,24 @@ export class TaskDetail extends LitElement {
       margin: 0;
     }
 
+    /* ── Dispatch bar ── */
+    .dispatch-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .dispatch-bar-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+
     /* ── Completion Summary ── */
     .completion-summary {
       background: var(--surface-card);
@@ -321,6 +342,8 @@ export class TaskDetail extends LitElement {
     ticket_id: string;
     title: string;
   }[] = [];
+
+  @query("invoke-dialog") private _invokeDialog!: InvokeDialog;
 
   private _storeUnsub: (() => void) | null = null;
 
@@ -451,6 +474,83 @@ export class TaskDetail extends LitElement {
     } catch {
       /* ignore */
     }
+  }
+
+  private _renderDispatchBar(task: TaskDetailView) {
+    if (!this.projectId) return nothing;
+
+    const prompt = (action: string) => {
+      const base = `${task.ticket_id}: ${task.title}`;
+      const desc = task.description ? `\n\n${task.description}` : "";
+      switch (action) {
+        case "implement":
+          return `Implement the following task: ${base}${desc}\n\nRead the task context in your system prompt for full details. Follow the definition of done for this task type.`;
+        case "plan":
+          return `Explore and plan the implementation for: ${base}${desc}\n\nAnalyze the codebase to understand what changes are needed. Produce a concrete implementation plan with specific files, functions, and changes. If this is an epic, break it down into actionable subtasks.`;
+        case "review":
+          return `Review the code related to: ${base}${desc}\n\nCheck for correctness, security issues, performance problems, and adherence to project conventions. Report findings as task comments.`;
+        case "test":
+          return `Run the test suite and verify the implementation for: ${base}${desc}\n\nRun \`cargo test\` and \`npm test\`. Report results including any failures, coverage gaps, or missing test cases. If tests fail, investigate the root cause.`;
+        default:
+          return base;
+      }
+    };
+
+    return html`
+      <div class="dispatch-bar" aria-label=${t("dispatch.button")}>
+        <span class="dispatch-bar-label">
+          <sl-icon name="robot" style="vertical-align: middle;"></sl-icon>
+        </span>
+        <sl-button-group label=${t("dispatch.button")}>
+          <sl-button
+            size="small"
+            variant="neutral"
+            aria-label=${t("dispatch.action.implement")}
+            @click=${() =>
+              this._invokeDialog.showWithPerspective(
+                "coder",
+                prompt("implement"),
+              )}
+          >
+            <sl-icon slot="prefix" name="code-slash"></sl-icon>
+            ${t("dispatch.action.implement")}
+          </sl-button>
+          <sl-button
+            size="small"
+            variant="neutral"
+            aria-label=${t("dispatch.action.plan")}
+            @click=${() =>
+              this._invokeDialog.showWithPerspective("planner", prompt("plan"))}
+          >
+            <sl-icon slot="prefix" name="diagram-3"></sl-icon>
+            ${t("dispatch.action.plan")}
+          </sl-button>
+          <sl-button
+            size="small"
+            variant="neutral"
+            aria-label=${t("dispatch.action.review")}
+            @click=${() =>
+              this._invokeDialog.showWithPerspective(
+                "reviewer",
+                prompt("review"),
+              )}
+          >
+            <sl-icon slot="prefix" name="search"></sl-icon>
+            ${t("dispatch.action.review")}
+          </sl-button>
+          <sl-button
+            size="small"
+            variant="neutral"
+            aria-label=${t("dispatch.action.test")}
+            @click=${() =>
+              this._invokeDialog.showWithPerspective("coder", prompt("test"))}
+          >
+            <sl-icon slot="prefix" name="check2-circle"></sl-icon>
+            ${t("dispatch.action.test")}
+          </sl-button>
+        </sl-button-group>
+      </div>
+    `;
   }
 
   private _renderAiSuggestions(task: TaskDetailView) {
@@ -762,6 +862,7 @@ export class TaskDetail extends LitElement {
       <!-- Body: main + sidebar -->
       <div class="body-layout">
         <div class="main-column">
+          ${this._renderDispatchBar(task)}
           ${task.blocked_by.length > 0
             ? html`
                 <div class="blocked-banner">
@@ -831,6 +932,11 @@ export class TaskDetail extends LitElement {
             )}
         ></task-metadata-panel>
       </div>
+
+      <invoke-dialog
+        project-id=${this.projectId}
+        task-id=${task.id}
+      ></invoke-dialog>
     `;
   }
 }
