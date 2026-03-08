@@ -668,6 +668,8 @@ export const messagesEn: Record<string, string> = {
   "taskBoard.batch.close": "Close",
   "taskBoard.batch.reopen": "Reopen",
   "taskBoard.batch.delete": "Delete",
+  "taskBoard.batch.dispatchAgent": "Dispatch Agent",
+  "taskBoard.batch.dispatchPrompt": "Work on the following tasks:",
   "taskBoard.action.startWork": "Start Work",
   "taskBoard.action.markDone": "Mark Done",
   "taskBoard.action.close": "Close",
@@ -910,6 +912,12 @@ export const messagesEn: Record<string, string> = {
   "dispatch.project.action.sprintPlan": "Sprint Plan",
   "dispatch.project.action.codeQuality": "Code Quality",
   "dispatch.project.action.custom": "Custom...",
+
+  // ── overview-level dispatch ──
+  "dispatch.overview.button": "Analyze",
+  "dispatch.overview.action.summarize": "Summarize Recent Activity",
+  "dispatch.overview.action.blockers": "Identify Blockers",
+  "dispatch.overview.action.custom": "Custom...",
 };
 
 // Wire English into the locale map

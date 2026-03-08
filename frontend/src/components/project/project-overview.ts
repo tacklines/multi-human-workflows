@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property, query, state } from "lit/decorators.js";
+import type { InvokeDialog } from "../invocations/invoke-dialog.js";
 import {
   stopWorkspace,
   destroyWorkspace,
@@ -24,6 +25,12 @@ import "@shoelace-style/shoelace/dist/components/alert/alert.js";
 import "@shoelace-style/shoelace/dist/components/dialog/dialog.js";
 import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
 import "@shoelace-style/shoelace/dist/components/icon-button/icon-button.js";
+import "@shoelace-style/shoelace/dist/components/dropdown/dropdown.js";
+import "@shoelace-style/shoelace/dist/components/menu/menu.js";
+import "@shoelace-style/shoelace/dist/components/menu-item/menu-item.js";
+import "@shoelace-style/shoelace/dist/components/divider/divider.js";
+
+import "../invocations/invoke-dialog.js";
 
 @customElement("project-overview")
 export class ProjectOverview extends LitElement {
@@ -287,6 +294,8 @@ export class ProjectOverview extends LitElement {
   @property({ type: Array }) workspaces: WorkspaceView[] = [];
   @property() orgSlug = "";
 
+  @query("invoke-dialog") private _invokeDialog!: InvokeDialog;
+
   @state() private _showNewSession = false;
   @state() private _newSessionName = "";
   @state() private _creatingSess = false;
@@ -374,6 +383,70 @@ export class ProjectOverview extends LitElement {
       );
     } catch (err) {
       console.error("Failed to destroy workspace", err);
+    }
+  }
+
+  private _renderAnalyzeDropdown() {
+    return html`
+      <div
+        style="display: flex; justify-content: flex-end; margin-bottom: 1rem;"
+      >
+        <sl-dropdown>
+          <sl-button
+            slot="trigger"
+            caret
+            variant="default"
+            size="small"
+            outline
+            aria-label=${t("dispatch.overview.button")}
+            aria-haspopup="menu"
+          >
+            <sl-icon slot="prefix" name="robot"></sl-icon>
+            ${t("dispatch.overview.button")}
+          </sl-button>
+          <sl-menu
+            @sl-select=${(e: CustomEvent) => this._handleAnalyzeAction(e)}
+          >
+            <sl-menu-item value="summarize">
+              <sl-icon slot="prefix" name="journal-text"></sl-icon>
+              ${t("dispatch.overview.action.summarize")}
+            </sl-menu-item>
+            <sl-menu-item value="blockers">
+              <sl-icon slot="prefix" name="exclamation-triangle"></sl-icon>
+              ${t("dispatch.overview.action.blockers")}
+            </sl-menu-item>
+            <sl-divider></sl-divider>
+            <sl-menu-item value="custom">
+              <sl-icon slot="prefix" name="gear"></sl-icon>
+              ${t("dispatch.overview.action.custom")}
+            </sl-menu-item>
+          </sl-menu>
+        </sl-dropdown>
+      </div>
+    `;
+  }
+
+  private _handleAnalyzeAction(e: CustomEvent) {
+    const action = (e.detail as { item: { value: string } }).item.value;
+    const projectName = this.project?.name ?? "this project";
+
+    switch (action) {
+      case "summarize":
+        this._invokeDialog.showWithPerspective(
+          "researcher",
+          `Summarize the recent activity for project "${projectName}". Look at recent tasks, sessions, comments, and agent work to produce a concise summary of what has been happening and the current state of the project.`,
+        );
+        break;
+      case "blockers":
+        this._invokeDialog.showWithPerspective(
+          "planner",
+          `Analyze the project "${projectName}" and identify any blockers, risks, or impediments to progress. Review open tasks, dependencies, and recent activity to surface issues that need attention.`,
+        );
+        break;
+      case "custom":
+      default:
+        this._invokeDialog.show();
+        break;
     }
   }
 
@@ -583,8 +656,10 @@ export class ProjectOverview extends LitElement {
             >${this._error}</sl-alert
           >`
         : nothing}
-      ${this._renderRepo()} ${this._renderSessions()}
-      ${this._renderWorkspaces()}
+      ${this._renderRepo()} ${this._renderAnalyzeDropdown()}
+      ${this._renderSessions()} ${this._renderWorkspaces()}
+
+      <invoke-dialog project-id=${this.projectId}></invoke-dialog>
 
       <sl-dialog
         label=${t("workspace.newSession")}
