@@ -1,5 +1,6 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use uuid::Uuid;
 
 /// Trait abstracting the Coder API calls used by the dispatch layer.
@@ -99,6 +100,53 @@ pub struct RichParameterValue {
     pub value: String,
 }
 
+/// Extract the HTTP status code from a `CoderError`, if it is an API error.
+fn extract_status(e: &CoderError) -> Option<reqwest::StatusCode> {
+    match e {
+        CoderError::Api { status, .. } => reqwest::StatusCode::from_u16(*status).ok(),
+        _ => None,
+    }
+}
+
+/// Retry an async operation up to `max_retries` times with exponential backoff.
+///
+/// Retries on server errors (5xx), rate-limit (429), and connection/timeout
+/// failures. Does NOT retry client errors (4xx except 429) — those indicate a
+/// bad request that will not succeed on retry.
+async fn retry_request<F, Fut, T>(
+    operation_name: &str,
+    max_retries: u32,
+    f: F,
+) -> Result<T, CoderError>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<T, CoderError>>,
+{
+    let mut last_error = None;
+    for attempt in 0..=max_retries {
+        if attempt > 0 {
+            let delay = Duration::from_millis(100 * 2u64.pow(attempt - 1)); // 100ms, 200ms, 400ms
+            tracing::warn!(
+                "{operation_name}: attempt {attempt}/{max_retries} failed, retrying in {delay:?}"
+            );
+            tokio::time::sleep(delay).await;
+        }
+        match f().await {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                // Don't retry client errors (4xx) except 429 Too Many Requests.
+                if let Some(status) = extract_status(&e) {
+                    if status.is_client_error() && status.as_u16() != 429 {
+                        return Err(e);
+                    }
+                }
+                last_error = Some(e);
+            }
+        }
+    }
+    Err(last_error.unwrap())
+}
+
 impl CoderClient {
     /// Create a new Coder client. Returns None if CODER_URL is not set.
     pub fn from_env() -> Option<Self> {
@@ -108,8 +156,12 @@ impl CoderClient {
     }
 
     pub fn new(base_url: String, token: String) -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("failed to build reqwest client");
         Self {
-            client: Client::new(),
+            client,
             base_url: base_url.trim_end_matches('/').to_string(),
             token,
         }
@@ -150,14 +202,17 @@ impl CoderClient {
 
     /// List templates in the default organization
     pub async fn list_templates(&self) -> Result<Vec<CoderTemplate>, CoderError> {
-        let resp = self
-            .client
-            .get(self.url("/templates"))
-            .header("Coder-Session-Token", &self.token)
-            .send()
-            .await?;
-        let resp = self.check_response(resp).await?;
-        Ok(resp.json().await?)
+        retry_request("list_templates", 3, || async {
+            let resp = self
+                .client
+                .get(self.url("/templates"))
+                .header("Coder-Session-Token", &self.token)
+                .send()
+                .await?;
+            let resp = self.check_response(resp).await?;
+            Ok(resp.json().await?)
+        })
+        .await
     }
 
     /// Get a template by name (searches default org)
@@ -177,15 +232,18 @@ impl CoderClient {
         owner: &str,
         req: CreateWorkspaceRequest,
     ) -> Result<CoderWorkspace, CoderError> {
-        let resp = self
-            .client
-            .post(self.url(&format!("/users/{}/workspaces", owner)))
-            .header("Coder-Session-Token", &self.token)
-            .json(&req)
-            .send()
-            .await?;
-        let resp = self.check_response(resp).await?;
-        Ok(resp.json().await?)
+        retry_request("create_workspace", 3, || async {
+            let resp = self
+                .client
+                .post(self.url(&format!("/users/{}/workspaces", owner)))
+                .header("Coder-Session-Token", &self.token)
+                .json(&req)
+                .send()
+                .await?;
+            let resp = self.check_response(resp).await?;
+            Ok(resp.json().await?)
+        })
+        .await
     }
 
     /// Get workspace by ID
@@ -202,15 +260,18 @@ impl CoderClient {
 
     /// Start a workspace (create a new build with "start" transition)
     pub async fn start_workspace(&self, id: Uuid) -> Result<CoderWorkspaceBuild, CoderError> {
-        let resp = self
-            .client
-            .put(self.url(&format!("/workspaces/{}/builds", id)))
-            .header("Coder-Session-Token", &self.token)
-            .json(&serde_json::json!({ "transition": "start" }))
-            .send()
-            .await?;
-        let resp = self.check_response(resp).await?;
-        Ok(resp.json().await?)
+        retry_request("start_workspace", 3, || async {
+            let resp = self
+                .client
+                .put(self.url(&format!("/workspaces/{}/builds", id)))
+                .header("Coder-Session-Token", &self.token)
+                .json(&serde_json::json!({ "transition": "start" }))
+                .send()
+                .await?;
+            let resp = self.check_response(resp).await?;
+            Ok(resp.json().await?)
+        })
+        .await
     }
 
     /// Stop a workspace
