@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { t } from "../../lib/i18n.js";
 import {
   createInvocation,
   checkCoderStatus,
@@ -107,7 +108,7 @@ export class InvokeDialog extends LitElement {
 
   private async _submit() {
     if (!this._prompt.trim()) {
-      this._error = "Prompt is required.";
+      this._error = t("invoke.errorPromptRequired");
       return;
     }
 
@@ -153,52 +154,52 @@ export class InvokeDialog extends LitElement {
     return html`
       <sl-dialog
         label=${this._resumeSessionId
-          ? "Continue Invocation"
-          : "New Invocation"}
+          ? t("invoke.titleContinue")
+          : t("invoke.titleNew")}
         ?open=${this._open}
         @sl-after-hide=${() => (this._open = false)}
       >
         ${this._coderStatus && !this._coderStatus.enabled
           ? html`<sl-alert variant="warning" open>
               <sl-icon name="exclamation-triangle" slot="icon"></sl-icon>
-              Coder is not configured. Agent dispatch requires a running Coder
-              instance with the seam-agent template.
+              ${t("invoke.coderNotConfigured")}
             </sl-alert>`
           : this._coderStatus && !this._coderStatus.connected
             ? html`<sl-alert variant="warning" open>
                 <sl-icon name="exclamation-triangle" slot="icon"></sl-icon>
-                Coder connection issue:
-                ${this._coderStatus.error || "unknown error"}
+                ${t("invoke.coderConnectionIssue")}
+                ${this._coderStatus.error ||
+                t("invoke.coderConnectionUnknown")}
               </sl-alert>`
             : nothing}
         ${this._resumeSessionId
           ? html`
               <sl-alert variant="primary" open>
-                Continuing previous session
+                ${t("invoke.continuingSession")}
                 (${this._resumeSessionId.substring(0, 8)}...)
               </sl-alert>
             `
           : nothing}
         <div class="form-group">
-          <label>Agent Perspective</label>
+          <label>${t("invoke.perspectiveLabel")}</label>
           <sl-select
             value=${this._perspective}
             @sl-change=${(e: Event) =>
               (this._perspective = (e.target as HTMLInputElement).value)}
           >
-            <sl-option value="coder">Coder</sl-option>
-            <sl-option value="reviewer">Reviewer</sl-option>
-            <sl-option value="planner">Planner</sl-option>
-            <sl-option value="tester">Tester</sl-option>
-            <sl-option value="researcher">Researcher</sl-option>
+            <sl-option value="coder">${t("invoke.perspective.coder")}</sl-option>
+            <sl-option value="reviewer">${t("invoke.perspective.reviewer")}</sl-option>
+            <sl-option value="planner">${t("invoke.perspective.planner")}</sl-option>
+            <sl-option value="tester">${t("invoke.perspective.tester")}</sl-option>
+            <sl-option value="researcher">${t("invoke.perspective.researcher")}</sl-option>
           </sl-select>
         </div>
 
         <div class="form-group">
-          <label>Prompt</label>
+          <label>${t("invoke.promptLabel")}</label>
           <sl-textarea
             rows="4"
-            placeholder="What should the agent do?"
+            placeholder=${t("invoke.promptPlaceholder")}
             value=${this._prompt}
             @sl-input=${(e: Event) =>
               (this._prompt = (e.target as HTMLInputElement).value)}
@@ -206,7 +207,7 @@ export class InvokeDialog extends LitElement {
         </div>
 
         <div class="form-group">
-          <label>Branch (optional)</label>
+          <label>${t("invoke.branchLabel")}</label>
           <sl-input
             placeholder="main"
             value=${this._branch}
@@ -216,7 +217,7 @@ export class InvokeDialog extends LitElement {
         </div>
 
         <div class="form-group">
-          <label>System Prompt Append (optional)</label>
+          <label>${t("invoke.systemPromptLabel")}</label>
           <sl-textarea
             rows="2"
             placeholder="Additional context for the agent..."
@@ -227,7 +228,7 @@ export class InvokeDialog extends LitElement {
         </div>
 
         <div class="form-group">
-          <label>Model (optional)</label>
+          <label>${t("invoke.modelLabel")}</label>
           <sl-input
             placeholder="e.g. qwen3.5, opus, deepseek (uses your default if empty)"
             value=${this._modelHint}
@@ -237,7 +238,7 @@ export class InvokeDialog extends LitElement {
         </div>
 
         <div class="form-group">
-          <label>Budget Tier (optional)</label>
+          <label>${t("invoke.budgetLabel")}</label>
           <sl-select
             placeholder="Use default"
             value=${this._budgetTier}
@@ -245,10 +246,10 @@ export class InvokeDialog extends LitElement {
             @sl-change=${(e: Event) =>
               (this._budgetTier = (e.target as HTMLInputElement).value)}
           >
-            <sl-option value="free">Free</sl-option>
-            <sl-option value="economy">Economy</sl-option>
-            <sl-option value="moderate">Moderate</sl-option>
-            <sl-option value="unlimited">Unlimited</sl-option>
+            <sl-option value="free">${t("invoke.budget.free")}</sl-option>
+            <sl-option value="economy">${t("invoke.budget.economy")}</sl-option>
+            <sl-option value="moderate">${t("invoke.budget.moderate")}</sl-option>
+            <sl-option value="unlimited">${t("invoke.budget.unlimited")}</sl-option>
           </sl-select>
         </div>
 
@@ -258,16 +259,13 @@ export class InvokeDialog extends LitElement {
               ${this._error}
               ${this._error.includes("Coder") ||
               this._error.includes("workspace")
-                ? html`<br /><small
-                      >Check Coder integration status at Settings →
-                      Integrations.</small
-                    >`
+                ? html`<br /><small>${t("invoke.coderSettingsHint")}</small>`
                 : ""}
             </sl-alert>`
           : ""}
 
         <div class="actions">
-          <sl-button @click=${() => this.hide()}>Cancel</sl-button>
+          <sl-button @click=${() => this.hide()}>${t("invoke.cancel")}</sl-button>
           <sl-button
             variant="primary"
             ?loading=${this._submitting}
@@ -275,7 +273,7 @@ export class InvokeDialog extends LitElement {
             (!this._coderStatus.enabled || !this._coderStatus.connected)}
             @click=${() => this._submit()}
           >
-            Launch
+            ${t("invoke.launch")}
           </sl-button>
         </div>
       </sl-dialog>
