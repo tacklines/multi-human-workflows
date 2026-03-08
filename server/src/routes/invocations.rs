@@ -71,6 +71,8 @@ pub struct InvocationView {
     pub input_tokens: Option<i32>,
     pub output_tokens: Option<i32>,
     pub cost_usd: Option<f64>,
+    // Error categorization (populated on failure)
+    pub error_category: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -123,6 +125,7 @@ fn to_view(inv: Invocation) -> InvocationView {
         input_tokens: inv.input_tokens,
         output_tokens: inv.output_tokens,
         cost_usd: inv.cost_usd,
+        error_category: inv.error_category,
     }
 }
 

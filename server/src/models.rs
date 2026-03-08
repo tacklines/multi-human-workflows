@@ -527,6 +527,9 @@ pub struct Invocation {
     pub output_tokens: Option<i32>,
     pub cost_usd: Option<f64>,
 
+    // Error categorization (populated on failure)
+    pub error_category: Option<String>,
+
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

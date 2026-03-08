@@ -850,6 +850,10 @@ pub async fn dispatch_invocation(
         Some(format!("Process exited with code {exit_code}"))
     };
 
+    // Categorize errors based on exit code and output (best-effort, non-blocking)
+    let combined_output = all_stdout_lines.join("\n");
+    let error_category = categorize_error(exit_code, &combined_output);
+
     if exit_status.success() {
         tracing::info!(
             workspace_id = %inv.workspace_id,
@@ -879,6 +883,7 @@ pub async fn dispatch_invocation(
              input_tokens = $8,
              output_tokens = $9,
              cost_usd = $10,
+             error_category = $11,
              completed_at = NOW(),
              updated_at = NOW()
          WHERE id = $1",
@@ -893,6 +898,7 @@ pub async fn dispatch_invocation(
     .bind(input_tokens)
     .bind(output_tokens)
     .bind(cost_usd)
+    .bind(&error_category)
     .execute(db)
     .await?;
 
@@ -949,6 +955,29 @@ fn which_coder() -> Option<std::path::PathBuf> {
         .find(|p| p.is_file())
 }
 
+/// Categorize the failure reason based on exit code and output text.
+///
+/// Returns None when the invocation succeeded (exit_code == 0) or when
+/// the failure reason cannot be determined. Categorization is best-effort
+/// and should never block completion of the invocation record update.
+fn categorize_error(exit_code: i32, output: &str) -> Option<String> {
+    if exit_code == 124 || output.contains("timed out") {
+        Some("timeout".to_string())
+    } else if output.contains("WorkspaceNotReady")
+        || (output.contains("workspace") && output.contains("failed"))
+    {
+        Some("workspace_error".to_string())
+    } else if output.contains("rate_limit") || output.contains("overloaded") {
+        Some("claude_error".to_string())
+    } else if output.contains("auth") || (output.contains("token") && output.contains("expired")) {
+        Some("auth_error".to_string())
+    } else if exit_code != 0 {
+        Some("system_error".to_string())
+    } else {
+        None
+    }
+}
+
 /// Parse the claude JSON output from collected stdout lines.
 /// `claude --output-format json` emits a JSON object as the last line.
 /// We scan in reverse to find the last well-formed JSON object or array.
@@ -967,6 +996,87 @@ fn parse_claude_json_output(lines: &[String]) -> Option<serde_json::Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- categorize_error ---
+
+    #[test]
+    fn categorize_error_success_returns_none() {
+        assert!(categorize_error(0, "").is_none());
+    }
+
+    #[test]
+    fn categorize_error_exit_124_is_timeout() {
+        assert_eq!(categorize_error(124, ""), Some("timeout".to_string()));
+    }
+
+    #[test]
+    fn categorize_error_timed_out_in_output() {
+        assert_eq!(
+            categorize_error(1, "process timed out after 30s"),
+            Some("timeout".to_string())
+        );
+    }
+
+    #[test]
+    fn categorize_error_workspace_not_ready() {
+        assert_eq!(
+            categorize_error(1, "WorkspaceNotReady"),
+            Some("workspace_error".to_string())
+        );
+    }
+
+    #[test]
+    fn categorize_error_workspace_failed() {
+        assert_eq!(
+            categorize_error(1, "workspace provisioning failed"),
+            Some("workspace_error".to_string())
+        );
+    }
+
+    #[test]
+    fn categorize_error_rate_limit() {
+        assert_eq!(
+            categorize_error(1, "Error: rate_limit exceeded"),
+            Some("claude_error".to_string())
+        );
+    }
+
+    #[test]
+    fn categorize_error_overloaded() {
+        assert_eq!(
+            categorize_error(1, "claude is overloaded"),
+            Some("claude_error".to_string())
+        );
+    }
+
+    #[test]
+    fn categorize_error_auth() {
+        assert_eq!(
+            categorize_error(1, "auth failed: invalid credentials"),
+            Some("auth_error".to_string())
+        );
+    }
+
+    #[test]
+    fn categorize_error_token_expired() {
+        assert_eq!(
+            categorize_error(1, "token has expired"),
+            Some("auth_error".to_string())
+        );
+    }
+
+    #[test]
+    fn categorize_error_generic_nonzero_is_system_error() {
+        assert_eq!(
+            categorize_error(1, "some unknown failure"),
+            Some("system_error".to_string())
+        );
+    }
+
+    #[test]
+    fn categorize_error_exit_nonzero_empty_output() {
+        assert_eq!(categorize_error(127, ""), Some("system_error".to_string()));
+    }
 
     // --- pool_key_for ---
 
