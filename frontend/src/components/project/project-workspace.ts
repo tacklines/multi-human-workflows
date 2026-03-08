@@ -43,6 +43,7 @@ import "../tasks/task-board.js";
 import "../automations/automation-panel.js";
 import "./project-overview.js";
 import "./project-settings.js";
+import "./project-metrics.js";
 // Lazy-loaded when graph tab is shown (Three.js is ~800KB)
 const ensureGraphLoaded = () => import("../graph/dependency-graph.js");
 
@@ -247,6 +248,7 @@ export class ProjectWorkspace extends LitElement {
           "agents",
           "workspaces",
           "automations",
+          "metrics",
         ];
         if (valid.includes(params.tab)) {
           this._activeTab = params.tab;
@@ -291,6 +293,7 @@ export class ProjectWorkspace extends LitElement {
         "agents",
         "workspaces",
         "automations",
+        "metrics",
       ];
       if (valid.includes(this.initialTab)) {
         this._switchTab(this.initialTab, false);
@@ -404,6 +407,11 @@ export class ProjectWorkspace extends LitElement {
                   ? html`<automation-panel
                       .projectId=${this._project!.id}
                     ></automation-panel>`
+                  : nothing}
+                ${this._activeTab === "metrics"
+                  ? html`<project-metrics
+                      .projectId=${this.projectId}
+                    ></project-metrics>`
                   : nothing}
                 ${this._activeTab === "settings"
                   ? html`
@@ -780,6 +788,7 @@ export class ProjectWorkspace extends LitElement {
           t("workspace.tab.automations"),
           "lightning-charge",
         )}
+        ${tab("metrics", t("workspace.tab.metrics"), "bar-chart")}
         ${tab("settings", t("workspace.tab.settings"), "gear")}
       </nav>
     `;
