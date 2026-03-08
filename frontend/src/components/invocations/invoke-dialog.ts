@@ -189,6 +189,8 @@ export class InvokeDialog extends LitElement {
             <sl-option value="coder">Coder</sl-option>
             <sl-option value="reviewer">Reviewer</sl-option>
             <sl-option value="planner">Planner</sl-option>
+            <sl-option value="tester">Tester</sl-option>
+            <sl-option value="researcher">Researcher</sl-option>
           </sl-select>
         </div>
 
