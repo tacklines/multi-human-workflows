@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
+use futures::FutureExt as _;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -540,19 +541,51 @@ pub async fn create_invocation(
         tracing::warn!("Failed to emit domain event: {e}");
     }
 
-    // Dispatch the invocation asynchronously
+    // Dispatch the invocation asynchronously.
+    // Wrapped in AssertUnwindSafe + catch_unwind so that a panic in the dispatch
+    // task does not silently leave the invocation stuck in 'running'.
     let invocation_id = inv.id;
     let dispatch_state = Arc::clone(&state);
     tokio::spawn(async move {
-        if let Err(e) = crate::dispatch::dispatch_invocation(
+        let db = dispatch_state.db.clone();
+        let result = std::panic::AssertUnwindSafe(crate::dispatch::dispatch_invocation(
             &dispatch_state.db,
             &dispatch_state.log_buffer,
             &dispatch_state.connections,
             invocation_id,
-        )
-        .await
-        {
-            tracing::error!(invocation_id = %invocation_id, "Dispatch failed: {e}");
+        ))
+        .catch_unwind()
+        .await;
+
+        match result {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                tracing::error!(invocation_id = %invocation_id, error = %e, "Dispatch failed");
+                // Best-effort: mark failed so the invocation doesn't stay 'running'
+                if let Err(db_err) = sqlx::query(
+                    "UPDATE invocations SET status = 'failed', error_message = $2, error_category = 'system_error', completed_at = NOW(), updated_at = NOW() WHERE id = $1 AND status = 'running'",
+                )
+                .bind(invocation_id)
+                .bind(format!("Dispatch error: {e}"))
+                .execute(&db)
+                .await
+                {
+                    tracing::warn!(invocation_id = %invocation_id, error = %db_err, "failed to mark invocation failed after dispatch error");
+                }
+            }
+            Err(_panic) => {
+                tracing::error!(invocation_id = %invocation_id, "Dispatch task panicked");
+                if let Err(db_err) = sqlx::query(
+                    "UPDATE invocations SET status = 'failed', error_message = $2, error_category = 'system_error', completed_at = NOW(), updated_at = NOW() WHERE id = $1 AND status = 'running'",
+                )
+                .bind(invocation_id)
+                .bind("Dispatch task panicked unexpectedly")
+                .execute(&db)
+                .await
+                {
+                    tracing::warn!(invocation_id = %invocation_id, error = %db_err, "failed to mark invocation failed after panic");
+                }
+            }
         }
     });
 

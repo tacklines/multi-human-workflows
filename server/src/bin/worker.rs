@@ -69,7 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bridge_handle = tokio::spawn(worker::bridge::run(pool.clone(), channel.clone()));
     let reactions_handle = tokio::spawn(worker::reactions::run(pool.clone(), channel));
     let scheduler_handle = tokio::spawn(worker::scheduler::run(pool.clone()));
-    let aggregation_handle = tokio::spawn(worker::aggregation::run(pool));
+    let aggregation_handle = tokio::spawn(worker::aggregation::run(pool.clone()));
+    let cleanup_handle = tokio::spawn(worker::cleanup::run_stuck_resource_cleanup(pool.clone()));
 
     // Wait for shutdown signal
     tokio::signal::ctrl_c().await?;
@@ -79,6 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     reactions_handle.abort();
     scheduler_handle.abort();
     aggregation_handle.abort();
+    cleanup_handle.abort();
 
     Ok(())
 }

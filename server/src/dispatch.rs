@@ -313,13 +313,16 @@ async fn create_pool_workspace<C: CoderApi>(
         Err(e) => {
             let msg = format!("Failed to create Coder workspace: {e}");
             tracing::error!(workspace_id = %workspace_id, error = %e, "Coder workspace creation failed");
-            let _ = sqlx::query(
+            if let Err(db_err) = sqlx::query(
                 "UPDATE workspaces SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1",
             )
             .bind(workspace_id)
             .bind(&msg)
             .execute(db)
-            .await;
+            .await
+            {
+                tracing::warn!(workspace_id = %workspace_id, error = %db_err, "failed to update workspace status to failed");
+            }
             Err(DispatchError::CoderApi(msg))
         }
     }
@@ -801,10 +804,53 @@ pub async fn dispatch_invocation(
         }
     }
 
-    // Wait for reader tasks to complete, then wait for the process itself
+    // Wait for reader tasks to complete, then wait for the process itself.
+    // Apply a 2-hour hard timeout to prevent invocations from hanging forever.
+    const DISPATCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2 * 60 * 60);
+
     let _ = stdout_task.await;
     let _ = stderr_task.await;
-    let exit_status = child.wait().await?;
+
+    let exit_status = match tokio::time::timeout(DISPATCH_TIMEOUT, child.wait()).await {
+        Ok(Ok(status)) => status,
+        Ok(Err(e)) => {
+            // IO error waiting for child
+            tracing::error!(invocation_id = %inv.id, error = %e, "IO error waiting for child process");
+            // Attempt to kill the child to avoid zombies
+            let _ = child.kill().await;
+            if let Err(e) = sqlx::query(
+                "UPDATE invocations SET status = 'failed', error_message = $2, error_category = 'system_error', completed_at = NOW(), updated_at = NOW() WHERE id = $1",
+            )
+            .bind(inv.id)
+            .bind(format!("IO error waiting for process: {e}"))
+            .execute(db)
+            .await
+            {
+                tracing::warn!(invocation_id = %inv.id, error = %e, "failed to mark invocation failed after IO error");
+            }
+            return Err(DispatchError::Exec(e));
+        }
+        Err(_elapsed) => {
+            // Timeout — kill the child and mark invocation failed
+            tracing::warn!(
+                invocation_id = %inv.id,
+                timeout_secs = DISPATCH_TIMEOUT.as_secs(),
+                "Invocation dispatch timed out; killing child process"
+            );
+            let _ = child.kill().await;
+            if let Err(e) = sqlx::query(
+                "UPDATE invocations SET status = 'failed', error_message = $2, error_category = 'timeout', completed_at = NOW(), updated_at = NOW() WHERE id = $1",
+            )
+            .bind(inv.id)
+            .bind(format!("Invocation timed out after {} hours", DISPATCH_TIMEOUT.as_secs() / 3600))
+            .execute(db)
+            .await
+            {
+                tracing::warn!(invocation_id = %inv.id, error = %e, "failed to mark invocation failed after timeout");
+            }
+            return Ok(());
+        }
+    };
     let exit_code = exit_status.code().unwrap_or(-1);
 
     // 9. Parse result JSON from stdout (last valid JSON line wins)
