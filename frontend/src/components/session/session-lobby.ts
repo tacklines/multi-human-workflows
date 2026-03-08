@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, state } from "lit/decorators.js";
+import { customElement, query, state } from "lit/decorators.js";
 import { store, type SessionState } from "../../state/app-state.js";
 import {
   connectSession,
@@ -10,6 +10,7 @@ import { createSession, joinSessionByCode } from "../../state/session-api.js";
 import { navigateTo } from "../../router.js";
 import type { RouterLocation } from "@vaadin/router";
 import { t } from "../../lib/i18n.js";
+import type { InvokeDialog } from "../invocations/invoke-dialog.js";
 
 import "@shoelace-style/shoelace/dist/components/button/button.js";
 import "@shoelace-style/shoelace/dist/components/input/input.js";
@@ -21,9 +22,14 @@ import "@shoelace-style/shoelace/dist/components/alert/alert.js";
 import "@shoelace-style/shoelace/dist/components/tab-group/tab-group.js";
 import "@shoelace-style/shoelace/dist/components/tab/tab.js";
 import "@shoelace-style/shoelace/dist/components/tab-panel/tab-panel.js";
+import "@shoelace-style/shoelace/dist/components/dropdown/dropdown.js";
+import "@shoelace-style/shoelace/dist/components/menu/menu.js";
+import "@shoelace-style/shoelace/dist/components/menu-item/menu-item.js";
+import "@shoelace-style/shoelace/dist/components/tooltip/tooltip.js";
 
 import "../tasks/task-board.js";
 import "./activity-view.js";
+import "../invocations/invoke-dialog.js";
 
 type LobbyState = "landing" | "creating" | "joining" | "in-session";
 
@@ -234,12 +240,23 @@ export class SessionLobby extends LitElement {
 
     .session-workspace {
       display: flex;
+      flex-direction: column;
       flex: 1;
       min-height: 100%;
     }
 
     .session-workspace task-board {
       flex: 1;
+    }
+
+    .session-dispatch-bar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0.4rem 1.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--surface-1);
+      gap: 0.5rem;
     }
 
     .error-msg {
@@ -262,6 +279,8 @@ export class SessionLobby extends LitElement {
   // TODO: add project selection UI. For now, use a fixed default.
   @state() private _projectId = "";
   @state() private _sessionName = "";
+
+  @query("invoke-dialog") private _invokeDialog!: InvokeDialog;
 
   private _unsubscribe: (() => void) | null = null;
   private _popstateHandler = () => this.requestUpdate();
@@ -426,6 +445,34 @@ export class SessionLobby extends LitElement {
     store.clearSession();
   }
 
+  private _handleSessionDispatch(e: CustomEvent) {
+    const action = (e.detail as { item: { value: string } }).item.value;
+    switch (action) {
+      case "summarize":
+        this._invokeDialog.showWithPerspective(
+          "researcher",
+          "Summarize this session's activity. List completed tasks, in-progress work, blockers, and key decisions made.",
+        );
+        break;
+      case "triage":
+        this._invokeDialog.showWithPerspective(
+          "planner",
+          "Triage the open tasks in this session. Assign priorities, suggest groupings, and identify which tasks are ready to work on.",
+        );
+        break;
+      case "create-tasks":
+        this._invokeDialog.showWithPerspective(
+          "planner",
+          "Review the session activity and create tasks for any action items, follow-ups, or work discovered during discussion.",
+        );
+        break;
+      case "custom":
+      default:
+        this._invokeDialog.show();
+        break;
+    }
+  }
+
   render() {
     switch (this._lobbyState) {
       case "landing":
@@ -585,7 +632,7 @@ export class SessionLobby extends LitElement {
 
   private _renderInSession() {
     if (!this._sessionState) return nothing;
-    const { session, participantId, agentCode } = this._sessionState;
+    const { session } = this._sessionState;
 
     if (this._isActivityRoute) {
       return html`
@@ -600,12 +647,42 @@ export class SessionLobby extends LitElement {
 
     return html`
       <div class="session-workspace">
+        <div class="session-dispatch-bar">
+          <sl-dropdown>
+            <sl-button slot="trigger" caret size="small" variant="default">
+              <sl-icon slot="prefix" name="robot"></sl-icon>
+              ${t("session.analyzeSession")}
+            </sl-button>
+            <sl-menu
+              @sl-select=${(e: CustomEvent) => this._handleSessionDispatch(e)}
+            >
+              <sl-menu-item value="summarize">
+                <sl-icon slot="prefix" name="card-list"></sl-icon>
+                ${t("session.dispatch.summarize")}
+              </sl-menu-item>
+              <sl-menu-item value="triage">
+                <sl-icon slot="prefix" name="diagram-3"></sl-icon>
+                ${t("session.dispatch.triage")}
+              </sl-menu-item>
+              <sl-menu-item value="create-tasks">
+                <sl-icon slot="prefix" name="plus-circle"></sl-icon>
+                ${t("session.dispatch.createTasks")}
+              </sl-menu-item>
+              <sl-divider></sl-divider>
+              <sl-menu-item value="custom">
+                <sl-icon slot="prefix" name="gear"></sl-icon>
+                ${t("session.dispatch.custom")}
+              </sl-menu-item>
+            </sl-menu>
+          </sl-dropdown>
+        </div>
         <task-board
           session-code=${session.code}
           session-name=${session.name ?? ""}
           project-id=${session.project_id}
           .participants=${session.participants}
         ></task-board>
+        <invoke-dialog project-id=${session.project_id}></invoke-dialog>
       </div>
     `;
   }

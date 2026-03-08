@@ -216,6 +216,13 @@ export const messagesEn: Record<string, string> = {
   "lobby.errorJoin": "Failed to join session",
   "lobby.errorRejoin": "Failed to rejoin session",
 
+  // ── session dispatch ──
+  "session.analyzeSession": "Analyze Session",
+  "session.dispatch.summarize": "Summarize Session",
+  "session.dispatch.triage": "Triage Tasks",
+  "session.dispatch.createTasks": "Create Tasks from Discussion",
+  "session.dispatch.custom": "Custom...",
+
   // ── activity-view ──
   "activityView.title": "Session Activity",
   "activityView.filterAllTypes": "All Event Types",
