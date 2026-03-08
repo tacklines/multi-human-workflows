@@ -108,7 +108,7 @@ Uses `@vaadin/router` (History API, not hash-based). Route config in `frontend/s
 
 - `/projects` — project list
 - `/projects/:id` — project workspace (overview)
-- `/projects/:id/:tab` — project workspace tab (graph, settings, tasks, plans, agents, workspaces)
+- `/projects/:id/:tab` — project workspace tab (graph, settings, tasks, plans, agents, workspaces, metrics)
 - `/projects/:id/tasks/:ticketId` — deep-link to task
 - `/projects/:id/plans/:planId` — deep-link to plan
 - `/projects/:id/agents/:agentId` — deep-link to agent detail
@@ -202,6 +202,29 @@ Server sends filtered `agent_stream` messages only to subscribed connections.
 - `agent-stream.ts` — WebSocket service managing subscriptions with auto-reconnect
 - `agent-activity-panel.ts` — Tabbed panel (All/Tools/Output) with live indicator and state badges
 - Integrated into `agent-detail.ts` for online agents
+
+## Project Metrics
+
+Dashboard and API for monitoring dispatch system health.
+
+### API Endpoints
+
+- `GET /api/projects/:id/metrics/summary?period=1h|24h|7d|30d` — Invocation success rates, duration percentiles (p50/p95), per-perspective and per-model breakdowns, workspace status counts
+- `GET /api/projects/:id/metrics/invocation-timeline?period=1h|24h|7d|30d` — Time-bucketed invocation counts for charting (1h buckets for 24h, 1d buckets for 7d/30d)
+
+### Error Categorization
+
+Invocations are auto-categorized on completion: `timeout`, `workspace_error`, `claude_error`, `auth_error`, `system_error`. Stored in `error_category` column, indexed for dashboard queries.
+
+### WebSocket Integration
+
+Metrics dashboard receives real-time updates via WebSocket `metrics_update` messages when invocations complete. Uses project-level subscriptions via `subscribe_project`/`unsubscribe_project` messages on the `/ws` connection.
+
+### Frontend Components
+
+- `project-metrics.ts` — Dashboard tab in project workspace with success rates, duration stats, pending count, per-perspective/model breakdowns, workspace status
+- `metrics-api.ts` — API client for metrics endpoints
+- `project-ws.ts` — WebSocket service for project-level subscriptions with auto-reconnect
 
 ## Agent Git Workflow
 
