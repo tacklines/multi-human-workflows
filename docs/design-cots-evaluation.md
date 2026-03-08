@@ -112,8 +112,8 @@ Seam is MIT-licensed. AGPL on Coder and Plane is a non-issue:
 ## Open Questions
 
 1. Does Plane's API support everything we need, or would we hit walls?
-2. Operational complexity of running Plane + Coder + Seam + Keycloak + Postgres
-3. Can Plane and Coder share Keycloak for SSO?
+2. Operational complexity of running Plane + Coder + Seam + Ory (Hydra + Kratos) + Postgres
+3. Can Plane and Coder share Hydra for SSO?
 4. Is the integration glue simple enough, or does it become its own maintenance burden?
 5. At what point does "integrate three tools" become harder than "build one tool"?
 

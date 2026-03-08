@@ -1,5 +1,7 @@
 # Plan: Migrate from Zitadel to Ory Hydra + Kratos
 
+**Status**: Complete (2026-03-07)
+
 ## Vision
 
 Replace Zitadel with Ory Hydra (OAuth2/OIDC + DCR) and Ory Kratos (identity management, MFA) to get:
@@ -15,7 +17,7 @@ Replace Zitadel with Ory Hydra (OAuth2/OIDC + DCR) and Ory Kratos (identity mana
 - Maintain `MCP_AUTH_DISABLED=true` bypass for local dev
 - Agent token validation in `workspace_logs.rs` and `mcp_auth.rs` must be replaced with JWT validation
 
-## Current Auth Surface (to replace)
+## Auth Surface (replaced)
 
 ### Server
 - `server/src/auth.rs` — JWKS validation + userinfo enrichment (Zitadel-specific userinfo URL)
@@ -42,21 +44,21 @@ Replace Zitadel with Ory Hydra (OAuth2/OIDC + DCR) and Ory Kratos (identity mana
 
 ---
 
-## Phase 1: Local Dev Infrastructure
+## Phase 1: Local Dev Infrastructure (DONE)
 
-Add Hydra + Kratos to `docker-compose.yml`, replacing the Keycloak container.
+Added Hydra + Kratos to `docker-compose.yml`, replacing the Keycloak container.
 
 ### Tasks
 1. Write Hydra config (`infra/ory/hydra.yml`) — enable DCR, set issuer URL, Postgres DSN
 2. Write Kratos config (`infra/ory/kratos.yml`) — identity schema, TOTP, self-service flows
 3. Write Kratos identity schema (`infra/ory/identity.schema.json`) — email, name
-4. Update `docker-compose.yml` — replace Keycloak with Hydra + Kratos containers
-5. Update `infra/postgres/01-create-coder-db.sh` — replace Zitadel DB with Hydra + Kratos DBs
+4. Update `docker-compose.yml` — replaced Keycloak with Hydra + Kratos containers
+5. Update `infra/postgres/01-create-coder-db.sh` — replaced Zitadel DB with Hydra + Kratos DBs
 6. Verify: `docker compose up -d` starts cleanly, Hydra OIDC discovery works
 
-## Phase 2: Login + Consent + Registration UI
+## Phase 2: Login + Consent + Registration UI (DONE)
 
-Build the auth UI as Lit components. Kratos provides flow state machine via API, we render it.
+Built the auth UI as Lit components. Kratos provides flow state machine via API, we render it.
 
 ### Tasks
 1. Create `frontend/src/components/auth/login-page.ts` — Kratos login flow renderer
@@ -68,9 +70,9 @@ Build the auth UI as Lit components. Kratos provides flow state machine via API,
 7. Add login API handler in Rust — bridge Kratos login completion to Hydra login acceptance
 8. Verify: full PKCE login flow works end-to-end in browser
 
-## Phase 3: Server Auth Refactor
+## Phase 3: Server Auth Refactor (DONE)
 
-Replace Zitadel JWT validation with Hydra JWT validation. Eliminate agent token dual-path.
+Replaced Zitadel JWT validation with Hydra JWT validation. Eliminated agent token dual-path.
 
 ### Tasks
 1. Update `auth.rs` — point JWKS at Hydra, remove Zitadel-specific userinfo enrichment
@@ -82,18 +84,18 @@ Replace Zitadel JWT validation with Hydra JWT validation. Eliminate agent token 
 7. Add migration to drop `agent_tokens` table
 8. Verify: `cargo test` passes, MCP auth works with JWT
 
-## Phase 4: Frontend Auth Repoint
+## Phase 4: Frontend Auth Repoint (DONE)
 
-Update frontend OIDC config to point at Hydra instead of Zitadel.
+Updated frontend OIDC config to point at Hydra instead of Zitadel.
 
 ### Tasks
 1. Update `auth-config.ts` — authority to Hydra URL, client ID
 2. Update `auth-state.ts` — remove Zitadel-specific workarounds if any
 3. Verify: login/logout/token refresh work in browser
 
-## Phase 5: Production Deployment
+## Phase 5: Production Deployment (DONE)
 
-Swap Zitadel for Hydra + Kratos on prod.
+Swapped Zitadel for Hydra + Kratos on prod.
 
 ### Tasks
 1. Update `docker-compose.prod.yml` — replace zitadel + zitadel-login with hydra + kratos
@@ -104,9 +106,9 @@ Swap Zitadel for Hydra + Kratos on prod.
 6. Update `docs/deployment.md` — Ory setup instructions
 7. Update `CLAUDE.md` — replace Zitadel/Keycloak references with Ory
 
-## Phase 6: Cleanup
+## Phase 6: Cleanup (DONE)
 
-Remove all Zitadel/Keycloak artifacts.
+Removed all Zitadel/Keycloak artifacts.
 
 ### Tasks
 1. Remove `infra/keycloak/` directory

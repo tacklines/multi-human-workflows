@@ -8,7 +8,7 @@ Additionally, agent identity is weak — agents are identified only by their spo
 
 ## Goals
 
-1. **Authenticate MCP connections** using Keycloak OAuth 2.0
+1. **Authenticate MCP connections** using Hydra OAuth 2.0
 2. **Device authorization flow** so agents can obtain tokens without browser access
 3. **Better agent identity** — persistent agent records with scoped capabilities
 4. **MCP spec compliance** — advertise OAuth metadata per the MCP specification
@@ -19,7 +19,7 @@ Additionally, agent identity is weak — agents are identified only by their spo
 ### Authentication Flow
 
 ```
-Agent                    Seam Server              Keycloak
+Agent                    Seam Server              Hydra
   │                          │                       │
   ├─ GET /.well-known/      │                       │
   │  oauth-protected-resource                       │
@@ -31,8 +31,7 @@ Agent                    Seam Server              Keycloak
   │                                verification_uri }│
   │                          │                       │
   │  (human approves via     │                       │
-  │   Keycloak UI or Seam    │                       │
-  │   session page)          │                       │
+  │   Seam auth UI)          │                       │
   │                          │                       │
   ├─────────────────────────────── POST /token       │
   │◄──────────────────────────── { access_token }    │
@@ -53,7 +52,7 @@ Agent                    Seam Server              Keycloak
 A Tower layer that wraps `StreamableHttpService`:
 
 - Extracts `Authorization: Bearer <token>` from request headers
-- Validates the JWT against Keycloak JWKS (reuses existing `JwksCache`)
+- Validates the JWT against Hydra JWKS (reuses existing `JwksCache`)
 - Injects validated `Claims` into request extensions
 - Returns `401 Unauthorized` if no/invalid token
 - Passes `/.well-known/*` requests through without auth
@@ -78,17 +77,17 @@ Per MCP spec, the server advertises OAuth configuration:
 ```json
 {
   "resource": "https://seam.example.com/mcp",
-  "authorization_servers": ["https://keycloak.example.com/realms/seam"],
+  "authorization_servers": ["https://auth.seam.example.com"],
   "scopes_supported": ["openid", "profile"],
   "bearer_methods_supported": ["header"]
 }
 ```
 
-**`GET /.well-known/oauth-authorization-server`** — proxies to Keycloak's own metadata at `{keycloak_url}/realms/{realm}/.well-known/openid-configuration`, which already includes the `device_authorization_endpoint`.
+**`GET /.well-known/oauth-authorization-server`** — proxies to Hydra's own metadata at `{hydra_url}/.well-known/openid-configuration`, which already includes the `device_authorization_endpoint`.
 
 #### 3. Internal Agent Tokens
 
-For server-spawned agents (Coder workspaces), Keycloak OAuth is overkill — the server itself creates and manages these agents. Instead, opaque bearer tokens:
+For server-spawned agents (Coder workspaces), Hydra OAuth is overkill — the server itself creates and manages these agents. Instead, opaque bearer tokens:
 
 ```sql
 CREATE TABLE agent_tokens (
@@ -111,12 +110,12 @@ Flow:
 
 This is simpler and more secure for internal agents — no OAuth dance, tokens are scoped and revocable, and the server controls the full lifecycle.
 
-#### 3b. Keycloak Device Auth (future, external clients)
+#### 3b. Hydra Device Auth (future, external clients)
 
-For external MCP clients (Claude Code, etc.), Keycloak device auth (RFC 8628) will be added later:
+For external MCP clients (Claude Code, etc.), Hydra device auth (RFC 8628) will be added later:
 
-- Create client `mcp-agents` in realm `seam`
-- Enable "OAuth 2.0 Device Authorization Grant" flow
+- Register an OAuth2 client for device flow via Hydra admin API
+- Enable device authorization grant type
 - MCP clients discover this via `/.well-known/oauth-authorization-server`
 
 #### 4. Agent Identity Model
@@ -129,13 +128,13 @@ Proposed additions:
 -- Track persistent agent identities across sessions
 CREATE TABLE agents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    keycloak_subject TEXT NOT NULL,         -- sub claim from JWT
+    oauth_subject TEXT NOT NULL,             -- sub claim from JWT
     display_name TEXT NOT NULL,
     organization_id UUID NOT NULL REFERENCES organizations(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     metadata JSONB DEFAULT '{}',            -- model, version, capabilities
-    UNIQUE(keycloak_subject, organization_id)
+    UNIQUE(oauth_subject, organization_id)
 );
 ```
 
@@ -182,9 +181,9 @@ async fn join_session(
 
 ```bash
 # One-time setup: get a token via device flow
-seam-auth device-login --realm-url https://keycloak.example.com/realms/seam
+seam-auth device-login --authority https://auth.seam.example.com
 
-# Opens browser / prints: "Go to https://keycloak.example.com/realms/seam/device
+# Opens browser / prints: "Go to https://auth.seam.example.com/oauth2/device
 #                          and enter code: ABCD-EFGH"
 
 # Token is cached in ~/.seam/token.json
@@ -241,27 +240,27 @@ Set `MCP_AUTH_DISABLED=true` on the server (or use `just dev-noauth`) to skip JW
 9. ~~Inject token into Coder workspace~~ — generate + pass `SEAM_TOKEN` on workspace creation (commit 36c571d)
 10. **Agent info in session context** — participants show agent metadata (model, capabilities)
 11. **Token lifecycle** — expiry, revocation, cleanup
-12. **External client OAuth** (future) — Keycloak device auth for Claude Code etc.
+12. **External client OAuth** (future) — Hydra device auth for Claude Code etc.
 
 ## Security Considerations
 
 - **JWT validation** reuses existing `JwksCache` — same security as REST API
 - **Agent codes remain required** for session authorization — JWT alone doesn't grant session access
-- **Scoping**: future work could add Keycloak roles/scopes for fine-grained tool access (e.g., read-only agents)
-- **Token lifetime**: Keycloak access tokens should be short-lived (5 min) with refresh tokens
+- **Scoping**: future work could add Hydra scopes for fine-grained tool access (e.g., read-only agents)
+- **Token lifetime**: Hydra access tokens should be short-lived (5 min) with refresh tokens
 - **Rate limiting**: Consider per-agent rate limits on the MCP endpoint
 - **Stdio transport**: Removed (gave direct DB access, bypassed all auth)
 
 ## Alternatives Considered
 
 ### API Keys instead of OAuth
-Simpler but requires key management UI, rotation, revocation. OAuth gives us all of this via Keycloak for free.
+Simpler but requires key management UI, rotation, revocation. OAuth gives us all of this via Hydra for free.
 
 ### Agent codes as Bearer tokens
 Conflates session authorization with transport authentication. Agent codes are short (8 chars) and session-scoped — not suitable as API credentials.
 
 ### Full OAuth authorization code flow (browser redirect)
-Works for humans but not for headless agents. Device flow solves this. MCP clients with browser access can use authorization code flow via the same Keycloak metadata.
+Works for humans but not for headless agents. Device flow solves this. MCP clients with browser access can use authorization code flow via the same Hydra metadata.
 
 ### Custom token endpoint on Seam server
-Adds complexity. Keycloak already implements device auth, token refresh, and JWKS. No need to reimplement.
+Adds complexity. Hydra already implements device auth, token refresh, and JWKS. No need to reimplement.

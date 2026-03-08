@@ -11,6 +11,7 @@ frontend/.vite/
 .env.local
 .env.*.local
 .env.coder
+.coder-template-hash
 
 # IDE
 .idea/

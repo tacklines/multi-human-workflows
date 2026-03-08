@@ -211,10 +211,21 @@ FORWARDER
     fi
 
     # --- Phase 1: Inject credentials (before any git operations) ---
+    # Write credentials to a file sourced by login shells (coder ssh),
+    # AND eval in this script so subsequent phases can use them.
     CREDS_JSON='${data.coder_parameter.credentials_json.value}'
     if [ "$CREDS_JSON" != "{}" ] && [ -n "$CREDS_JSON" ]; then
       echo "Injecting credentials..."
-      eval "$(echo "$CREDS_JSON" | jq -r 'to_entries[] | "export \(.key)=\(.value | @sh)"')"
+      CREDS_EXPORTS="$(echo "$CREDS_JSON" | jq -r 'to_entries[] | "export \(.key)=\(.value | @sh)"')"
+      # Persist for login shells
+      echo "$CREDS_EXPORTS" > /opt/seam/credentials.env
+      chmod 600 /opt/seam/credentials.env
+      # Source in .bashrc so coder ssh sessions get them
+      if ! grep -q 'credentials.env' ~/.bashrc 2>/dev/null; then
+        echo '[ -f /opt/seam/credentials.env ] && . /opt/seam/credentials.env' >> ~/.bashrc
+      fi
+      # Also eval now for this startup script
+      eval "$CREDS_EXPORTS"
       echo "Injected $(echo "$CREDS_JSON" | jq 'length') credential(s)"
     fi
 
@@ -464,17 +475,27 @@ AGENT_EOF
     fi
 
     echo "Workspace ready for invocations."
+
+    # Write sentinel file so dispatch can detect startup completion
+    touch /tmp/.seam-ready
   EOT
 
-  env = {
-    GIT_AUTHOR_NAME      = data.coder_workspace_owner.me.name
-    GIT_AUTHOR_EMAIL     = data.coder_workspace_owner.me.email
-    GIT_COMMITTER_NAME   = data.coder_workspace_owner.me.name
-    GIT_COMMITTER_EMAIL  = data.coder_workspace_owner.me.email
-    SEAM_URL             = data.coder_parameter.seam_url.value
-    SEAM_TOKEN           = data.coder_parameter.seam_token.value
-    SEAM_WORKSPACE_ID    = data.coder_parameter.workspace_id.value
-  }
+  env = merge(
+    {
+      GIT_AUTHOR_NAME      = data.coder_workspace_owner.me.name
+      GIT_AUTHOR_EMAIL     = data.coder_workspace_owner.me.email
+      GIT_COMMITTER_NAME   = data.coder_workspace_owner.me.name
+      GIT_COMMITTER_EMAIL  = data.coder_workspace_owner.me.email
+      # SEAM_URL is passed by the server with localhost already rewritten
+      # to host.docker.internal when needed (WORKSPACE_SEAM_URL env var).
+      SEAM_URL             = data.coder_parameter.seam_url.value
+      SEAM_TOKEN           = data.coder_parameter.seam_token.value
+      SEAM_WORKSPACE_ID    = data.coder_parameter.workspace_id.value
+    },
+    # Inject org + user credentials (e.g. CLAUDE_CODE_OAUTH_TOKEN, GIT_TOKEN)
+    # directly into the agent env so they're available in SSH sessions.
+    try(jsondecode(data.coder_parameter.credentials_json.value), {})
+  )
 }
 
 # --- Docker Image ---

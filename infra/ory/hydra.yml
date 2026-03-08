@@ -7,7 +7,7 @@ serve:
     cors:
       enabled: true
       allowed_origins:
-        - http://localhost:5173
+        - http://localhost:8585
       allowed_methods:
         - POST
         - GET
@@ -26,9 +26,9 @@ serve:
 urls:
   self:
     issuer: http://localhost:4444
-  consent: http://localhost:5173/auth/consent
-  login: http://localhost:5173/auth/login
-  logout: http://localhost:5173/auth/logout
+  consent: http://localhost:8585/auth/consent
+  login: http://localhost:8585/auth/login
+  logout: http://localhost:8585/auth/logout
 
 oidc:
   subject_identifiers:

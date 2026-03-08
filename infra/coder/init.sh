@@ -111,6 +111,11 @@ else
   echo "Template 'seam-agent' pushed"
 fi
 
+# Record template hash so host-side sync can detect changes
+TEMPLATE_HASH=$(find /templates/seam-agent -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+echo "$TEMPLATE_HASH" > "$OUTPUT_DIR/.coder-template-hash"
+echo "Template hash recorded: ${TEMPLATE_HASH:0:12}…"
+
 # --- create API token for seam server ---
 
 # Delete existing token with same name (idempotent refresh)

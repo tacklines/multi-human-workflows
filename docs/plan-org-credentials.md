@@ -29,7 +29,7 @@ Make organizations the root navigational and data-scoping concept in Seam. Every
 
 **Data flow:**
 ```
-User authenticates (Keycloak)
+User authenticates (Hydra/Kratos)
   -> Fetch user's org memberships
     -> Select/default org
       -> Fetch org's projects

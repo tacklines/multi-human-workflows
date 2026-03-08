@@ -18,7 +18,8 @@ EKS Cluster (Cilium CNI)
 +-- namespace: seam-core
 |   +-- Deployment: seam-server (Rust API)
 |   +-- Deployment: seam-worker (event bridge + scheduler)
-|   +-- Deployment: zitadel (OIDC)
+|   +-- Deployment: hydra (OAuth2/OIDC)
+|   +-- Deployment: kratos (identity)
 |   +-- Deployment: rabbitmq
 |   +-- ExternalSecret: credentials (from AWS Secrets Manager)
 |   +-- [RDS PostgreSQL — external, VPC-internal]
@@ -166,7 +167,7 @@ See [ADR-004](adrs/ADR-004-tls-termination.md) for ingress decision.
 
 ## Phase 2: Platform Services
 
-**Goal**: RDS, Zitadel, Seam server, and RabbitMQ running in `seam-core`.
+**Goal**: RDS, Hydra, Kratos, Seam server, and RabbitMQ running in `seam-core`.
 
 See [ADR-003](adrs/ADR-003-oidc-provider.md) for OIDC provider choice, [ADR-005](adrs/ADR-005-secrets-management.md) for secrets approach.
 
@@ -185,13 +186,14 @@ See [ADR-003](adrs/ADR-003-oidc-provider.md) for OIDC provider choice, [ADR-005]
    - Multi-AZ: disabled initially (enable when justified)
    - Encryption at rest: enabled (KMS)
    - VPC security group: allow inbound from platform node group subnets only
-   - Databases: `seam`, `zitadel`
+   - Databases: `seam`, `hydra`, `kratos`
    - Credentials managed via Secrets Manager with automatic rotation (30-day)
 
 2. **Create secrets in AWS Secrets Manager**:
    - `seam/credential-master-key` — restricted IAM policy (seam-server role only)
    - `seam/rds-credentials` — auto-rotated by Secrets Manager
-   - `seam/zitadel-admin` — Zitadel bootstrap credentials
+   - `seam/hydra-secrets` — Hydra system secrets
+   - `seam/kratos-secrets` — Kratos cookie and cipher secrets
    - `seam/rabbitmq` — RabbitMQ credentials
    - `seam/coder-api-token` — set in Phase 3
 
@@ -213,10 +215,11 @@ See [ADR-003](adrs/ADR-003-oidc-provider.md) for OIDC provider choice, [ADR-005]
                name: seam-server
    ```
 
-4. **Deploy Zitadel**:
-   - Helm chart or Deployment manifest
-   - External Postgres (RDS, `zitadel` database)
-   - Configure: project, application (public PKCE client), redirect URIs
+4. **Deploy Hydra + Kratos**:
+   - Helm charts or Deployment manifests
+   - External Postgres (RDS, `hydra` and `kratos` databases)
+   - Hydra: configure OAuth2 client (public PKCE), redirect URIs, JWT access token strategy
+   - Kratos: configure identity schema, self-service flows (login, registration, recovery)
    - Node affinity: platform node group
 
 5. **Build and push Seam server image**:
@@ -243,7 +246,8 @@ See [ADR-003](adrs/ADR-003-oidc-provider.md) for OIDC provider choice, [ADR-005]
 ### Validation
 
 - Seam server health check returns 200
-- Zitadel admin console accessible via port-forward
+- Hydra health check returns 200 (port-forward to :4444)
+- Kratos health check returns 200 (port-forward to :4433)
 - Test user login flow works end-to-end (PKCE)
 - Migrations applied successfully
 - ESO SecretStore status is `Valid`
@@ -310,7 +314,7 @@ See [ADR-006](adrs/ADR-006-workspace-security.md) for the workspace security mod
 
 - Creating a workspace via Seam spawns a pod on workspace node group
 - Workspace pod can reach Seam MCP endpoint
-- Workspace pod **cannot** reach RDS, Zitadel, or RabbitMQ (NetworkPolicy test)
+- Workspace pod **cannot** reach RDS, Hydra, Kratos, or RabbitMQ (NetworkPolicy test)
 - Workspace pod **cannot** reach arbitrary external hosts (egress test)
 - Workspace pod **can** reach allowlisted hosts (api.anthropic.com, github.com, etc.)
 - ResourceQuota prevents >8 concurrent workspace pods
@@ -372,9 +376,9 @@ See [ADR-004](adrs/ADR-004-tls-termination.md) for ingress decision.
                pathType: Prefix
                backend:
                  service:
-                   name: zitadel
+                   name: hydra-public
                    port:
-                     number: 8080
+                     number: 4444
        - host: coder.seam.example.com
          http:
            paths:
@@ -399,7 +403,7 @@ See [ADR-004](adrs/ADR-004-tls-termination.md) for ingress decision.
 ### Validation
 
 - `curl https://app.seam.example.com/api/health` returns 200
-- Zitadel login flow works through `auth.seam.example.com`
+- Hydra OAuth2 flow works through `auth.seam.example.com`
 - WebSocket connection to `/ws` upgrades successfully
 - ACM certificate shows `Issued` status
 - WAF blocks synthetic attack traffic (if enabled)
@@ -424,7 +428,7 @@ See [ADR-004](adrs/ADR-004-tls-termination.md) for ingress decision.
    - Snapshot before major migrations
    - Test restore quarterly
 
-2. **Zitadel configuration**: Exported as code (project/application config in `infra/k8s/seam-core/zitadel-config/`). Reconstructible from git.
+2. **Hydra + Kratos configuration**: Exported as code (config files in `infra/ory/`). Reconstructible from git.
 
 3. **EBS snapshots**: Automated snapshots for RabbitMQ persistent volumes via AWS Backup.
 
@@ -433,7 +437,7 @@ See [ADR-004](adrs/ADR-004-tls-termination.md) for ingress decision.
 Minimal viable monitoring:
 
 - **CloudWatch Container Insights**: Node and pod metrics, log aggregation
-- **Uptime checks**: Route 53 health checks on `/api/health`, Zitadel health, Coder health
+- **Uptime checks**: Route 53 health checks on `/api/health`, Hydra health, Kratos health, Coder health
 - **Cost alarms**: AWS Budgets alert at 80% and 100% of monthly target
   - Separate alarm for workspace node group compute (the runaway risk)
 - **Workspace alerts**: Workspace running >2 hours without MCP activity, sustained high CPU without tool calls
@@ -479,11 +483,11 @@ infra/
 |   +-- seam-core/
 |   |   +-- seam-server.yaml         (Deployment + Service)
 |   |   +-- seam-worker.yaml         (Deployment)
-|   |   +-- zitadel.yaml             (Deployment + Service + ConfigMap)
+|   |   +-- hydra.yaml               (Deployment + Service + ConfigMap)
+|   |   +-- kratos.yaml             (Deployment + Service + ConfigMap)
 |   |   +-- rabbitmq.yaml            (Helm values or Deployment)
 |   |   +-- external-secrets.yaml    (SecretStore + ExternalSecret)
 |   |   +-- ingress.yaml             (ALB Ingress)
-|   |   +-- zitadel-config/          (Zitadel project/app config)
 |   +-- seam-coder/
 |   |   +-- coder.yaml               (Helm values or Deployment + RBAC)
 |   |   +-- network-policies.yaml    (default-deny + egress allowlist)
@@ -506,7 +510,7 @@ Implementation tasks (decisions are in ADRs):
 - [ ] Create `server/Dockerfile` (multi-stage Rust build)
 - [ ] Write Terraform modules for VPC, EKS, RDS, ECR
 - [ ] Write k8s manifests for all services
-- [ ] Translate Keycloak realm config to Zitadel project/application config
+- [ ] Configure Hydra OAuth2 client and Kratos identity schema
 - [ ] Implement MCP rate limiting middleware
 - [ ] Implement token TTL and auto-revocation
 - [ ] Implement workspace auto-stop (idle detection)
@@ -521,7 +525,7 @@ Implementation tasks (decisions are in ADRs):
 |-----|----------|
 | [ADR-001](adrs/ADR-001-eks.md) | EKS for container orchestration |
 | [ADR-002](adrs/ADR-002-managed-services.md) | Managed services for stateful infrastructure |
-| [ADR-003](adrs/ADR-003-oidc-provider.md) | Zitadel as OIDC provider |
+| [ADR-003](adrs/ADR-003-oidc-provider.md) | Ory Hydra + Kratos as OIDC/identity provider (supersedes earlier Zitadel decision) |
 | [ADR-004](adrs/ADR-004-tls-termination.md) | ALB + ACM for ingress and TLS |
 | [ADR-005](adrs/ADR-005-secrets-management.md) | AWS Secrets Manager + External Secrets Operator |
 | [ADR-006](adrs/ADR-006-workspace-security.md) | Agent workspace security model |

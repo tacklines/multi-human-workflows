@@ -213,8 +213,7 @@ The frontend uses `oidc-client-ts` for the OAuth2 flow. Configuration is baked a
 just dev-noauth
 
 # Start with full auth stack
-docker compose up -d  # Starts Keycloak + Postgres + RabbitMQ
-# Note: local dev still uses Keycloak, not Ory (TODO: add local Ory compose)
+docker compose up -d  # Starts Hydra + Kratos + Postgres + RabbitMQ
 ```
 
 ## Debugging
@@ -274,8 +273,8 @@ echo '<token>' | cut -d. -f2 | base64 -d 2>/dev/null | python3 -m json.tool
 
 ## Migration History
 
-- **Keycloak → Zitadel**: Initial migration (later abandoned)
-- **Zitadel → Ory Hydra + Kratos**: Final migration (2026-03-07)
+- **Keycloak → Zitadel**: Initial migration (abandoned — Zitadel was never deployed)
+- **Keycloak → Ory Hydra + Kratos**: Final migration (2026-03-07)
   - Hydra handles OAuth2/OIDC (token issuance, client management)
   - Kratos handles identity (registration, login, password management)
   - Seam server bridges the two via admin APIs

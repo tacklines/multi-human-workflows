@@ -47,7 +47,7 @@ During the session, the agent filed 6 bugs for platform issues encountered:
 |-----|----------|
 | 401 returns empty body instead of JSON error | API |
 | `parent_id` filter doesn't work on task list | API |
-| Keycloak tokens expire in 5 min with no refresh | Auth |
+| Auth tokens expire in 5 min with no refresh | Auth |
 | MCP `list_tasks` crashes on missing columns | MCP |
 | Playwright `fill()` fails on Shoelace shadow DOM | Testing |
 | Agent `display_name` not respected on re-join | API |
@@ -70,7 +70,7 @@ The other agent session committed `f152f9b` which rewrote `task-detail.ts` as pa
 
 ## What didn't work
 
-**Token expiry with no warning.** Keycloak tokens expire in 5 minutes. The API returns an empty body on 401 — no JSON, no error message. The agent burned several cycles debugging "empty responses" before realizing it was auth expiry. Every API call batch required a fresh token.
+**Token expiry with no warning.** Auth tokens expire in 5 minutes. The API returns an empty body on 401 — no JSON, no error message. The agent burned several cycles debugging "empty responses" before realizing it was auth expiry. Every API call batch required a fresh token.
 
 **Agent join is a separate endpoint.** The join flow for agents (`/api/agent/join`) is different from humans (`/api/sessions/{code}/join`), but this isn't documented anywhere the agent can discover it. It required grepping the server source code.
 

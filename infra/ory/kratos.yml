@@ -8,7 +8,7 @@ serve:
     cors:
       enabled: true
       allowed_origins:
-        - http://localhost:5173
+        - http://localhost:8585
       allowed_methods:
         - POST
         - GET
@@ -25,9 +25,9 @@ serve:
     base_url: http://kratos:4434/
 
 selfservice:
-  default_browser_return_url: http://localhost:5173/
+  default_browser_return_url: http://localhost:8585/
   allowed_return_urls:
-    - http://localhost:5173
+    - http://localhost:8585
 
   methods:
     password:
@@ -43,7 +43,7 @@ selfservice:
           display_name: Seam
           id: localhost
           origins:
-            - http://localhost:5173
+            - http://localhost:8585
         passwordless: false
     passkey:
       enabled: true
@@ -52,34 +52,34 @@ selfservice:
           display_name: Seam
           id: localhost
           origins:
-            - http://localhost:5173
+            - http://localhost:8585
 
   flows:
     login:
-      ui_url: http://localhost:5173/auth/login
+      ui_url: http://localhost:8585/auth/login
       lifespan: 10m
     registration:
       enabled: false
-      ui_url: http://localhost:5173/auth/register
+      ui_url: http://localhost:8585/auth/register
       lifespan: 10m
       after:
         password:
           hooks:
             - hook: session
     settings:
-      ui_url: http://localhost:5173/settings
+      ui_url: http://localhost:8585/settings
       privileged_session_max_age: 15m
     recovery:
       enabled: true
-      ui_url: http://localhost:5173/auth/recovery
+      ui_url: http://localhost:8585/auth/recovery
     verification:
       enabled: true
-      ui_url: http://localhost:5173/auth/verify
+      ui_url: http://localhost:8585/auth/verify
     error:
-      ui_url: http://localhost:5173/auth/error
+      ui_url: http://localhost:8585/auth/error
     logout:
       after:
-        default_browser_return_url: http://localhost:5173/
+        default_browser_return_url: http://localhost:8585/
 
 log:
   level: info

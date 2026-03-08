@@ -25,6 +25,8 @@ export default defineConfig({
     headers: {
       "Cache-Control": "no-store",
     },
+    port: 8585,
+    strictPort: true,
     proxy: {
       "/api": "http://localhost:3002",
       "/mcp": "http://localhost:3002",

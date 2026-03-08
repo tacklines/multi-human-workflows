@@ -99,7 +99,7 @@ Plus 6 bugs fixed along the way (401 error bodies, MCP crashes, session persiste
 
 **No branch isolation.** Two agents on the same branch with overlapping file changes is fragile. The selective-staging workaround is clever but accident-prone. Feature branches per agent (or per task) would be more robust.
 
-**Token lifecycle is hostile to agents.** Keycloak tokens expire in 5 minutes. Every batch of API calls risks a silent 401. Agent sessions should get longer-lived tokens or automatic refresh.
+**Token lifecycle is hostile to agents.** Auth tokens expire in 5 minutes. Every batch of API calls risks a silent 401. Agent sessions should get longer-lived tokens or automatic refresh.
 
 **No conflict detection.** If two agents update the same task, last-write-wins. No optimistic locking, no version field, no notification that your update was overwritten. This is fine for 1-2 agents but would cause data loss at scale.
 

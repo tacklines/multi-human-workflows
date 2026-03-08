@@ -29,6 +29,8 @@ dev: infra-up
     if [ -f .env.coder ]; then
       echo "✓ Loading Coder credentials from .env.coder"
       set -a; source .env.coder; set +a
+      # Sync template if it changed since last push
+      ./infra/coder/template-sync.sh || true
     fi
 
     ./infra/ory/seed-hydra-client.sh &
@@ -72,6 +74,8 @@ dev-noauth: infra-up
     if [ -f .env.coder ]; then
       echo "✓ Loading Coder credentials from .env.coder"
       set -a; source .env.coder; set +a
+      # Sync template if it changed since last push
+      ./infra/coder/template-sync.sh || true
     fi
 
     ./infra/ory/seed-hydra-client.sh &
@@ -106,6 +110,21 @@ coder-up:
     @echo "Waiting for coder-init to finish..."
     @docker compose --profile coder logs -f coder-init 2>/dev/null || true
     @if [ -f .env.coder ]; then echo "✓ Coder ready — .env.coder written"; else echo "⚠ .env.coder not found — check coder-init logs"; fi
+    just coder-template-sync
+
+# Push seam-agent template to Coder (unconditional)
+coder-template-push:
+    #!/usr/bin/env bash
+    set -e
+    if [ -f .env.coder ]; then set -a; source .env.coder; set +a; fi
+    ./infra/coder/template-sync.sh --force
+
+# Sync seam-agent template to Coder if changed (idempotent, skips if unchanged)
+coder-template-sync:
+    #!/usr/bin/env bash
+    set -e
+    if [ -f .env.coder ]; then set -a; source .env.coder; set +a; fi
+    ./infra/coder/template-sync.sh
 
 # Stop Docker infra
 infra-down:

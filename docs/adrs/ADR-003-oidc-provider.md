@@ -1,6 +1,6 @@
 # ADR-003: OIDC Provider Selection
 
-**Status**: Proposed
+**Status**: Superseded (2026-03-07) — replaced by Ory Hydra + Kratos. See `docs/plan-ory-migration.md`.
 **Date**: 2026-03-06
 **Deciders**: ty
 
@@ -33,9 +33,18 @@ Use **Zitadel** as the production OIDC provider.
 - **Migration path**: Standard OIDC — if Zitadel proves insufficient, any other provider (including Cognito) can replace it without Seam server changes
 - Cognito was tempting (zero infra) but its OIDC customization is limited and creates an AWS-specific dependency for a security-critical service
 
-## Consequences
+## Consequences (original, now moot)
 
 - Must create Zitadel k8s deployment manifests
 - Realm/client configuration from `infra/keycloak/realm-export.json` must be translated to Zitadel project/application config
 - Dev environment can continue using Keycloak — the Seam server doesn't care as long as JWKS works
 - Zitadel shares the RDS instance: simpler infrastructure, but backup/restore must account for both databases
+
+## Superseded
+
+Zitadel was never deployed. The project migrated directly from Keycloak to **Ory Hydra + Kratos** (2026-03-07):
+
+- **Hydra** handles OAuth2/OIDC (token issuance, JWKS, client management, Dynamic Client Registration)
+- **Kratos** handles identity management (registration, login, password hashing, account recovery)
+- Seam server bridges the two via Hydra admin API for login/consent flows
+- See `docs/plan-ory-migration.md` for the migration plan and `docs/ory-auth-guide.md` for operational details
