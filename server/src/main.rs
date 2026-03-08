@@ -550,7 +550,7 @@ async fn well_known_protected_resource(State(state): State<Arc<AppState>>) -> im
     Json(serde_json::json!({
         "resource": resource,
         "authorization_servers": [&state.issuer_url],
-        "scopes_supported": ["openid", "profile"],
+        "scopes_supported": ["openid", "profile", "offline_access"],
         "bearer_methods_supported": ["header"],
     }))
 }
