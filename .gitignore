@@ -10,6 +10,7 @@ frontend/.vite/
 .env
 .env.local
 .env.*.local
+.env.coder
 
 # IDE
 .idea/

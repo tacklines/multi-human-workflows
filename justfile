@@ -2,10 +2,10 @@
 
 set dotenv-load
 
-export KEYCLOAK_PORT := env("KEYCLOAK_PORT", "8081")
 export POSTGRES_PORT := env("POSTGRES_PORT", "5433")
 export DATABASE_URL := env("DATABASE_URL", "postgres://seam:seam@localhost:" + POSTGRES_PORT + "/seam")
-export KEYCLOAK_URL := env("KEYCLOAK_URL", "http://localhost:" + KEYCLOAK_PORT)
+export HYDRA_PUBLIC_PORT := env("HYDRA_PUBLIC_PORT", "4444")
+export KRATOS_PUBLIC_PORT := env("KRATOS_PUBLIC_PORT", "4433")
 
 # Start everything: infra + backend + frontend
 dev: infra-up
@@ -17,9 +17,22 @@ dev: infra-up
     until pg_isready -h localhost -p {{POSTGRES_PORT}} -U seam -q 2>/dev/null; do sleep 0.5; done
     echo "✓ Postgres ready"
 
-    echo "⏳ Waiting for Keycloak..."
-    until curl -sf http://localhost:{{KEYCLOAK_PORT}}/realms/seam > /dev/null 2>&1; do sleep 1; done
-    echo "✓ Keycloak ready"
+    echo "⏳ Waiting for Hydra..."
+    until curl -sf http://localhost:{{HYDRA_PUBLIC_PORT}}/health/ready > /dev/null 2>&1; do sleep 1; done
+    echo "✓ Hydra ready"
+
+    echo "⏳ Waiting for Kratos..."
+    until curl -sf http://localhost:{{KRATOS_PUBLIC_PORT}}/health/ready > /dev/null 2>&1; do sleep 1; done
+    echo "✓ Kratos ready"
+
+    # Source Coder credentials if coder-init has written them
+    if [ -f .env.coder ]; then
+      echo "✓ Loading Coder credentials from .env.coder"
+      set -a; source .env.coder; set +a
+    fi
+
+    ./infra/ory/seed-hydra-client.sh &
+    ./infra/ory/seed-test-user.sh &
 
     echo "🚀 Starting backend + frontend..."
     cd server && cargo watch -x 'run --bin seam-server' 2>&1 | sed 's/^/[server] /' &
@@ -47,9 +60,22 @@ dev-noauth: infra-up
     until pg_isready -h localhost -p {{POSTGRES_PORT}} -U seam -q 2>/dev/null; do sleep 0.5; done
     echo "✓ Postgres ready"
 
-    echo "⏳ Waiting for Keycloak..."
-    until curl -sf http://localhost:{{KEYCLOAK_PORT}}/realms/seam > /dev/null 2>&1; do sleep 1; done
-    echo "✓ Keycloak ready"
+    echo "⏳ Waiting for Hydra..."
+    until curl -sf http://localhost:{{HYDRA_PUBLIC_PORT}}/health/ready > /dev/null 2>&1; do sleep 1; done
+    echo "✓ Hydra ready"
+
+    echo "⏳ Waiting for Kratos..."
+    until curl -sf http://localhost:{{KRATOS_PUBLIC_PORT}}/health/ready > /dev/null 2>&1; do sleep 1; done
+    echo "✓ Kratos ready"
+
+    # Source Coder credentials if coder-init has written them
+    if [ -f .env.coder ]; then
+      echo "✓ Loading Coder credentials from .env.coder"
+      set -a; source .env.coder; set +a
+    fi
+
+    ./infra/ory/seed-hydra-client.sh &
+    ./infra/ory/seed-test-user.sh &
 
     echo "🚀 Starting backend (MCP auth disabled) + frontend..."
     export MCP_AUTH_DISABLED=true
@@ -70,9 +96,16 @@ server-noauth:
 frontend:
     cd frontend && npx vite
 
-# Start Docker infra (Keycloak + Postgres)
+# Start Docker infra (Hydra + Kratos + Postgres + RabbitMQ)
 infra-up:
     docker compose up -d
+
+# Start Docker infra with Coder (auto-bootstraps first user + template + token)
+coder-up:
+    docker compose --profile coder up -d
+    @echo "Waiting for coder-init to finish..."
+    @docker compose --profile coder logs -f coder-init 2>/dev/null || true
+    @if [ -f .env.coder ]; then echo "✓ Coder ready — .env.coder written"; else echo "⚠ .env.coder not found — check coder-init logs"; fi
 
 # Stop Docker infra
 infra-down:
@@ -144,19 +177,30 @@ ps:
 logs service="":
     docker compose logs -f {{service}}
 
-# Get a test token from Keycloak (testuser/testpass)
+# Get a test token from Hydra (creates a client_credentials client, then fetches a JWT)
 token:
     #!/usr/bin/env bash
-    curl -s -X POST {{KEYCLOAK_URL}}/realms/seam/protocol/openid-connect/token \
-      -d "grant_type=password" \
-      -d "client_id=web-app" \
-      -d "username=testuser" \
-      -d "password=testpass" \
-      -d "scope=openid profile email" | jq -r '.access_token'
+    set -euo pipefail
+    HYDRA_ADMIN="http://localhost:${HYDRA_ADMIN_PORT:-4445}"
+    # Create (or reuse) a test client
+    CLIENT=$(curl -sf "$HYDRA_ADMIN/admin/clients" \
+      -H "Content-Type: application/json" \
+      -d '{"client_id":"seam-test","client_secret":"seam-test-secret","grant_types":["client_credentials"],"token_endpoint_auth_method":"client_secret_post","scope":"openid"}' 2>/dev/null \
+      || curl -sf "$HYDRA_ADMIN/admin/clients/seam-test" 2>/dev/null)
+    # Fetch token
+    curl -s -X POST http://localhost:{{HYDRA_PUBLIC_PORT}}/oauth2/token \
+      -d "grant_type=client_credentials" \
+      -d "client_id=seam-test" \
+      -d "client_secret=seam-test-secret" \
+      -d "scope=openid" | jq -r '.access_token'
 
 # Run the background worker (scheduler + reactions)
 worker:
     cd server && cargo run --bin seam-worker
+
+# Seed test user into Kratos (idempotent)
+seed-user:
+    ./infra/ory/seed-test-user.sh
 
 # Create a test session (requires running backend)
 test-session:

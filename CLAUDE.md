@@ -23,6 +23,7 @@ Serial dispatch (dispatch -> wait -> review -> dispatch next) is reserved for ta
 ```bash
 just dev                  # Start everything (infra + server + frontend)
 just dev-noauth           # Same but with MCP auth disabled
+just coder-up             # Start Coder with auto-bootstrap (first user + template + token)
 just worker               # Start the seam-worker (event bridge + scheduler)
 just test                 # cargo test (server)
 just check-all            # cargo check + tsc --noEmit
@@ -70,15 +71,13 @@ cd frontend && npm run dev     # Vite on :5173
 
 Test user: register at http://localhost:5173/auth/register (Kratos)
 
-### Coder Integration (optional)
+### Coder Integration
 
 ```bash
-docker compose --profile coder up -d   # Add Coder on :7080
-./infra/coder/setup.sh                 # Push seam-agent template
-# Set env vars for the Seam server:
-export CODER_URL=http://localhost:7080
-export CODER_TOKEN=<coder tokens create --name seam-integration>
+just coder-up    # Starts Coder + auto-bootstraps first user, template, and API token
 ```
+
+This writes `.env.coder` with `CODER_URL` and `CODER_TOKEN`. The `just dev` / `just dev-noauth` recipes auto-source it if present. Idempotent — safe to re-run.
 
 Health check: `GET /api/integrations/coder/status`
 

@@ -60,6 +60,11 @@ services:
       - ./infra/ory/identity.schema.json:/etc/config/kratos/identity.schema.json:ro
     environment:
       DSN: postgres://seam:seam@postgres:5432/kratos?sslmode=disable
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:4433/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -95,6 +100,26 @@ services:
       - "${DOCKER_GROUP_ID:-984}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7080/api/v2/buildinfo"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  coder-init:
+    image: ghcr.io/coder/coder:latest
+    profiles: [coder]
+    user: "0:0"
+    depends_on:
+      coder:
+        condition: service_healthy
+    volumes:
+      - ./infra/coder/templates:/templates:ro
+      - ./infra/coder/init.sh:/init.sh:ro
+      - .:/output
+    entrypoint: ["/bin/bash", "/init.sh"]
+    restart: "no"
 
 volumes:
   pgdata:

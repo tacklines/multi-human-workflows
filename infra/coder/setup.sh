@@ -1,5 +1,7 @@
 #!/bin/bash
-# Setup script for Coder integration with Seam.
+# Manual setup script for Coder integration with Seam.
+# NOTE: Prefer `just coder-up` which auto-bootstraps via coder-init container.
+# This script is a fallback for manual setup or non-Docker environments.
 #
 # Prerequisites:
 #   - Coder CLI installed (curl -L https://coder.com/install.sh | sh)
