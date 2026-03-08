@@ -897,6 +897,13 @@ export const messagesEn: Record<string, string> = {
   "dispatch.budget.high": "High",
   "dispatch.budget.medium": "Medium",
   "dispatch.budget.low": "Low",
+
+  // ── project-level dispatch ──
+  "dispatch.project.button": "Dispatch Agent",
+  "dispatch.project.action.archReview": "Architecture Review",
+  "dispatch.project.action.sprintPlan": "Sprint Plan",
+  "dispatch.project.action.codeQuality": "Code Quality",
+  "dispatch.project.action.custom": "Custom...",
 };
 
 // Wire English into the locale map

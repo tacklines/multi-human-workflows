@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property, query, state } from "lit/decorators.js";
 import {
   fetchProject,
   fetchProjectSessions,
@@ -20,6 +20,10 @@ import "@shoelace-style/shoelace/dist/components/icon/icon.js";
 import "@shoelace-style/shoelace/dist/components/spinner/spinner.js";
 import "@shoelace-style/shoelace/dist/components/badge/badge.js";
 import "@shoelace-style/shoelace/dist/components/alert/alert.js";
+import "@shoelace-style/shoelace/dist/components/dropdown/dropdown.js";
+import "@shoelace-style/shoelace/dist/components/menu/menu.js";
+import "@shoelace-style/shoelace/dist/components/menu-item/menu-item.js";
+import "@shoelace-style/shoelace/dist/components/divider/divider.js";
 
 import "../plans/plan-list.js";
 import "../plans/plan-detail.js";
@@ -34,6 +38,7 @@ import "../workspaces/workspace-detail.js";
 import "../invocations/invocation-list.js";
 import "../invocations/invocation-detail.js";
 import "../invocations/invoke-dialog.js";
+import type { InvokeDialog } from "../invocations/invoke-dialog.js";
 import "../tasks/task-board.js";
 import "../automations/automation-panel.js";
 import "./project-overview.js";
@@ -219,6 +224,9 @@ export class ProjectWorkspace extends LitElement {
   @state() private _loading = true;
   @state() private _error = "";
   @state() private _activeTab = "overview";
+
+  @query("#project-dispatch-dialog")
+  private _projectDispatchDialog!: InvokeDialog;
 
   connectedCallback() {
     super.connectedCallback();
@@ -413,6 +421,34 @@ export class ProjectWorkspace extends LitElement {
     `;
   }
 
+  private _handleProjectDispatch(e: CustomEvent) {
+    const action = (e.detail as { item: { value: string } }).item.value;
+    switch (action) {
+      case "arch-review":
+        this._projectDispatchDialog.showWithPerspective(
+          "reviewer",
+          "Review the architecture of this project. Analyze code organization, design patterns, dependency structure, and suggest improvements.",
+        );
+        break;
+      case "sprint-plan":
+        this._projectDispatchDialog.showWithPerspective(
+          "planner",
+          "Analyze the project's open tasks and create a sprint plan. Prioritize by value and dependency order, identify parallel work opportunities.",
+        );
+        break;
+      case "code-quality":
+        this._projectDispatchDialog.showWithPerspective(
+          "reviewer",
+          "Analyze code quality across the project. Check for security issues, test coverage gaps, dead code, and style inconsistencies.",
+        );
+        break;
+      case "custom":
+      default:
+        this._projectDispatchDialog.show();
+        break;
+    }
+  }
+
   private _renderHeader() {
     const p = this._project!;
     return html`
@@ -432,7 +468,48 @@ export class ProjectWorkspace extends LitElement {
         </span>
         <h1>${p.name}</h1>
         <span class="prefix-badge">${p.ticket_prefix}</span>
+        <sl-dropdown>
+          <sl-button
+            slot="trigger"
+            caret
+            variant="primary"
+            size="small"
+            outline
+          >
+            <sl-icon slot="prefix" name="robot"></sl-icon>
+            ${t("dispatch.project.button")}
+          </sl-button>
+          <sl-menu
+            @sl-select=${(e: CustomEvent) => this._handleProjectDispatch(e)}
+          >
+            <sl-menu-item value="arch-review">
+              <sl-icon slot="prefix" name="diagram-3"></sl-icon>
+              ${t("dispatch.project.action.archReview")}
+            </sl-menu-item>
+            <sl-menu-item value="sprint-plan">
+              <sl-icon slot="prefix" name="kanban"></sl-icon>
+              ${t("dispatch.project.action.sprintPlan")}
+            </sl-menu-item>
+            <sl-menu-item value="code-quality">
+              <sl-icon slot="prefix" name="search"></sl-icon>
+              ${t("dispatch.project.action.codeQuality")}
+            </sl-menu-item>
+            <sl-divider></sl-divider>
+            <sl-menu-item value="custom">
+              <sl-icon slot="prefix" name="gear"></sl-icon>
+              ${t("dispatch.project.action.custom")}
+            </sl-menu-item>
+          </sl-menu>
+        </sl-dropdown>
       </div>
+      <invoke-dialog
+        id="project-dispatch-dialog"
+        project-id=${this.projectId}
+        @invocation-created=${(e: CustomEvent) => {
+          this._selectedInvocationId = e.detail.invocation.id;
+          this._switchTab("invocations");
+        }}
+      ></invoke-dialog>
     `;
   }
 
