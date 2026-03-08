@@ -353,6 +353,28 @@ struct UnlinkRequestRequirementParams {
     requirement_id: String,
 }
 
+// --- Workspace params ---
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ListWorkspacesParams {
+    /// Filter by status: pending, creating, running, stopping, stopped, failed, destroyed
+    status: Option<String>,
+    /// Maximum number of results to return (default 20)
+    limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetWorkspaceParams {
+    /// Workspace ID (UUID)
+    id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct StopWorkspaceParams {
+    /// Workspace ID (UUID) of the running workspace to stop
+    id: String,
+}
+
 // --- Invocation params ---
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -4483,6 +4505,251 @@ impl SeamMcp {
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&result).unwrap(),
         )]))
+    }
+
+    #[tool(
+        description = "List Coder workspaces for the current project, optionally filtered by status."
+    )]
+    async fn list_workspaces(
+        &self,
+        Parameters(params): Parameters<ListWorkspacesParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let limit = params.limit.unwrap_or(20).min(100);
+
+        let workspaces: Vec<crate::models::Workspace> = sqlx::query_as(
+            "SELECT * FROM workspaces
+             WHERE project_id = $1
+               AND ($2::text IS NULL OR status = $2)
+             ORDER BY created_at DESC
+             LIMIT $3",
+        )
+        .bind(project_id)
+        .bind(&params.status)
+        .bind(limit)
+        .fetch_all(&self.db)
+        .await
+        .map_err(|e| McpError::internal_error(format!("Failed to list workspaces: {e}"), None))?;
+
+        let items: Vec<serde_json::Value> = workspaces
+            .iter()
+            .map(|w| {
+                serde_json::json!({
+                    "id": w.id,
+                    "coder_workspace_name": w.coder_workspace_name,
+                    "status": w.status,
+                    "pool_key": w.pool_key,
+                    "branch": w.branch,
+                    "task_id": w.task_id,
+                    "participant_id": w.participant_id,
+                    "template_name": w.template_name,
+                    "created_at": w.created_at,
+                    "last_invocation_at": w.last_invocation_at,
+                })
+            })
+            .collect();
+
+        let result = serde_json::json!({
+            "count": items.len(),
+            "workspaces": items,
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(description = "Get details of a specific Coder workspace by ID.")]
+    async fn get_workspace(
+        &self,
+        Parameters(params): Parameters<GetWorkspaceParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let workspace_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid workspace ID: must be a UUID",
+                )]))
+            }
+        };
+
+        let w: Option<crate::models::Workspace> =
+            sqlx::query_as("SELECT * FROM workspaces WHERE id = $1 AND project_id = $2")
+                .bind(workspace_id)
+                .bind(project_id)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| {
+                    McpError::internal_error(format!("Failed to fetch workspace: {e}"), None)
+                })?;
+
+        let w = match w {
+            Some(ws) => ws,
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Workspace not found or does not belong to this project",
+                )]))
+            }
+        };
+
+        let result = serde_json::json!({
+            "id": w.id,
+            "coder_workspace_id": w.coder_workspace_id,
+            "coder_workspace_name": w.coder_workspace_name,
+            "status": w.status,
+            "pool_key": w.pool_key,
+            "branch": w.branch,
+            "task_id": w.task_id,
+            "participant_id": w.participant_id,
+            "template_name": w.template_name,
+            "error_message": w.error_message,
+            "created_at": w.created_at,
+            "updated_at": w.updated_at,
+            "started_at": w.started_at,
+            "stopped_at": w.stopped_at,
+            "last_invocation_at": w.last_invocation_at,
+        });
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&result).unwrap(),
+        )]))
+    }
+
+    #[tool(description = "Stop a running Coder workspace to free resources.")]
+    async fn stop_workspace(
+        &self,
+        Parameters(params): Parameters<StopWorkspaceParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let project_id = match self.require_project() {
+            Ok(id) => id,
+            Err(e) => return Ok(e),
+        };
+
+        let workspace_id = match Uuid::parse_str(&params.id) {
+            Ok(id) => id,
+            Err(_) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Invalid workspace ID: must be a UUID",
+                )]))
+            }
+        };
+
+        let w: Option<crate::models::Workspace> =
+            sqlx::query_as("SELECT * FROM workspaces WHERE id = $1 AND project_id = $2")
+                .bind(workspace_id)
+                .bind(project_id)
+                .fetch_optional(&self.db)
+                .await
+                .map_err(|e| {
+                    McpError::internal_error(format!("Failed to fetch workspace: {e}"), None)
+                })?;
+
+        let w = match w {
+            Some(ws) => ws,
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Workspace not found or does not belong to this project",
+                )]))
+            }
+        };
+
+        if w.status != crate::models::WorkspaceStatus::Running {
+            return Ok(CallToolResult::error(vec![Content::text(format!(
+                "Workspace is not running (current status: {:?}). Only running workspaces can be stopped.",
+                w.status
+            ))]));
+        }
+
+        let coder_ws_id = match w.coder_workspace_id {
+            Some(id) => id,
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Workspace has no Coder ID — cannot stop",
+                )]))
+            }
+        };
+
+        // Build Coder client from environment (same pattern as routes/workspaces.rs)
+        let coder_url = std::env::var("CODER_URL").unwrap_or_default();
+        let coder_token = std::env::var("CODER_TOKEN").unwrap_or_default();
+        if coder_url.is_empty() || coder_token.is_empty() {
+            return Ok(CallToolResult::error(vec![Content::text(
+                "Coder integration is not configured on this server",
+            )]));
+        }
+        let client = crate::coder::CoderClient::new(coder_url, coder_token);
+
+        // Mark as stopping
+        let _ = sqlx::query(
+            "UPDATE workspaces SET status = 'stopping', updated_at = NOW() WHERE id = $1",
+        )
+        .bind(workspace_id)
+        .execute(&self.db)
+        .await;
+
+        match client.stop_workspace(coder_ws_id).await {
+            Ok(_) => {
+                sqlx::query(
+                    "UPDATE workspaces SET status = 'stopped', stopped_at = NOW(), updated_at = NOW() WHERE id = $1",
+                )
+                .bind(workspace_id)
+                .execute(&self.db)
+                .await
+                .map_err(|e| {
+                    McpError::internal_error(format!("Failed to update workspace status: {e}"), None)
+                })?;
+
+                let event = crate::events::DomainEvent::new(
+                    "workspace.stopped",
+                    "workspace",
+                    workspace_id,
+                    None,
+                    serde_json::json!({ "coder_workspace_id": coder_ws_id }),
+                );
+                if let Err(e) = crate::events::emit(&self.db, &event).await {
+                    tracing::warn!("Failed to emit workspace.stopped domain event: {e}");
+                }
+
+                let result = serde_json::json!({
+                    "id": workspace_id,
+                    "status": "stopped",
+                    "message": "Workspace stopped successfully",
+                });
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result).unwrap(),
+                )]))
+            }
+            Err(e) => {
+                let error_message = format!("Failed to stop workspace: {e}");
+                let _ = sqlx::query(
+                    "UPDATE workspaces SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1",
+                )
+                .bind(workspace_id)
+                .bind(&error_message)
+                .execute(&self.db)
+                .await;
+
+                let event = crate::events::DomainEvent::new(
+                    "workspace.failed",
+                    "workspace",
+                    workspace_id,
+                    None,
+                    serde_json::json!({ "error_message": error_message }),
+                );
+                if let Err(ev_err) = crate::events::emit(&self.db, &event).await {
+                    tracing::warn!("Failed to emit workspace.failed domain event: {ev_err}");
+                }
+
+                Ok(CallToolResult::error(vec![Content::text(error_message)]))
+            }
+        }
     }
 }
 
