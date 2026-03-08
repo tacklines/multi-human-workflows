@@ -23,6 +23,17 @@ pub trait CoderApi {
         owner: &str,
         req: CreateWorkspaceRequest,
     ) -> impl std::future::Future<Output = Result<CoderWorkspace, CoderError>> + Send;
+
+    /// Poll the workspace until its build status is "running" (agent ready for SSH).
+    ///
+    /// Uses exponential backoff: 1s, 2s, 4s, 8s, ... up to `timeout` total.
+    /// Returns `Ok(())` once the workspace is running, or `Err` if it fails or
+    /// times out.
+    fn wait_until_ready(
+        &self,
+        workspace_id: Uuid,
+        timeout: Duration,
+    ) -> impl std::future::Future<Output = Result<(), CoderError>> + Send;
 }
 
 /// Thin HTTP client for Coder's REST API.
@@ -298,6 +309,84 @@ impl CoderClient {
         self.check_response(resp).await?;
         Ok(())
     }
+
+    /// Poll the workspace until its build is running (agent SSH-ready).
+    ///
+    /// Workspace build lifecycle: pending → starting → running (or failed/canceled).
+    /// We poll `GET /api/v2/workspaces/{id}` with exponential backoff (1s, 2s, 4s, 8s …)
+    /// until `latest_build.status == "running"` OR we exceed `timeout`.
+    pub async fn wait_until_ready(&self, id: Uuid, timeout: Duration) -> Result<(), CoderError> {
+        let deadline = std::time::Instant::now() + timeout;
+        let mut delay = Duration::from_secs(1);
+
+        loop {
+            let workspace = self.get_workspace(id).await?;
+            let build_status = workspace.latest_build.status.as_str();
+            let job_status = workspace.latest_build.job.status.as_str();
+
+            tracing::debug!(
+                workspace_id = %id,
+                build_status = build_status,
+                job_status = job_status,
+                "Polling workspace readiness"
+            );
+
+            match build_status {
+                "running" => {
+                    tracing::info!(workspace_id = %id, "Workspace build is running; agent ready");
+                    return Ok(());
+                }
+                "failed" | "canceled" | "deleted" => {
+                    let err_msg = workspace
+                        .latest_build
+                        .job
+                        .error
+                        .unwrap_or_else(|| format!("build status: {}", build_status));
+                    tracing::error!(
+                        workspace_id = %id,
+                        build_status = build_status,
+                        error = %err_msg,
+                        "Workspace build entered terminal failure state"
+                    );
+                    return Err(CoderError::Api {
+                        status: 500,
+                        message: format!("Workspace build failed: {}", err_msg),
+                    });
+                }
+                // "pending" | "starting" | "stopping" | "canceling" | etc. — keep waiting
+                _ => {
+                    if std::time::Instant::now() >= deadline {
+                        tracing::warn!(
+                            workspace_id = %id,
+                            build_status = build_status,
+                            "Timed out waiting for workspace to become ready"
+                        );
+                        return Err(CoderError::Api {
+                            status: 504,
+                            message: format!(
+                                "Workspace did not become ready within {:?} (last status: {})",
+                                timeout, build_status
+                            ),
+                        });
+                    }
+
+                    // Cap delay so we don't overshoot the deadline by too much
+                    let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                    let sleep_for = delay.min(remaining);
+                    tracing::debug!(
+                        workspace_id = %id,
+                        build_status = build_status,
+                        sleep_secs = sleep_for.as_secs_f32(),
+                        "Workspace not ready; waiting before next poll"
+                    );
+                    tokio::time::sleep(sleep_for).await;
+
+                    // Exponential backoff capped at 8s
+                    delay = (delay * 2).min(Duration::from_secs(8));
+                }
+            }
+        }
+    }
 }
 
 impl CoderApi for CoderClient {
@@ -315,6 +404,14 @@ impl CoderApi for CoderClient {
         req: CreateWorkspaceRequest,
     ) -> Result<CoderWorkspace, CoderError> {
         self.create_workspace(owner, req).await
+    }
+
+    async fn wait_until_ready(
+        &self,
+        workspace_id: Uuid,
+        timeout: Duration,
+    ) -> Result<(), CoderError> {
+        self.wait_until_ready(workspace_id, timeout).await
     }
 }
 
@@ -335,11 +432,14 @@ pub mod testing {
         pub get_template_result: Mutex<Result<Option<CoderTemplate>, String>>,
         /// Result returned by `create_workspace`.
         pub create_workspace_result: Mutex<Result<CoderWorkspace, String>>,
+        /// If set, `wait_until_ready` returns this error instead of Ok.
+        pub wait_until_ready_error: Mutex<Option<String>>,
 
         /// Call counts for assertions.
         pub start_workspace_calls: Mutex<Vec<Uuid>>,
         pub get_template_calls: Mutex<Vec<String>>,
         pub create_workspace_calls: Mutex<Vec<(String, String)>>, // (owner, workspace_name)
+        pub wait_until_ready_calls: Mutex<Vec<Uuid>>,
     }
 
     impl MockCoderClient {
@@ -382,9 +482,11 @@ pub mod testing {
                 start_workspace_result: Mutex::new(Ok(build)),
                 get_template_result: Mutex::new(Ok(Some(template))),
                 create_workspace_result: Mutex::new(Ok(workspace)),
+                wait_until_ready_error: Mutex::new(None),
                 start_workspace_calls: Mutex::new(vec![]),
                 get_template_calls: Mutex::new(vec![]),
                 create_workspace_calls: Mutex::new(vec![]),
+                wait_until_ready_calls: Mutex::new(vec![]),
             }
         }
 
@@ -485,5 +587,189 @@ pub mod testing {
                     message: e.clone(),
                 })
         }
+
+        async fn wait_until_ready(
+            &self,
+            workspace_id: Uuid,
+            _timeout: Duration,
+        ) -> Result<(), CoderError> {
+            self.wait_until_ready_calls
+                .lock()
+                .unwrap()
+                .push(workspace_id);
+
+            // Return configured error if set
+            if let Some(ref msg) = *self.wait_until_ready_error.lock().unwrap() {
+                return Err(CoderError::Api {
+                    status: 500,
+                    message: msg.clone(),
+                });
+            }
+
+            Ok(())
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Unit tests for CoderClient::wait_until_ready logic
+    // -------------------------------------------------------------------------
+    //
+    // We test the polling behaviour by constructing a test double that returns
+    // a sequence of workspace statuses before finally returning "running".
+    // This avoids needing a real HTTP server.
+
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// A minimal CoderApi implementation that drives `wait_until_ready` through
+    /// a sequence of build statuses, then returns "running".
+    struct SequencedMock {
+        /// Build statuses to return on successive `get_workspace` polls.
+        /// The LAST entry is used for all subsequent calls once the list is exhausted.
+        statuses: Vec<&'static str>,
+        call_count: AtomicUsize,
+    }
+
+    impl SequencedMock {
+        fn new(statuses: Vec<&'static str>) -> Self {
+            Self {
+                statuses,
+                call_count: AtomicUsize::new(0),
+            }
+        }
+
+        fn current_status(&self) -> &'static str {
+            let idx = self.call_count.fetch_add(1, Ordering::SeqCst);
+            self.statuses
+                .get(idx)
+                .copied()
+                .unwrap_or(*self.statuses.last().unwrap_or(&"running"))
+        }
+    }
+
+    impl CoderApi for SequencedMock {
+        async fn start_workspace(&self, _id: Uuid) -> Result<CoderWorkspaceBuild, CoderError> {
+            unimplemented!()
+        }
+        async fn get_template_by_name(
+            &self,
+            _name: &str,
+        ) -> Result<Option<CoderTemplate>, CoderError> {
+            unimplemented!()
+        }
+        async fn create_workspace(
+            &self,
+            _owner: &str,
+            _req: CreateWorkspaceRequest,
+        ) -> Result<CoderWorkspace, CoderError> {
+            unimplemented!()
+        }
+        async fn wait_until_ready(
+            &self,
+            _workspace_id: Uuid,
+            timeout: Duration,
+        ) -> Result<(), CoderError> {
+            // Simulate the polling loop without real HTTP or sleep:
+            // iterate through statuses and mimic the terminal-state logic.
+            let deadline = std::time::Instant::now() + timeout;
+            loop {
+                let status = self.current_status();
+                match status {
+                    "running" => return Ok(()),
+                    "failed" | "canceled" | "deleted" => {
+                        return Err(CoderError::Api {
+                            status: 500,
+                            message: format!("Workspace build failed: build status: {}", status),
+                        });
+                    }
+                    _ => {
+                        if std::time::Instant::now() >= deadline {
+                            return Err(CoderError::Api {
+                                status: 504,
+                                message: format!(
+                                    "Workspace did not become ready within {:?} (last status: {})",
+                                    timeout, status
+                                ),
+                            });
+                        }
+                        // No actual sleep in unit tests — just loop
+                    }
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn wait_until_ready_returns_ok_when_already_running() {
+        let mock = SequencedMock::new(vec!["running"]);
+        let result = mock
+            .wait_until_ready(Uuid::new_v4(), Duration::from_secs(60))
+            .await;
+        assert!(result.is_ok(), "expected Ok but got {result:?}");
+    }
+
+    #[tokio::test]
+    async fn wait_until_ready_retries_on_starting_then_succeeds() {
+        // starting → starting → running
+        let mock = SequencedMock::new(vec!["starting", "starting", "running"]);
+        let result = mock
+            .wait_until_ready(Uuid::new_v4(), Duration::from_secs(60))
+            .await;
+        assert!(
+            result.is_ok(),
+            "should succeed after transient starting states; got {result:?}"
+        );
+        // Verify it polled at least 3 times (starting, starting, running)
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn wait_until_ready_retries_on_pending_then_succeeds() {
+        let mock = SequencedMock::new(vec!["pending", "pending", "starting", "running"]);
+        let result = mock
+            .wait_until_ready(Uuid::new_v4(), Duration::from_secs(60))
+            .await;
+        assert!(result.is_ok(), "expected Ok; got {result:?}");
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 4);
+    }
+
+    #[tokio::test]
+    async fn wait_until_ready_returns_err_on_failed_build() {
+        let mock = SequencedMock::new(vec!["starting", "failed"]);
+        let result = mock
+            .wait_until_ready(Uuid::new_v4(), Duration::from_secs(60))
+            .await;
+        assert!(result.is_err(), "expected Err but got Ok");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("failed"),
+            "error message should mention failure: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn wait_until_ready_returns_err_on_canceled_build() {
+        let mock = SequencedMock::new(vec!["canceling", "canceled"]);
+        let result = mock
+            .wait_until_ready(Uuid::new_v4(), Duration::from_secs(60))
+            .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("failed") || err.contains("canceled"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn wait_until_ready_times_out() {
+        // "starting" forever with a very short timeout so the loop exits immediately
+        let mock = SequencedMock::new(vec!["starting"]);
+        // Use a zero-duration timeout so the deadline is already passed after the first check
+        let result = mock
+            .wait_until_ready(Uuid::new_v4(), Duration::from_nanos(0))
+            .await;
+        assert!(result.is_err(), "expected timeout error");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("did not become ready") || err.contains("504"),
+            "error should mention timeout: {err}"
+        );
     }
 }

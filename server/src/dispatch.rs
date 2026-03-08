@@ -298,9 +298,22 @@ async fn wake_workspace<C: CoderApi>(
         tracing::warn!("Failed to emit workspace.running event: {e}");
     }
 
-    // Wait briefly for workspace to be SSH-ready
-    tracing::info!("Waiting for workspace to become SSH-ready after wake");
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    // Poll until the workspace build reaches "running" status (agent SSH-ready).
+    // Exponential backoff: 1s, 2s, 4s, 8s … up to 60s total.
+    tracing::info!("Polling workspace until SSH-ready after wake");
+    if let Err(e) = client
+        .wait_until_ready(coder_workspace_id, std::time::Duration::from_secs(60))
+        .await
+    {
+        tracing::error!(error = %e, "Workspace did not become ready after wake; reverting to stopped");
+        let _ = sqlx::query(
+            "UPDATE workspaces SET status = 'stopped', updated_at = NOW() WHERE id = $1",
+        )
+        .bind(workspace_id)
+        .execute(db)
+        .await;
+        return Err(DispatchError::CoderApi(e.to_string()));
+    }
 
     tracing::info!("Workspace woken and ready");
     Ok(())
@@ -422,12 +435,36 @@ async fn provision_pool_workspace<C: CoderApi>(
                 tracing::warn!("Failed to emit workspace.running event: {e}");
             }
 
-            tracing::info!(workspace_id = %workspace_id, "Pool workspace created and running");
+            tracing::info!(workspace_id = %workspace_id, "Pool workspace created; polling until ready");
 
-            // Wait for workspace startup to complete
-            tracing::info!(workspace_id = %workspace_id, "Waiting for new workspace to complete startup");
-            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            // Poll until the workspace build is running (agent SSH-ready).
+            // New workspaces can take longer to provision than waking stopped ones;
+            // allow up to 120s total.
+            if let Err(e) = client
+                .wait_until_ready(coder_ws.id, std::time::Duration::from_secs(120))
+                .await
+            {
+                tracing::error!(
+                    workspace_id = %workspace_id,
+                    coder_workspace_id = %coder_ws.id,
+                    error = %e,
+                    "New workspace did not become ready in time; marking failed"
+                );
+                let fail_msg = format!("Workspace readiness timeout: {e}");
+                if let Err(db_err) = sqlx::query(
+                    "UPDATE workspaces SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1",
+                )
+                .bind(workspace_id)
+                .bind(&fail_msg)
+                .execute(db)
+                .await
+                {
+                    tracing::warn!(workspace_id = %workspace_id, error = %db_err, "failed to update workspace status to failed after readiness timeout");
+                }
+                return Err(DispatchError::CoderApi(fail_msg));
+            }
 
+            tracing::info!(workspace_id = %workspace_id, "Pool workspace ready for dispatch");
             Ok(workspace_id)
         }
         Err(e) => {
