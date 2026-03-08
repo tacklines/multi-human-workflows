@@ -2,6 +2,28 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Trait abstracting the Coder API calls used by the dispatch layer.
+///
+/// Implementing this trait on a mock allows dispatch functions to be tested
+/// without a real Coder instance.
+pub trait CoderApi {
+    fn start_workspace(
+        &self,
+        id: Uuid,
+    ) -> impl std::future::Future<Output = Result<CoderWorkspaceBuild, CoderError>> + Send;
+
+    fn get_template_by_name(
+        &self,
+        name: &str,
+    ) -> impl std::future::Future<Output = Result<Option<CoderTemplate>, CoderError>> + Send;
+
+    fn create_workspace(
+        &self,
+        owner: &str,
+        req: CreateWorkspaceRequest,
+    ) -> impl std::future::Future<Output = Result<CoderWorkspace, CoderError>> + Send;
+}
+
 /// Thin HTTP client for Coder's REST API.
 ///
 /// Coder API docs: https://coder.com/docs/api
@@ -214,5 +236,193 @@ impl CoderClient {
             .await?;
         self.check_response(resp).await?;
         Ok(())
+    }
+}
+
+impl CoderApi for CoderClient {
+    async fn start_workspace(&self, id: Uuid) -> Result<CoderWorkspaceBuild, CoderError> {
+        self.start_workspace(id).await
+    }
+
+    async fn get_template_by_name(&self, name: &str) -> Result<Option<CoderTemplate>, CoderError> {
+        self.get_template_by_name(name).await
+    }
+
+    async fn create_workspace(
+        &self,
+        owner: &str,
+        req: CreateWorkspaceRequest,
+    ) -> Result<CoderWorkspace, CoderError> {
+        self.create_workspace(owner, req).await
+    }
+}
+
+/// Test double for the Coder API. Configure each field with the desired
+/// return value before passing to dispatch helpers under test.
+#[cfg(test)]
+pub mod testing {
+    use super::*;
+    use std::sync::Mutex;
+
+    /// A configurable mock of the Coder API.
+    ///
+    /// Each method records calls and returns a pre-configured result.
+    pub struct MockCoderClient {
+        /// Result returned by `start_workspace`.
+        pub start_workspace_result: Mutex<Result<CoderWorkspaceBuild, String>>,
+        /// Result returned by `get_template_by_name`.
+        pub get_template_result: Mutex<Result<Option<CoderTemplate>, String>>,
+        /// Result returned by `create_workspace`.
+        pub create_workspace_result: Mutex<Result<CoderWorkspace, String>>,
+
+        /// Call counts for assertions.
+        pub start_workspace_calls: Mutex<Vec<Uuid>>,
+        pub get_template_calls: Mutex<Vec<String>>,
+        pub create_workspace_calls: Mutex<Vec<(String, String)>>, // (owner, workspace_name)
+    }
+
+    impl MockCoderClient {
+        /// Create a mock where all operations succeed with the given template/workspace IDs.
+        pub fn new_ok(template_id: Uuid, coder_workspace_id: Uuid) -> Self {
+            let template = CoderTemplate {
+                id: template_id,
+                name: "seam-agent".to_string(),
+                organization_id: Uuid::new_v4(),
+            };
+            let job = CoderProvisionerJob {
+                id: Uuid::new_v4(),
+                status: "succeeded".to_string(),
+                error: None,
+            };
+            let build = CoderWorkspaceBuild {
+                id: Uuid::new_v4(),
+                status: "running".to_string(),
+                job,
+            };
+            let workspace = CoderWorkspace {
+                id: coder_workspace_id,
+                name: "seam-test".to_string(),
+                owner_id: Uuid::new_v4(),
+                owner_name: "me".to_string(),
+                template_id,
+                template_name: "seam-agent".to_string(),
+                latest_build: CoderWorkspaceBuild {
+                    id: Uuid::new_v4(),
+                    status: "running".to_string(),
+                    job: CoderProvisionerJob {
+                        id: Uuid::new_v4(),
+                        status: "succeeded".to_string(),
+                        error: None,
+                    },
+                },
+            };
+
+            Self {
+                start_workspace_result: Mutex::new(Ok(build)),
+                get_template_result: Mutex::new(Ok(Some(template))),
+                create_workspace_result: Mutex::new(Ok(workspace)),
+                start_workspace_calls: Mutex::new(vec![]),
+                get_template_calls: Mutex::new(vec![]),
+                create_workspace_calls: Mutex::new(vec![]),
+            }
+        }
+
+        /// Create a mock where `create_workspace` fails with the given message.
+        pub fn new_create_fails(template_id: Uuid, error_msg: &str) -> Self {
+            let mock = Self::new_ok(template_id, Uuid::new_v4());
+            *mock.create_workspace_result.lock().unwrap() = Err(error_msg.to_string());
+            mock
+        }
+
+        /// Create a mock where `get_template_by_name` returns None (template not found).
+        pub fn new_no_template() -> Self {
+            let mock = Self::new_ok(Uuid::new_v4(), Uuid::new_v4());
+            *mock.get_template_result.lock().unwrap() = Ok(None);
+            mock
+        }
+    }
+
+    impl CoderApi for MockCoderClient {
+        async fn start_workspace(&self, id: Uuid) -> Result<CoderWorkspaceBuild, CoderError> {
+            self.start_workspace_calls.lock().unwrap().push(id);
+            self.start_workspace_result
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|b| CoderWorkspaceBuild {
+                    id: b.id,
+                    status: b.status.clone(),
+                    job: CoderProvisionerJob {
+                        id: b.job.id,
+                        status: b.job.status.clone(),
+                        error: b.job.error.clone(),
+                    },
+                })
+                .map_err(|e| CoderError::Api {
+                    status: 500,
+                    message: e.clone(),
+                })
+        }
+
+        async fn get_template_by_name(
+            &self,
+            name: &str,
+        ) -> Result<Option<CoderTemplate>, CoderError> {
+            self.get_template_calls
+                .lock()
+                .unwrap()
+                .push(name.to_string());
+            self.get_template_result
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|opt| {
+                    opt.as_ref().map(|t| CoderTemplate {
+                        id: t.id,
+                        name: t.name.clone(),
+                        organization_id: t.organization_id,
+                    })
+                })
+                .map_err(|e| CoderError::Api {
+                    status: 500,
+                    message: e.clone(),
+                })
+        }
+
+        async fn create_workspace(
+            &self,
+            owner: &str,
+            req: CreateWorkspaceRequest,
+        ) -> Result<CoderWorkspace, CoderError> {
+            self.create_workspace_calls
+                .lock()
+                .unwrap()
+                .push((owner.to_string(), req.name.clone()));
+            self.create_workspace_result
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|ws| CoderWorkspace {
+                    id: ws.id,
+                    name: ws.name.clone(),
+                    owner_id: ws.owner_id,
+                    owner_name: ws.owner_name.clone(),
+                    template_id: ws.template_id,
+                    template_name: ws.template_name.clone(),
+                    latest_build: CoderWorkspaceBuild {
+                        id: ws.latest_build.id,
+                        status: ws.latest_build.status.clone(),
+                        job: CoderProvisionerJob {
+                            id: ws.latest_build.job.id,
+                            status: ws.latest_build.job.status.clone(),
+                            error: ws.latest_build.job.error.clone(),
+                        },
+                    },
+                })
+                .map_err(|e| CoderError::Api {
+                    status: 500,
+                    message: e.clone(),
+                })
+        }
     }
 }

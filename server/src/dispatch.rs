@@ -10,6 +10,7 @@ use tokio::process::Command;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
+use crate::coder::CoderApi;
 use crate::log_buffer::{LogBuffer, LogLine};
 use crate::ws::ConnectionManager;
 
@@ -47,6 +48,23 @@ pub async fn resolve_workspace(
     project_id: Uuid,
     branch: Option<&str>,
     user_id: Uuid,
+) -> Result<Uuid, DispatchError> {
+    let coder_url = std::env::var("CODER_URL").map_err(|_| DispatchError::CoderNotConfigured)?;
+    let coder_token =
+        std::env::var("CODER_TOKEN").map_err(|_| DispatchError::CoderNotConfigured)?;
+    let client = crate::coder::CoderClient::new(coder_url, coder_token);
+    resolve_workspace_with_client(db, project_id, branch, user_id, &client).await
+}
+
+/// Internal: resolve workspace using an explicit Coder API client.
+///
+/// Separated from `resolve_workspace` so tests can inject a `MockCoderClient`.
+pub(crate) async fn resolve_workspace_with_client<C: CoderApi>(
+    db: &PgPool,
+    project_id: Uuid,
+    branch: Option<&str>,
+    user_id: Uuid,
+    client: &C,
 ) -> Result<Uuid, DispatchError> {
     let pool_key = pool_key_for(project_id, branch);
 
@@ -97,13 +115,13 @@ pub async fn resolve_workspace(
 
     if let Some((ws_id, Some(coder_id))) = stopped {
         tracing::info!(workspace_id = %ws_id, "Waking stopped workspace");
-        wake_workspace(db, ws_id, coder_id).await?;
+        wake_workspace(db, ws_id, coder_id, client).await?;
         return Ok(ws_id);
     }
 
     // 4. Create a new workspace
     tracing::info!(project_id = %project_id, pool_key = %pool_key, "Creating new workspace for pool");
-    create_pool_workspace(db, project_id, branch, &pool_key, user_id).await
+    create_pool_workspace(db, project_id, branch, &pool_key, user_id, client).await
 }
 
 /// Build a pool key for project + optional branch.
@@ -115,17 +133,13 @@ fn pool_key_for(project_id: Uuid, branch: Option<&str>) -> String {
 }
 
 /// Wake a stopped Coder workspace via the API.
-#[tracing::instrument(skip(db), fields(workspace_id = %workspace_id, coder_workspace_id = %coder_workspace_id))]
-async fn wake_workspace(
+#[tracing::instrument(skip(db, client), fields(workspace_id = %workspace_id, coder_workspace_id = %coder_workspace_id))]
+async fn wake_workspace<C: CoderApi>(
     db: &PgPool,
     workspace_id: Uuid,
     coder_workspace_id: Uuid,
+    client: &C,
 ) -> Result<(), DispatchError> {
-    let coder_url = std::env::var("CODER_URL").map_err(|_| DispatchError::CoderNotConfigured)?;
-    let coder_token =
-        std::env::var("CODER_TOKEN").map_err(|_| DispatchError::CoderNotConfigured)?;
-
-    let client = crate::coder::CoderClient::new(coder_url, coder_token);
     tracing::info!("Waking stopped workspace via Coder API");
     client
         .start_workspace(coder_workspace_id)
@@ -165,19 +179,15 @@ async fn wake_workspace(
 }
 
 /// Create a new workspace in the pool via Coder API.
-#[tracing::instrument(skip(db), fields(project_id = %project_id, pool_key = %pool_key, branch = ?branch))]
-async fn create_pool_workspace(
+#[tracing::instrument(skip(db, client), fields(project_id = %project_id, pool_key = %pool_key, branch = ?branch))]
+async fn create_pool_workspace<C: CoderApi>(
     db: &PgPool,
     project_id: Uuid,
     branch: Option<&str>,
     pool_key: &str,
     user_id: Uuid,
+    client: &C,
 ) -> Result<Uuid, DispatchError> {
-    let coder_url = std::env::var("CODER_URL").map_err(|_| DispatchError::CoderNotConfigured)?;
-    let coder_token =
-        std::env::var("CODER_TOKEN").map_err(|_| DispatchError::CoderNotConfigured)?;
-    let client = crate::coder::CoderClient::new(coder_url, coder_token);
-
     let template_name = "seam-agent";
 
     // Resolve template
@@ -952,4 +962,230 @@ fn parse_claude_json_output(lines: &[String]) -> Option<serde_json::Value> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- pool_key_for ---
+
+    #[test]
+    fn pool_key_without_branch() {
+        let project_id = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let key = pool_key_for(project_id, None);
+        assert_eq!(key, "project:00000000-0000-0000-0000-000000000001");
+    }
+
+    #[test]
+    fn pool_key_with_branch() {
+        let project_id = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
+        let key = pool_key_for(project_id, Some("main"));
+        assert_eq!(
+            key,
+            "project:00000000-0000-0000-0000-000000000002:branch:main"
+        );
+    }
+
+    #[test]
+    fn pool_key_with_feature_branch() {
+        let project_id = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
+        let key = pool_key_for(project_id, Some("feat/my-feature"));
+        assert_eq!(
+            key,
+            "project:00000000-0000-0000-0000-000000000003:branch:feat/my-feature"
+        );
+    }
+
+    // --- parse_claude_json_output ---
+
+    #[test]
+    fn parse_json_output_returns_none_for_empty_lines() {
+        let lines: Vec<String> = vec![];
+        assert!(parse_claude_json_output(&lines).is_none());
+    }
+
+    #[test]
+    fn parse_json_output_returns_none_for_non_json_lines() {
+        let lines = vec![
+            "Starting agent...".to_string(),
+            "Processing task".to_string(),
+            "Done".to_string(),
+        ];
+        assert!(parse_claude_json_output(&lines).is_none());
+    }
+
+    #[test]
+    fn parse_json_output_picks_up_last_json_object() {
+        let lines = vec![
+            "Some text output".to_string(),
+            r#"{"session_id": "abc123", "model": "claude-opus-4-5"}"#.to_string(),
+        ];
+        let result = parse_claude_json_output(&lines).expect("should parse JSON");
+        assert_eq!(result["session_id"], "abc123");
+        assert_eq!(result["model"], "claude-opus-4-5");
+    }
+
+    #[test]
+    fn parse_json_output_prefers_last_json_when_multiple() {
+        let lines = vec![
+            r#"{"session_id": "first", "model": "a"}"#.to_string(),
+            "some text in between".to_string(),
+            r#"{"session_id": "last", "model": "b", "cost_usd": 0.01}"#.to_string(),
+        ];
+        let result = parse_claude_json_output(&lines).expect("should parse JSON");
+        assert_eq!(result["session_id"], "last");
+    }
+
+    #[test]
+    fn parse_json_output_skips_invalid_json_and_finds_valid() {
+        let lines = vec![
+            r#"{"session_id": "valid", "model": "claude"}"#.to_string(),
+            "not json at all".to_string(),
+            // Intentionally malformed JSON as the last candidate
+            "{malformed}".to_string(),
+        ];
+        let result = parse_claude_json_output(&lines).expect("should parse JSON");
+        assert_eq!(result["session_id"], "valid");
+    }
+
+    #[test]
+    fn parse_json_output_extracts_session_id() {
+        let lines = vec![
+            r#"{"session_id": "ses_xyz789", "model": "claude-sonnet", "cost_usd": 0.05, "usage": {"input_tokens": 1000, "output_tokens": 500}}"#.to_string(),
+        ];
+        let result = parse_claude_json_output(&lines).expect("should parse JSON");
+        assert_eq!(result["session_id"], "ses_xyz789");
+        assert_eq!(result["usage"]["input_tokens"], 1000);
+        assert_eq!(result["usage"]["output_tokens"], 500);
+        assert_eq!(result["cost_usd"], 0.05);
+    }
+
+    #[test]
+    fn parse_json_output_handles_json_array() {
+        let lines = vec![r#"[{"type": "result"}]"#.to_string()];
+        let result = parse_claude_json_output(&lines).expect("should parse JSON array");
+        assert!(result.is_array());
+    }
+
+    #[test]
+    fn parse_json_output_handles_whitespace_prefix() {
+        // Lines with leading whitespace should still be detected
+        let lines = vec![
+            "  text  ".to_string(),
+            r#"  {"session_id": "trimmed"}"#.to_string(),
+        ];
+        let result = parse_claude_json_output(&lines).expect("should parse JSON with whitespace");
+        assert_eq!(result["session_id"], "trimmed");
+    }
+
+    // --- bash_single_quote_escape ---
+
+    #[test]
+    fn bash_escape_plain_string_unchanged() {
+        assert_eq!(bash_single_quote_escape("hello world"), "hello world");
+    }
+
+    #[test]
+    fn bash_escape_replaces_single_quotes() {
+        // A single-quote in the input becomes: '\''
+        let escaped = bash_single_quote_escape("it's a test");
+        assert_eq!(escaped, "it'\\''s a test");
+    }
+
+    #[test]
+    fn bash_escape_multiple_single_quotes() {
+        let escaped = bash_single_quote_escape("can't stop won't stop");
+        assert_eq!(escaped, "can'\\''t stop won'\\''t stop");
+    }
+
+    #[test]
+    fn bash_escape_empty_string() {
+        assert_eq!(bash_single_quote_escape(""), "");
+    }
+
+    // --- MockCoderClient integration (compile-time verification) ---
+    //
+    // The following test verifies that MockCoderClient satisfies the CoderApi
+    // trait and can be used where a CoderApi impl is expected. This is a
+    // compile-time check more than a runtime check — if it compiles, the mock
+    // implements the full interface correctly.
+
+    #[tokio::test]
+    async fn mock_coder_client_start_workspace_ok() {
+        use crate::coder::testing::MockCoderClient;
+        let template_id = Uuid::new_v4();
+        let coder_ws_id = Uuid::new_v4();
+        let mock = MockCoderClient::new_ok(template_id, coder_ws_id);
+
+        let result = mock.start_workspace(coder_ws_id).await;
+        assert!(result.is_ok());
+        assert_eq!(mock.start_workspace_calls.lock().unwrap().len(), 1);
+        assert_eq!(mock.start_workspace_calls.lock().unwrap()[0], coder_ws_id);
+    }
+
+    #[tokio::test]
+    async fn mock_coder_client_get_template_found() {
+        use crate::coder::testing::MockCoderClient;
+        let template_id = Uuid::new_v4();
+        let mock = MockCoderClient::new_ok(template_id, Uuid::new_v4());
+
+        let result = mock.get_template_by_name("seam-agent").await;
+        assert!(result.is_ok());
+        let template = result.unwrap().expect("template should be found");
+        assert_eq!(template.name, "seam-agent");
+        assert_eq!(template.id, template_id);
+    }
+
+    #[tokio::test]
+    async fn mock_coder_client_get_template_not_found() {
+        use crate::coder::testing::MockCoderClient;
+        let mock = MockCoderClient::new_no_template();
+
+        let result = mock.get_template_by_name("seam-agent").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none(), "template should not be found");
+    }
+
+    #[tokio::test]
+    async fn mock_coder_client_create_workspace_ok() {
+        use crate::coder::testing::MockCoderClient;
+        use crate::coder::CreateWorkspaceRequest;
+        let template_id = Uuid::new_v4();
+        let coder_ws_id = Uuid::new_v4();
+        let mock = MockCoderClient::new_ok(template_id, coder_ws_id);
+
+        let req = CreateWorkspaceRequest {
+            name: "seam-test".to_string(),
+            template_id,
+            rich_parameter_values: vec![],
+        };
+        let result = mock.create_workspace("me", req).await;
+        assert!(result.is_ok());
+        let ws = result.unwrap();
+        assert_eq!(ws.id, coder_ws_id);
+
+        let calls = mock.create_workspace_calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "me");
+        assert_eq!(calls[0].1, "seam-test");
+    }
+
+    #[tokio::test]
+    async fn mock_coder_client_create_workspace_fails() {
+        use crate::coder::testing::MockCoderClient;
+        use crate::coder::CreateWorkspaceRequest;
+        let template_id = Uuid::new_v4();
+        let mock = MockCoderClient::new_create_fails(template_id, "quota exceeded");
+
+        let req = CreateWorkspaceRequest {
+            name: "seam-fail".to_string(),
+            template_id,
+            rich_parameter_values: vec![],
+        };
+        let result = mock.create_workspace("me", req).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("quota exceeded"), "error: {err}");
+    }
 }
