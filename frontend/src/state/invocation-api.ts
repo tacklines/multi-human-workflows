@@ -125,7 +125,48 @@ export async function createInvocation(
     headers: authHeaders(),
     body: JSON.stringify(req),
   });
-  return handleResponse(res);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const details =
+      (body as { details?: string; error?: string }).details ||
+      (body as { details?: string; error?: string }).error ||
+      `HTTP ${res.status}`;
+    throw new Error(details);
+  }
+  return res.json();
+}
+
+export interface CoderStatus {
+  enabled: boolean;
+  connected: boolean;
+  url?: string;
+  user?: string;
+  error?: string;
+  templates: string[];
+}
+
+export async function checkCoderStatus(): Promise<CoderStatus> {
+  try {
+    const resp = await fetch(`${API_BASE}/api/integrations/coder/status`, {
+      headers: authHeaders(),
+    });
+    if (!resp.ok) {
+      return {
+        enabled: false,
+        connected: false,
+        error: `HTTP ${resp.status}`,
+        templates: [],
+      };
+    }
+    return await resp.json();
+  } catch {
+    return {
+      enabled: false,
+      connected: false,
+      error: "Failed to check Coder status",
+      templates: [],
+    };
+  }
 }
 
 export async function fetchProjectCostSummary(

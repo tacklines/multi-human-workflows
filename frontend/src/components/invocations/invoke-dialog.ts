@@ -2,7 +2,9 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   createInvocation,
+  checkCoderStatus,
   type InvocationView,
+  type CoderStatus,
 } from "../../state/invocation-api.js";
 
 import "@shoelace-style/shoelace/dist/components/dialog/dialog.js";
@@ -12,6 +14,7 @@ import "@shoelace-style/shoelace/dist/components/select/select.js";
 import "@shoelace-style/shoelace/dist/components/option/option.js";
 import "@shoelace-style/shoelace/dist/components/button/button.js";
 import "@shoelace-style/shoelace/dist/components/alert/alert.js";
+import "@shoelace-style/shoelace/dist/components/icon/icon.js";
 
 @customElement("invoke-dialog")
 export class InvokeDialog extends LitElement {
@@ -226,9 +229,17 @@ export class InvokeDialog extends LitElement {
         </div>
 
         ${this._error
-          ? html`<sl-alert variant="danger" open class="error"
-              >${this._error}</sl-alert
-            >`
+          ? html`<sl-alert variant="danger" open class="error">
+              <sl-icon name="exclamation-triangle" slot="icon"></sl-icon>
+              ${this._error}
+              ${this._error.includes("Coder") ||
+              this._error.includes("workspace")
+                ? html`<br /><small
+                      >Check Coder integration status at Settings →
+                      Integrations.</small
+                    >`
+                : ""}
+            </sl-alert>`
           : ""}
 
         <div class="actions">
