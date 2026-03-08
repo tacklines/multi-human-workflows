@@ -128,6 +128,8 @@ services:
       MCP_AUTH_DISABLED: ${MCP_AUTH_DISABLED:-false}
       SEAM_URL: http://seam-server:3002
       PUBLIC_URL: https://seam.tacklines.com
+      WORKSPACE_CLIENT_SECRET: ${WORKSPACE_CLIENT_SECRET}
+      WORKSPACE_SEAM_URL: ${WORKSPACE_SEAM_URL}
     networks:
       - internal
 
