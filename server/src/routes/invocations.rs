@@ -257,6 +257,42 @@ async fn verify_project_member(
     Ok(())
 }
 
+/// Generate a branch name from a task's ticket_id and title.
+/// Returns None if the task is not found or the query fails.
+async fn generate_branch_name(db: &sqlx::PgPool, task_id: Uuid) -> Option<String> {
+    let row: Option<(String, String)> =
+        sqlx::query_as("SELECT ticket_id, title FROM tasks WHERE id = $1")
+            .bind(task_id)
+            .fetch_optional(db)
+            .await
+            .ok()?;
+
+    let (ticket_id, title) = row?;
+
+    // Slugify: lowercase, replace non-alphanumeric with hyphens
+    let raw_slug: String = title
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect();
+
+    // Collapse multiple hyphens and drop empty segments
+    let slug = raw_slug
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+
+    // Truncate to a reasonable length, avoiding a trailing hyphen
+    let slug = if slug.len() > 40 {
+        slug[..40].trim_end_matches('-').to_string()
+    } else {
+        slug
+    };
+
+    Some(format!("agent/{}-{}", ticket_id, slug))
+}
+
 /// POST /api/projects/:project_id/invocations
 pub async fn create_invocation(
     State(state): State<Arc<AppState>>,
@@ -279,6 +315,18 @@ pub async fn create_invocation(
                 Json(serde_json::json!({"error": "not found or forbidden"})),
             )
         })?;
+
+    // Auto-generate branch name from task when no branch is specified
+    let effective_branch = match &req.branch {
+        Some(b) if !b.is_empty() => Some(b.clone()),
+        _ => {
+            if let Some(tid) = req.task_id {
+                generate_branch_name(&state.db, tid).await
+            } else {
+                None
+            }
+        }
+    };
 
     // Resolve workspace: use provided ID or find/create from pool
     let workspace_id = match req.workspace_id {
@@ -310,7 +358,7 @@ pub async fn create_invocation(
             crate::dispatch::resolve_workspace(
                 &state.db,
                 project_id,
-                req.branch.as_deref(),
+                effective_branch.as_deref(),
                 user.id,
             )
             .await
