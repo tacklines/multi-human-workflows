@@ -8,7 +8,13 @@
 
 import { authStore } from './auth-state.js';
 
-const WS_BASE = (import.meta as any).env?.VITE_WS_URL ?? 'ws://localhost:5173/ws';
+function getWsBase(): string {
+  const env = (import.meta as any).env?.VITE_WS_URL;
+  if (env) return env;
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${location.host}/ws`;
+}
+const WS_BASE = getWsBase();
 
 export interface ToolInvocationEvent {
   stream: 'tool';

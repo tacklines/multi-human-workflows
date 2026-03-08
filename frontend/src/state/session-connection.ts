@@ -2,7 +2,13 @@ import { store, type SessionParticipant } from './app-state.js';
 import { authStore } from './auth-state.js';
 import { fetchQuestions } from './task-api.js';
 
-const WS_BASE = (import.meta as any).env?.VITE_WS_URL ?? 'ws://localhost:5173/ws';
+function getWsBase(): string {
+  const env = (import.meta as any).env?.VITE_WS_URL;
+  if (env) return env;
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${location.host}/ws`;
+}
+const WS_BASE = getWsBase();
 
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
