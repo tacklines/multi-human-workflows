@@ -1,5 +1,5 @@
-//! Shared test harness for integration tests.
 #![allow(dead_code)]
+//! Shared test harness for integration tests.
 //!
 //! Provides common setup functions used across most integration test files.
 //! Tests require Docker Compose running (Postgres on :5433).
