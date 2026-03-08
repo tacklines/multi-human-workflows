@@ -524,12 +524,14 @@ async fn main() {
     let mcp_db = state.db.clone();
     let mcp_code_index = code_index.clone();
     let mcp_connections = state.connections.clone();
+    let mcp_log_buffer = std::sync::Arc::new(crate::log_buffer::LogBuffer::new(500));
     let mcp_service = StreamableHttpService::new(
         move || {
             Ok(mcp_handler::SeamMcp::with_connections(
                 mcp_db.clone(),
                 mcp_code_index.clone(),
                 mcp_connections.clone(),
+                mcp_log_buffer.clone(),
                 mcp_auth_enabled,
             ))
         },
