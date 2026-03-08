@@ -1,60 +1,15 @@
 //! Integration tests for the plans data model.
 //! Requires Docker Compose running (Postgres on :5433).
 
-use sqlx::PgPool;
+mod common;
+
+use common::*;
 use uuid::Uuid;
-
-async fn setup_db() -> PgPool {
-    let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url)
-        .await
-        .expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations")
-        .run(&db)
-        .await
-        .expect("Failed to run migrations");
-    db
-}
-
-/// Create a test user, org, and project. Returns (user_id, project_id).
-async fn create_test_context(db: &PgPool) -> (Uuid, Uuid) {
-    let user_id = Uuid::new_v4();
-    let external_id = format!("test-{}", Uuid::new_v4());
-    sqlx::query("INSERT INTO users (id, external_id, username, display_name, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(user_id).bind(&external_id).bind(&external_id).bind("Test User")
-        .execute(db).await.unwrap();
-
-    let org_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
-    )
-    .bind(org_id)
-    .bind("Test Org")
-    .bind(format!("test-org-{}", Uuid::new_v4()))
-    .execute(db)
-    .await
-    .unwrap();
-
-    let project_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
-    )
-    .bind(project_id)
-    .bind(org_id)
-    .bind("Test Project")
-    .bind(format!("test-proj-{}", Uuid::new_v4()))
-    .execute(db)
-    .await
-    .unwrap();
-
-    (user_id, project_id)
-}
 
 #[tokio::test]
 async fn test_create_plan() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     let plan_id = Uuid::new_v4();
     let slug = format!("plan-{}", &Uuid::new_v4().to_string()[..8]);
@@ -88,7 +43,7 @@ async fn test_create_plan() {
 #[tokio::test]
 async fn test_plan_status_default() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     let plan_id = Uuid::new_v4();
     let slug = format!("default-{}", &Uuid::new_v4().to_string()[..8]);
@@ -119,7 +74,7 @@ async fn test_plan_status_default() {
 #[tokio::test]
 async fn test_plan_slug_uniqueness() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     let slug = format!("unique-{}", &Uuid::new_v4().to_string()[..8]);
 
@@ -158,7 +113,7 @@ async fn test_plan_slug_uniqueness() {
 #[tokio::test]
 async fn test_plan_update_status() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     let plan_id = Uuid::new_v4();
     let slug = format!("status-{}", &Uuid::new_v4().to_string()[..8]);
@@ -206,7 +161,7 @@ async fn test_plan_update_status() {
 #[tokio::test]
 async fn test_plan_parent_child() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     // Create parent plan
     let parent_id = Uuid::new_v4();
@@ -259,7 +214,7 @@ async fn test_plan_parent_child() {
 #[tokio::test]
 async fn test_plan_project_scoping() {
     let db = setup_db().await;
-    let (user_id, project_id_a) = create_test_context(&db).await;
+    let (user_id, _org_id_a, project_id_a) = create_test_context(&db).await;
 
     // Create a second project under a new org
     let org_id_b = Uuid::new_v4();

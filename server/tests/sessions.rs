@@ -1,55 +1,10 @@
 //! Integration tests for the session and participant data model.
 //! Requires Docker Compose running (Postgres on :5433).
 
-use sqlx::PgPool;
+mod common;
+
+use common::*;
 use uuid::Uuid;
-
-async fn setup_db() -> PgPool {
-    let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url)
-        .await
-        .expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations")
-        .run(&db)
-        .await
-        .expect("Failed to run migrations");
-    db
-}
-
-/// Create a test user, org, and project. Returns (user_id, org_id, project_id).
-async fn create_test_context(db: &PgPool) -> (Uuid, Uuid, Uuid) {
-    let user_id = Uuid::new_v4();
-    let external_id = format!("test-{}", Uuid::new_v4());
-    sqlx::query("INSERT INTO users (id, external_id, username, display_name, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(user_id).bind(&external_id).bind(&external_id).bind("Test User")
-        .execute(db).await.unwrap();
-
-    let org_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
-    )
-    .bind(org_id)
-    .bind("Test Org")
-    .bind(format!("test-org-{}", Uuid::new_v4()))
-    .execute(db)
-    .await
-    .unwrap();
-
-    let project_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
-    )
-    .bind(project_id)
-    .bind(org_id)
-    .bind("Test Project")
-    .bind(format!("test-proj-{}", Uuid::new_v4()))
-    .execute(db)
-    .await
-    .unwrap();
-
-    (user_id, org_id, project_id)
-}
 
 #[tokio::test]
 async fn test_create_session() {

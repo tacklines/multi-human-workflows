@@ -1,64 +1,15 @@
 //! Integration tests for the requests system (request-to-requirements flow).
 //! Requires Docker Compose running (Postgres on :5433).
 
-use sqlx::PgPool;
+mod common;
+
+use common::*;
 use uuid::Uuid;
-
-async fn setup_db() -> PgPool {
-    let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url)
-        .await
-        .expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations")
-        .run(&db)
-        .await
-        .expect("Failed to run migrations");
-    db
-}
-
-/// Create a test user, org, project.
-/// Returns (user_id, project_id).
-async fn create_test_context(db: &PgPool) -> (Uuid, Uuid) {
-    let user_id = Uuid::new_v4();
-    let external_id = format!("test-{}", Uuid::new_v4());
-    sqlx::query("INSERT INTO users (id, external_id, username, display_name, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(user_id)
-        .bind(&external_id)
-        .bind(&external_id)
-        .bind("Test User")
-        .execute(db).await.unwrap();
-
-    let org_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
-    )
-    .bind(org_id)
-    .bind("Test Org")
-    .bind(format!("test-org-{}", Uuid::new_v4()))
-    .execute(db)
-    .await
-    .unwrap();
-
-    let project_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
-    )
-    .bind(project_id)
-    .bind(org_id)
-    .bind("Test Project")
-    .bind(format!("test-proj-{}", Uuid::new_v4()))
-    .execute(db)
-    .await
-    .unwrap();
-
-    (user_id, project_id)
-}
 
 #[tokio::test]
 async fn test_create_request() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     let req_id = Uuid::new_v4();
     sqlx::query(
@@ -87,7 +38,7 @@ async fn test_create_request() {
 #[tokio::test]
 async fn test_request_status_constraint() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     // Valid statuses
     for status in &["pending", "analyzing", "decomposed", "archived"] {
@@ -117,7 +68,7 @@ async fn test_request_status_constraint() {
 #[tokio::test]
 async fn test_request_status_transitions() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     let req_id = Uuid::new_v4();
     sqlx::query(
@@ -148,7 +99,7 @@ async fn test_request_status_transitions() {
 #[tokio::test]
 async fn test_request_analysis_field() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     let req_id = Uuid::new_v4();
     sqlx::query(
@@ -186,7 +137,7 @@ async fn test_request_analysis_field() {
 #[tokio::test]
 async fn test_request_requirement_linking() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     // Create a request
     let request_id = Uuid::new_v4();
@@ -257,7 +208,7 @@ async fn test_request_requirement_linking() {
 #[tokio::test]
 async fn test_request_many_to_many_shared_requirements() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     // Two different requests
     let req_a = Uuid::new_v4();
@@ -314,7 +265,7 @@ async fn test_request_many_to_many_shared_requirements() {
 #[tokio::test]
 async fn test_request_cascade_delete() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     let request_id = Uuid::new_v4();
     let req_id = Uuid::new_v4();
@@ -368,7 +319,7 @@ async fn test_request_cascade_delete() {
 #[tokio::test]
 async fn test_full_request_to_task_chain() {
     let db = setup_db().await;
-    let (user_id, project_id) = create_test_context(&db).await;
+    let (user_id, _org_id, project_id) = create_test_context(&db).await;
 
     // Create session + participant for tasks
     let session_id = Uuid::new_v4();

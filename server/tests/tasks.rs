@@ -1,8 +1,10 @@
 //! Integration tests for the task management system.
 //! Requires Docker Compose running (Postgres on :5433).
 
+mod common;
+
 use chrono::Utc;
-use sqlx::PgPool;
+use common::*;
 use std::sync::atomic::{AtomicI32, Ordering};
 use uuid::Uuid;
 
@@ -11,74 +13,6 @@ static TICKET_COUNTER: AtomicI32 = AtomicI32::new(10000);
 
 fn next_ticket() -> i32 {
     TICKET_COUNTER.fetch_add(1, Ordering::Relaxed)
-}
-
-async fn setup_db() -> PgPool {
-    let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://seam:seam@localhost:5433/seam".to_string());
-    let db = PgPool::connect(&url)
-        .await
-        .expect("Failed to connect to test database");
-    sqlx::migrate!("./migrations")
-        .run(&db)
-        .await
-        .expect("Failed to run migrations");
-    db
-}
-
-/// Create a test user, org, project, session, and participant for task tests.
-/// Returns (session_id, project_id, participant_id).
-async fn create_test_session(db: &PgPool) -> (Uuid, Uuid, Uuid) {
-    let user_id = Uuid::new_v4();
-    let external_id = format!("test-{}", Uuid::new_v4());
-    sqlx::query("INSERT INTO users (id, external_id, username, display_name, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(user_id)
-        .bind(&external_id)
-        .bind(&external_id)
-        .bind("Test User")
-        .execute(db).await.unwrap();
-
-    let org_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO organizations (id, name, slug, created_at) VALUES ($1, $2, $3, NOW())",
-    )
-    .bind(org_id)
-    .bind("Test Org")
-    .bind(format!("test-org-{}", Uuid::new_v4()))
-    .execute(db)
-    .await
-    .unwrap();
-
-    let project_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO projects (id, org_id, name, slug, created_at) VALUES ($1, $2, $3, $4, NOW())",
-    )
-    .bind(project_id)
-    .bind(org_id)
-    .bind("Test Project")
-    .bind(format!("test-proj-{}", Uuid::new_v4()))
-    .execute(db)
-    .await
-    .unwrap();
-
-    let session_id = Uuid::new_v4();
-    let session_code = session_id.to_string()[..6].to_string().to_uppercase();
-    sqlx::query("INSERT INTO sessions (id, project_id, code, created_by, created_at) VALUES ($1, $2, $3, $4, NOW())")
-        .bind(session_id)
-        .bind(project_id)
-        .bind(&session_code)
-        .bind(user_id)
-        .execute(db).await.unwrap();
-
-    let participant_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO participants (id, session_id, user_id, display_name, participant_type, joined_at) VALUES ($1, $2, $3, $4, 'human', NOW())")
-        .bind(participant_id)
-        .bind(session_id)
-        .bind(user_id)
-        .bind("Test User")
-        .execute(db).await.unwrap();
-
-    (session_id, project_id, participant_id)
 }
 
 #[tokio::test]
