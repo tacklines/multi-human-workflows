@@ -314,22 +314,22 @@ FORWARDER
       echo "Configuring Seam MCP connection..."
 
       # MCP server config must go in .mcp.json (not settings.local.json)
-      # for headers support. Uses $${SEAM_TOKEN} env var expansion at runtime.
-      # Double $$ escapes Terraform interpolation so the literal ${SEAM_TOKEN}
-      # reaches the shell and then the .mcp.json file for Claude Code expansion.
-      cat > /workspace/.mcp.json << 'MCP_EOF'
+      # for headers support. Double $$ escapes Terraform interpolation so
+      # the literal ${SEAM_TOKEN} and ${SEAM_URL} reach the file for Claude
+      # Code's runtime env var expansion.
+      cat > /workspace/.mcp.json << EOF
 {
   "mcpServers": {
     "seam": {
       "type": "http",
-      "url": "${SEAM_URL}/mcp",
+      "url": "$${SEAM_URL}/mcp",
       "headers": {
-        "Authorization": "Bearer ${SEAM_TOKEN}"
+        "Authorization": "Bearer $${SEAM_TOKEN}"
       }
     }
   }
 }
-MCP_EOF
+EOF
 
       echo "Seam MCP configured: ${data.coder_parameter.seam_url.value}/mcp"
 
