@@ -141,6 +141,17 @@ export class InvocationDetail extends LitElement {
       color: #f87171;
     }
 
+    .evt-thinking {
+      white-space: pre-wrap;
+      color: #8b8fa3;
+      padding: 0.25rem 0.5rem;
+      margin: 0.15rem 0;
+      border-left: 2px solid #3b3f54;
+      font-size: 0.78rem;
+      font-style: italic;
+      line-height: 1.5;
+    }
+
     .evt-text {
       white-space: pre-wrap;
       color: var(--text-primary, #e2e4ed);
@@ -377,6 +388,8 @@ export class InvocationDetail extends LitElement {
 
   private _renderEvent(evt: StreamEvent) {
     switch (evt.kind) {
+      case "thinking":
+        return html`<div class="evt-thinking">${evt.text}</div>`;
       case "text":
         return html`<div class="evt-text">${evt.text}</div>`;
       case "tool_call": {

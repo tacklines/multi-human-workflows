@@ -2,12 +2,13 @@
  * Parses claude -p --output-format stream-json JSONL lines into
  * displayable events for the invocation detail view.
  *
- * Filters out noise (system events, thinking blocks, rate limits)
- * and extracts meaningful content (text, tool calls, tool results).
+ * Filters out noise (system events, rate limits) and extracts
+ * meaningful content (thinking, text, tool calls, tool results).
  */
 
 export type StreamEventKind =
   | "text"
+  | "thinking"
   | "tool_call"
   | "tool_result"
   | "result"
@@ -35,6 +36,7 @@ interface StreamJsonMessage {
     content?: Array<{
       type: string;
       text?: string;
+      thinking?: string;
       name?: string;
       input?: Record<string, unknown>;
       content?: string | Array<{ type: string; content?: string; text?: string }>;
@@ -52,9 +54,6 @@ interface StreamJsonMessage {
 
 /** Event types to skip entirely */
 const SKIP_TYPES = new Set(["system", "rate_limit_event"]);
-
-/** Content block types to skip */
-const SKIP_CONTENT_TYPES = new Set(["thinking"]);
 
 /**
  * Parse a single JSONL line into zero or more display events.
@@ -78,9 +77,9 @@ function parseLine(raw: string): StreamEvent[] {
   if (obj.type === "assistant" && obj.message?.content) {
     const events: StreamEvent[] = [];
     for (const block of obj.message.content) {
-      if (SKIP_CONTENT_TYPES.has(block.type)) continue;
-
-      if (block.type === "text" && block.text) {
+      if (block.type === "thinking" && block.thinking) {
+        events.push({ kind: "thinking", text: block.thinking });
+      } else if (block.type === "text" && block.text) {
         events.push({ kind: "text", text: block.text });
       } else if (block.type === "tool_use" && block.name) {
         const desc = block.input?.description as string | undefined;

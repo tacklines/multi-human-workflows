@@ -33,7 +33,7 @@ describe("parseStreamOutput", () => {
     expect(result).toHaveLength(0);
   });
 
-  it("filters out thinking blocks", () => {
+  it("extracts thinking blocks", () => {
     const result = parseStreamOutput([
       line(
         JSON.stringify({
@@ -50,7 +50,9 @@ describe("parseStreamOutput", () => {
         }),
       ),
     ]);
-    expect(result).toHaveLength(0);
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe("thinking");
+    expect(result[0].text).toBe("some internal reasoning");
   });
 
   it("extracts text content from assistant messages", () => {
