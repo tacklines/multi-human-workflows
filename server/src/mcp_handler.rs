@@ -505,6 +505,8 @@ struct SearchCodeParams {
 struct ListPlansParams {
     /// Maximum number of plans to return (default 20)
     limit: Option<i64>,
+    /// Filter by status: draft, review, accepted, superseded, abandoned
+    status: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -3929,13 +3931,24 @@ impl SeamMcp {
 
         let limit = params.limit.unwrap_or(20).min(100);
 
-        let plans: Vec<Plan> = sqlx::query_as(
-            "SELECT * FROM plans WHERE project_id = $1 ORDER BY updated_at DESC LIMIT $2",
-        )
-        .bind(project_id)
-        .bind(limit)
-        .fetch_all(&self.db)
-        .await
+        let plans: Vec<Plan> = if let Some(ref status) = params.status {
+            sqlx::query_as(
+                "SELECT * FROM plans WHERE project_id = $1 AND status = $2 ORDER BY updated_at DESC LIMIT $3",
+            )
+            .bind(project_id)
+            .bind(status)
+            .bind(limit)
+            .fetch_all(&self.db)
+            .await
+        } else {
+            sqlx::query_as(
+                "SELECT * FROM plans WHERE project_id = $1 ORDER BY updated_at DESC LIMIT $2",
+            )
+            .bind(project_id)
+            .bind(limit)
+            .fetch_all(&self.db)
+            .await
+        }
         .map_err(|e| McpError::internal_error(format!("Failed to list plans: {e}"), None))?;
 
         let result: Vec<serde_json::Value> = plans
@@ -4022,6 +4035,23 @@ impl SeamMcp {
             Err(e) => return Ok(e),
         };
 
+        // plans.author_id references users(id), not participants
+        let user_id: Option<(Uuid,)> =
+            sqlx::query_as("SELECT user_id FROM participants WHERE id = $1")
+                .bind(participant_id)
+                .fetch_optional(&self.db)
+                .await
+                .unwrap_or(None);
+
+        let user_id = match user_id {
+            Some((uid,)) => uid,
+            None => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    "Participant not found",
+                )]))
+            }
+        };
+
         if params.title.trim().is_empty() {
             return Ok(CallToolResult::error(vec![Content::text(
                 "Title cannot be empty",
@@ -4046,7 +4076,7 @@ impl SeamMcp {
              RETURNING *",
         )
         .bind(project_id)
-        .bind(participant_id)
+        .bind(user_id)
         .bind(&params.title)
         .bind(&slug)
         .bind(&params.content)
@@ -4074,6 +4104,7 @@ impl SeamMcp {
             "id": plan.id,
             "title": plan.title,
             "slug": plan.slug,
+            "content": plan.body,
             "status": plan.status,
             "created_at": plan.created_at,
         });
