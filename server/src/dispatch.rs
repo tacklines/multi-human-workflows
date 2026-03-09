@@ -121,10 +121,16 @@ pub(crate) async fn resolve_workspace_with_client<C: CoderApi>(
 
         tracing::debug!(pool_key = %pool_key, lock_key = lock_key, "Advisory lock acquired");
 
-        // 1. Try to find a running workspace with matching pool_key
+        // 1. Try to find a running workspace with matching pool_key that has no
+        //    active running invocation. This prevents two invocations from
+        //    landing in the same workspace simultaneously.
         let running: Option<(Uuid,)> = sqlx::query_as(
             "SELECT id FROM workspaces
              WHERE project_id = $1 AND status = 'running' AND pool_key = $2
+               AND NOT EXISTS (
+                   SELECT 1 FROM invocations
+                   WHERE workspace_id = workspaces.id AND status = 'running'
+               )
              ORDER BY last_invocation_at DESC NULLS LAST
              LIMIT 1",
         )
@@ -138,71 +144,59 @@ pub(crate) async fn resolve_workspace_with_client<C: CoderApi>(
             txn.commit().await?;
             ResolveAction::UseRunning(ws_id)
         } else {
-            // 2. Try to find any running workspace for this project (fallback)
-            let any_running: Option<(Uuid,)> = sqlx::query_as(
-                "SELECT id FROM workspaces
-                 WHERE project_id = $1 AND status = 'running'
-                 ORDER BY last_invocation_at DESC NULLS LAST
+            // 2. (removed) The former "any running workspace for this project" fallback
+            //    caused branch contamination — a workspace on branch A being reused
+            //    for branch B work. It is removed; if no idle pool_key match exists
+            //    the system falls through to wake a stopped workspace or create a new one.
+
+            // 3. Try to find a stopped workspace to wake
+            let stopped: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
+                "SELECT id, coder_workspace_id FROM workspaces
+                 WHERE project_id = $1 AND status = 'stopped' AND pool_key = $2
+                 ORDER BY stopped_at DESC NULLS LAST
                  LIMIT 1",
             )
             .bind(project_id)
+            .bind(&pool_key)
             .fetch_optional(&mut *txn)
             .await?;
 
-            if let Some((ws_id,)) = any_running {
-                tracing::info!(workspace_id = %ws_id, "Resolved running workspace (any) from pool");
+            if let Some((ws_id, Some(coder_id))) = stopped {
+                tracing::info!(workspace_id = %ws_id, "Waking stopped workspace");
+                // Update status to 'running' immediately so concurrent
+                // requests that acquire the lock next see it as running.
+                sqlx::query(
+                    "UPDATE workspaces SET status = 'running', updated_at = NOW() WHERE id = $1",
+                )
+                .bind(ws_id)
+                .execute(&mut *txn)
+                .await?;
                 txn.commit().await?;
-                ResolveAction::UseRunning(ws_id)
+                ResolveAction::WakeStopped {
+                    workspace_id: ws_id,
+                    coder_id,
+                }
             } else {
-                // 3. Try to find a stopped workspace to wake
-                let stopped: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
-                    "SELECT id, coder_workspace_id FROM workspaces
-                     WHERE project_id = $1 AND status = 'stopped' AND pool_key = $2
-                     ORDER BY stopped_at DESC NULLS LAST
-                     LIMIT 1",
+                // 4. No usable workspace — insert a placeholder so
+                //    concurrent requests see it as 'creating' and don't
+                //    also try to create one.
+                tracing::info!(
+                    project_id = %project_id,
+                    pool_key = %pool_key,
+                    "No workspace found; inserting placeholder for new workspace"
+                );
+                let workspace_id: Uuid = sqlx::query_scalar(
+                    "INSERT INTO workspaces (project_id, template_name, branch, pool_key, status)
+                     VALUES ($1, 'seam-agent', $2, $3, 'creating')
+                     RETURNING id",
                 )
                 .bind(project_id)
+                .bind(branch)
                 .bind(&pool_key)
-                .fetch_optional(&mut *txn)
+                .fetch_one(&mut *txn)
                 .await?;
-
-                if let Some((ws_id, Some(coder_id))) = stopped {
-                    tracing::info!(workspace_id = %ws_id, "Waking stopped workspace");
-                    // Update status to 'running' immediately so concurrent
-                    // requests that acquire the lock next see it as running.
-                    sqlx::query(
-                        "UPDATE workspaces SET status = 'running', updated_at = NOW() WHERE id = $1",
-                    )
-                    .bind(ws_id)
-                    .execute(&mut *txn)
-                    .await?;
-                    txn.commit().await?;
-                    ResolveAction::WakeStopped {
-                        workspace_id: ws_id,
-                        coder_id,
-                    }
-                } else {
-                    // 4. No usable workspace — insert a placeholder so
-                    //    concurrent requests see it as 'creating' and don't
-                    //    also try to create one.
-                    tracing::info!(
-                        project_id = %project_id,
-                        pool_key = %pool_key,
-                        "No workspace found; inserting placeholder for new workspace"
-                    );
-                    let workspace_id: Uuid = sqlx::query_scalar(
-                        "INSERT INTO workspaces (project_id, template_name, branch, pool_key, status)
-                         VALUES ($1, 'seam-agent', $2, $3, 'creating')
-                         RETURNING id",
-                    )
-                    .bind(project_id)
-                    .bind(branch)
-                    .bind(&pool_key)
-                    .fetch_one(&mut *txn)
-                    .await?;
-                    txn.commit().await?;
-                    ResolveAction::CreateNew(workspace_id)
-                }
+                txn.commit().await?;
+                ResolveAction::CreateNew(workspace_id)
             }
         }
     };
@@ -877,6 +871,15 @@ pub async fn dispatch_invocation(
     .bind(inv.id)
     .execute(db)
     .await?;
+
+    // Stamp last_invocation_at at dispatch start so that LRU ordering in pool
+    // resolution reflects active dispatches, not just completed ones (best-effort).
+    let _ = sqlx::query(
+        "UPDATE workspaces SET last_invocation_at = NOW(), updated_at = NOW() WHERE id = $1",
+    )
+    .bind(inv_workspace_id)
+    .execute(db)
+    .await;
 
     let event = crate::events::DomainEvent::new(
         "invocation.started",
