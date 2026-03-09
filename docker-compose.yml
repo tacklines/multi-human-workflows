@@ -91,9 +91,10 @@ services:
     environment:
       CODER_PG_CONNECTION_URL: "postgresql://seam:seam@postgres:5432/coder?sslmode=disable"
       CODER_HTTP_ADDRESS: "0.0.0.0:7080"
-      CODER_ACCESS_URL: "http://localhost:7080"
+      CODER_ACCESS_URL: "${CODER_ACCESS_URL:-http://localhost:7080}"
       CODER_TELEMETRY: "false"
       CODER_EXPERIMENTS: "*"
+      CODER_DOCKER_NETWORK: "${CODER_DOCKER_NETWORK:-}"
     ports:
       - "7080:7080"
     group_add:
