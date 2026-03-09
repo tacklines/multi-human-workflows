@@ -64,12 +64,15 @@ WORKDIR /app
 # Runtime dependencies only:
 # - libpq5: postgres client library (sqlx runtime connection)
 # - ca-certificates: TLS root certs for outbound HTTPS (Hydra, Coder, Ollama)
-# - curl: HEALTHCHECK
+# - curl: HEALTHCHECK + Coder CLI install
 RUN apt-get update && apt-get install -y \
     libpq5 \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Coder CLI — needed for `coder ssh` to dispatch invocations into workspaces
+RUN curl -fsSL https://coder.com/install.sh | sh
 
 # Binaries from builder
 COPY --from=builder /usr/local/bin/seam-server /usr/local/bin/seam-server

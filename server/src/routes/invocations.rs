@@ -357,8 +357,8 @@ async fn build_task_context(
     // Dependencies (tasks this task depends on)
     let deps: Vec<(i32, String, String)> = sqlx::query_as(
         "SELECT t.ticket_number, t.title, t.status::text
-         FROM task_dependencies td JOIN tasks t ON t.id = td.depends_on_id
-         WHERE td.task_id = $1",
+         FROM task_dependencies td JOIN tasks t ON t.id = td.blocker_id
+         WHERE td.blocked_id = $1",
     )
     .bind(task_id)
     .fetch_all(db)
