@@ -148,8 +148,14 @@ async fn main() {
 
     let app = Router::new()
         // Health
-        .route("/health", get(|| async { "ok" }))
-        .route("/api/health", get(|| async { "ok" }))
+        .route(
+            "/health",
+            get(|| async { axum::Json(serde_json::json!({"status": "ok"})) }),
+        )
+        .route(
+            "/api/health",
+            get(|| async { axum::Json(serde_json::json!({"status": "ok"})) }),
+        )
         // Organizations
         .route(
             "/api/orgs",
