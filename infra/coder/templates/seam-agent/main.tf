@@ -126,10 +126,16 @@ data "coder_parameter" "memory_limit" {
   }
 }
 
+variable "arch" {
+  description = "CPU architecture for the agent binary (amd64 or arm64)"
+  type        = string
+  default     = "amd64"
+}
+
 # --- Agent ---
 
 resource "coder_agent" "dev" {
-  arch = "amd64"
+  arch = var.arch
   os   = "linux"
   dir  = "/workspace"
 
