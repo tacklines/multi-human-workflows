@@ -230,7 +230,7 @@ async fn main() {
         )
         .route(
             "/api/projects/{project_id}/tasks",
-            get(routes::tasks::list_project_tasks),
+            get(routes::tasks::list_project_tasks).post(routes::tasks::create_project_task),
         )
         .route(
             "/api/projects/{project_id}/tasks/{task_id}",
