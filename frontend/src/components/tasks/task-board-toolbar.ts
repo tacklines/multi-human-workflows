@@ -217,6 +217,14 @@ export class TaskBoardToolbar extends LitElement {
                   <sl-icon slot="prefix" name="calendar-week"></sl-icon>
                   ${t("taskBoard.planSprint")}
                 </sl-button>
+                <sl-button
+                  variant="primary"
+                  size="small"
+                  @click=${() => this._emit("open-create", {})}
+                >
+                  <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+                  ${t("taskBoard.newTask")}
+                </sl-button>
               `
             : html`
                 <sl-button
